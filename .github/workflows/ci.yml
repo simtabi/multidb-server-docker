@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# The full build matrix (4 PG majors x 3 MySQL x 3 MariaDB x amd64/arm64,
+# full and slim) lands in phase 6. Phase 1 establishes the harness gate.
+jobs:
+  verify:
+    name: verify (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Confirm docker is available
+        run: docker info
+
+      # CLAUDE.md is explicit that docker is required and never mocked, so a
+      # runner without it must fail here rather than silently skipping checks.
+      - name: Harness structure
+        run: make verify-structure
+
+      - name: Full acceptance harness
+        run: make verify

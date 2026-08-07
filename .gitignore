@@ -4,8 +4,12 @@
 !CLAUDE.md
 
 # Generated secrets and certificates: never committed (SPEC.md section 15).
-secrets/
-certs/
+# Ignore the contents but keep the directories, so a fresh clone still has
+# somewhere for `make init` and `make certs` to write.
+secrets/*
+!secrets/.gitkeep
+certs/*
+!certs/.gitkeep
 
 # Local environment files.
 .env

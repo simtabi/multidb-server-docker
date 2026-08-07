@@ -1,0 +1,18 @@
+# Force LF everywhere. Windows checkouts must not rewrite shell scripts,
+# Dockerfiles, or SQL to CRLF: the container would fail to execute them.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.bash      text eol=lf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.sql       text eol=lf
+*.conf      text eol=lf
+*.cnf       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+*.png       binary
+*.jpg       binary
+*.gz        binary
+*.xz        binary

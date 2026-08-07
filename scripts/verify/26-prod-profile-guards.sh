@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# verify: the prod profile publishes nothing but Caddy and demands pooling
+# tags: prod security
+# phase: 4
+
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+need_docker
+cd "$DBTK_ROOT" || exit 1
+
+# SPEC section 18: "make init-prod renders a prod env that passes check-env
+# with TLS enforced, nothing published except Caddy".
+# SPEC section 21.1: pooling is mandatory under prod, and check-env must fail a
+# prod boot without a reachable pooler rather than starting unpooled.
+
+need_file "$DBTK_ROOT/compose.prod.yml"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"; make down >/dev/null 2>&1 || true' EXIT
+
+make init-prod ENV_FILE="$tmp/.env.prod" >/dev/null 2>&1 \
+    || vfail "make init-prod failed"
+
+grep -q '^DBTK_TLS_ENFORCE=true' "$tmp/.env.prod" \
+    || vfail "init-prod did not enforce TLS"
+vinfo "init-prod renders TLS enforced"
+
+DBTK_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1 \
+    || vfail "the rendered prod env does not pass check-env"
+vinfo "rendered prod env passes check-env"
+
+# Pooling is not optional under prod (section 21.1).
+sed -i.bak 's/^DBTK_PGBOUNCER_POOL_MODE=.*/DBTK_PGBOUNCER_POOL_MODE=/' "$tmp/.env.prod"
+if DBTK_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1; then
+    vfail "check-env allowed a prod boot with no pooler; SPEC 21.1 makes pooling mandatory"
+fi
+vinfo "check-env refuses an unpooled prod boot"
+mv "$tmp/.env.prod.bak" "$tmp/.env.prod"
+
+# UI basic auth is mandatory under prod.
+sed -i.bak 's/^DBTK_UI_BASIC_AUTH_HASH=.*/DBTK_UI_BASIC_AUTH_HASH=/' "$tmp/.env.prod"
+if DBTK_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1; then
+    vfail "check-env allowed a prod boot with no UI basic auth"
+fi
+vinfo "check-env refuses prod without UI basic auth"
+
+# Nothing but Caddy may be published.
+published="$(docker compose -f docker-compose.yml -f compose.prod.yml --profile prod config \
+    | awk '/^  [a-z-]+:/{svc=$1} /published:/{print svc, $2}' | grep -v '^caddy:' || true)"
+[[ -z "$published" ]] || {
+    printf '      %s\n' "$published" >&2
+    vfail "prod publishes ports on services other than caddy"
+}
+vinfo "prod publishes nothing except Caddy"

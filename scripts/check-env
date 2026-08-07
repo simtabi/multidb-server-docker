@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+#
+# Validate the environment before anything is allowed to start.
+#
+# SPEC decision 6 and section 9: this refuses to let the stack boot with
+# sentinel passwords. SPEC section 21.1 adds the prod guards. A check-env that
+# a placeholder can satisfy is not a gate, so every rule here fails closed.
+#
+# Usage: scripts/check-env [--quiet]
+#        DBTK_ENV_FILE=path/to/.env scripts/check-env
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+QUIET=0
+[[ "${1:-}" == "--quiet" ]] && QUIET=1
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    if [[ -f "$ROOT/.env.example" ]]; then
+        ENV_FILE="$ROOT/.env.example"
+    else
+        printf 'check-env: no .env and no .env.example found\n' >&2
+        exit 1
+    fi
+fi
+
+if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+    RED=$'\033[31m'; GRN=$'\033[32m'; OFF=$'\033[0m'
+else
+    RED=''; GRN=''; OFF=''
+fi
+
+errors=0
+err()  { printf '%scheck-env%s %s\n' "$RED" "$OFF" "$1" >&2; (( errors++ )) || true; }
+note() { (( QUIET )) || printf '  %s\n' "$1"; }
+
+# Read a key's value from the env file, ignoring comments.
+get() {
+    grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
+# -----------------------------------------------------------------------------
+# 1. Sentinels and plaintext passwords
+# -----------------------------------------------------------------------------
+while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+
+    key="${line%%=*}"
+    value="${line#*=}"
+    [[ "$key" == "$line" ]] && continue
+
+    # Sentinel values anywhere are fatal.
+    case "$value" in
+        *CHANGE_ME*|*CHANGEME*|*REPLACE_ME*|*your-password-here*|*TODO*)
+            err "$key still holds a sentinel value ($value)"
+            continue
+            ;;
+    esac
+
+    # A password-ish key must be a _FILE reference, never a literal.
+    case "$key" in
+        *_PASSWORD_FILE|*_SECRET_FILE|*_KEY_ID_FILE|*_PASSPHRASE_FILE)
+            : # correct form
+            ;;
+        *PASSWORD|*PASSWD|*_SECRET|*PASSPHRASE|*ACCESS_KEY|*PRIVATE_KEY)
+            if [[ -n "$value" ]]; then
+                err "$key holds a literal value; use ${key}_FILE and a file under secrets/"
+            fi
+            ;;
+    esac
+done < "$ENV_FILE"
+
+# -----------------------------------------------------------------------------
+# 2. Required variables
+# -----------------------------------------------------------------------------
+for key in COMPOSE_PROJECT_NAME DBTK_PROFILES DBTK_TZ DBTK_BIND_ADDR \
+           DBTK_PG_VERSION DBTK_MYSQL_VERSION DBTK_MARIADB_VERSION; do
+    [[ -n "$(get "$key")" ]] || err "$key is required but unset"
+done
+
+# -----------------------------------------------------------------------------
+# 3. Engine versions must be on the supported menu (SPEC section 4)
+# -----------------------------------------------------------------------------
+check_menu() {
+    local key="$1" value; shift
+    value="$(get "$key")"
+    [[ -z "$value" ]] && return 0
+    local allowed=" $* "
+    [[ "$allowed" == *" $value "* ]] || err "$key=$value is not on the supported menu: $*"
+}
+check_menu DBTK_PG_VERSION      15 16 17 18
+check_menu DBTK_MYSQL_VERSION   8.0 8.4 9.7
+check_menu DBTK_MARIADB_VERSION 10.11 11.4 11.8
+
+# -----------------------------------------------------------------------------
+# 4. Host port collisions
+# -----------------------------------------------------------------------------
+# bash 3.2 has no associative arrays (macOS ships 3.2), so collisions are
+# tracked in a plain string of "port:key " pairs.
+seen_ports=""
+while IFS= read -r line; do
+    key="${line%%=*}"; value="${line#*=}"
+    [[ -z "$value" ]] && continue
+    case " $seen_ports " in
+        *" ${value}:"*)
+            prior="${seen_ports##*" ${value}:"}"
+            prior="${prior%% *}"
+            err "port $value is claimed by both $prior and $key"
+            ;;
+        *)
+            seen_ports="$seen_ports ${value}:${key}"
+            ;;
+    esac
+done < <(grep -E '^DBTK_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null || true)
+
+# -----------------------------------------------------------------------------
+# 5. Prod-profile guards (SPEC sections 18 and 21.1)
+# -----------------------------------------------------------------------------
+profiles="$(get DBTK_PROFILES)"
+if [[ ",${profiles}," == *",prod,"* ]]; then
+    note "prod profile detected: applying prod guards"
+
+    [[ "$(get DBTK_TLS_ENFORCE)" == "true" ]] \
+        || err "the prod profile requires DBTK_TLS_ENFORCE=true"
+
+    # Pooling is mandatory, not advisory: ~10 MB per direct PostgreSQL
+    # connection means ~500 connections cost ~5 GB before a query runs.
+    [[ -n "$(get DBTK_PGBOUNCER_POOL_MODE)" ]] \
+        || err "the prod profile requires a pooler (DBTK_PGBOUNCER_POOL_MODE); see SPEC section 21.1"
+
+    [[ -n "$(get DBTK_UI_BASIC_AUTH_HASH)" ]] \
+        || err "the prod profile requires DBTK_UI_BASIC_AUTH_HASH on every UI route"
+
+    if [[ "$(get DBTK_HA_ENABLE)" == "true" ]]; then
+        etcd_hosts="$(get DBTK_HA_ETCD_HOSTS)"
+        members="$(awk -F, '{print NF}' <<< "$etcd_hosts")"
+        (( members >= 3 )) \
+            || err "DBTK_HA_ETCD_HOSTS lists $members endpoint(s); a quorum needs 3 minimum (SPEC 21.2)"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
+# 6. Secret files referenced must be resolvable once initialised
+# -----------------------------------------------------------------------------
+while IFS= read -r line; do
+    key="${line%%=*}"; value="${line#*=}"
+    [[ -z "$value" ]] && continue
+    [[ "$value" == secrets/* ]] || continue
+    if [[ ! -f "$ROOT/$value" ]] && [[ -f "$ROOT/.env" ]] && [[ "$ENV_FILE" == "$ROOT/.env" ]]; then
+        err "$key points at $value, which does not exist (run: make init)"
+    fi
+done < <(grep -E '^DBTK_[A-Z0-9_]*_FILE=' "$ENV_FILE" 2>/dev/null || true)
+
+# -----------------------------------------------------------------------------
+if (( errors )); then
+    printf '\n%s✗ check-env failed with %d problem(s)%s\n' "$RED" "$errors" "$OFF" >&2
+    exit 1
+fi
+
+(( QUIET )) || printf '%s✓ check-env passed%s (%s)\n' "$GRN" "$OFF" "${ENV_FILE#"$ROOT"/}"

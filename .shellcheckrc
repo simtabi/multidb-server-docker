@@ -1,0 +1,5 @@
+# Verify checks source lib.sh through a dynamic path
+# ("$(dirname "${BASH_SOURCE[0]}")/lib.sh"), which shellcheck cannot resolve
+# statically. SCRIPTDIR tells it to look next to the script being checked.
+source-path=SCRIPTDIR
+external-sources=true
