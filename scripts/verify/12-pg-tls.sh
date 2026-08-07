@@ -24,7 +24,7 @@ need_image "$img"
 net="dbtk-verify-tls-net-$$"
 name="dbtk-verify-tls-$$"
 track_container "$name"
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker network rm "$net" >/dev/null 2>&1 || true' EXIT
+add_cleanup "docker network rm '$net'"
 
 docker network create "$net" >/dev/null
 

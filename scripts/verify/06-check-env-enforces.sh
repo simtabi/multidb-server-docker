@@ -12,7 +12,7 @@ need_file "$DBTK_ROOT/scripts/check-env"
 [[ -x "$DBTK_ROOT/scripts/check-env" ]] || vfail "scripts/check-env is not executable"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+add_cleanup "rm -rf '$tmp'"
 
 # A sentinel value must be rejected.
 cp "$DBTK_ROOT/.env.example" "$tmp/.env"

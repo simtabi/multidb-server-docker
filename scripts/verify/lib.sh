@@ -109,29 +109,49 @@ build_image() {
         cli)     version="dev" ;;
     esac
 
+    # Context is images/ so MySQL and MariaDB can share images/_shared.
     if [[ "$engine" == "cli" ]]; then
-        docker build -t "$tag" "$DBTK_ROOT/images/cli"
+        docker build -f "$DBTK_ROOT/images/cli/Dockerfile" -t "$tag" "$DBTK_ROOT/images"
         return
     fi
 
     base="$(base_image "$engine" "$version")"
     docker build \
+        -f "$DBTK_ROOT/images/$engine/Dockerfile" \
         --build-arg "BASE_IMAGE=$base" \
         --build-arg "ENGINE_VERSION=$version" \
-        -t "$tag" "$DBTK_ROOT/images/$engine"
+        -t "$tag" "$DBTK_ROOT/images"
 }
 
-# Run a throwaway container and always clean it up.
+# --- cleanup -----------------------------------------------------------------
+#
+# There is exactly ONE EXIT trap, installed here, and checks must never install
+# their own. A per-check `trap ... EXIT` REPLACES this one rather than adding to
+# it, which silently defeats container cleanup: an early version of this harness
+# leaked 11 containers holding ~1.8 GB across a single run, which then slowed
+# every later check. Register extra work with add_cleanup instead.
+
 CLEANUP_CONTAINERS=()
-cleanup_containers() {
-    local c
-    for c in "${CLEANUP_CONTAINERS[@]:-}"; do
-        [[ -n "$c" ]] && docker rm -f "$c" >/dev/null 2>&1 || true
-    done
-}
-trap cleanup_containers EXIT
+CLEANUP_VOLUMES=()
+CLEANUP_COMMANDS=()
 
 track_container() { CLEANUP_CONTAINERS+=("$1"); }
+track_volume()    { CLEANUP_VOLUMES+=("$1"); }
+add_cleanup()     { CLEANUP_COMMANDS+=("$1"); }
+
+dbtk_cleanup() {
+    local item
+    for item in ${CLEANUP_COMMANDS[@]+"${CLEANUP_COMMANDS[@]}"}; do
+        eval "$item" >/dev/null 2>&1 || true
+    done
+    for item in ${CLEANUP_CONTAINERS[@]+"${CLEANUP_CONTAINERS[@]}"}; do
+        [[ -n "$item" ]] && docker rm -f "$item" >/dev/null 2>&1 || true
+    done
+    for item in ${CLEANUP_VOLUMES[@]+"${CLEANUP_VOLUMES[@]}"}; do
+        [[ -n "$item" ]] && docker volume rm -f "$item" >/dev/null 2>&1 || true
+    done
+}
+trap dbtk_cleanup EXIT
 
 # Wait until a command succeeds, or fail after a budget in seconds.
 wait_for() {

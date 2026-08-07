@@ -19,7 +19,7 @@ need_file "$DBTK_ROOT/scripts/backup"
 need_file "$DBTK_ROOT/scripts/restore"
 
 make up PROFILES=pg,mysql,mariadb >/dev/null 2>&1 || vfail "make up failed"
-trap 'make down >/dev/null 2>&1 || true' EXIT
+add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 120 "all engines healthy" bash -c \

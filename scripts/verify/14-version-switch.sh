@@ -28,7 +28,7 @@ cleanup() {
     docker rm -f "$c16" "$c17" >/dev/null 2>&1 || true
     docker volume rm -f "$vol16" "$vol17" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT
+add_cleanup cleanup
 
 docker volume create "$vol16" >/dev/null
 docker volume create "$vol17" >/dev/null

@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-project triplet provisioning with cross-project access denied.
 - `make init`, `certs`, `build`, `up`, `down`, `status`, `logs`, `psql`.
 - `docker-compose.yml` with the `pg` and `ui` profiles and per-major volumes.
+- `db-toolkit-mysql` (8.0/8.4/9.7) and `db-toolkit-mariadb` (10.11/11.4/11.8),
+  both s6-supervised with baked utf8mb4 / `utf8mb4_unicode_ci` / explicit
+  `sql_mode`, triplet provisioning, and the same tool suite.
+- phpMyAdmin serving both MySQL-family servers from one instance via
+  `PMA_HOSTS`, and `make mysql` / `make mariadb` client shells.
 
 ### Fixed
 

@@ -18,7 +18,7 @@ need_file "$DBTK_ROOT/docker-compose.yml"
 budget="$(env_get DBTK_HA_FAILOVER_BUDGET 30)"
 
 make up PROFILES=pg,ha >/dev/null 2>&1 || vfail "make up PROFILES=pg,ha failed"
-trap 'make down >/dev/null 2>&1 || true' EXIT
+add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 180 "the Patroni cluster to converge on one leader" bash -c \

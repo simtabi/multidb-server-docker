@@ -51,11 +51,17 @@ check_engine() {
             || vfail "$engine image is missing $tool"
     done
 
-    printf '%s' "$name"
+    # Returned through a global rather than stdout: vinfo writes to stdout too,
+    # so command substitution would capture the whole running commentary along
+    # with the container name.
+    CHECKED_CONTAINER="$name"
 }
 
-mysql_c="$(check_engine mysql MYSQL_ROOT_PASSWORD mysql)"
-mariadb_c="$(check_engine mariadb MARIADB_ROOT_PASSWORD mariadb)"
+CHECKED_CONTAINER=""
+check_engine mysql MYSQL_ROOT_PASSWORD mysql
+mysql_c="$CHECKED_CONTAINER"
+check_engine mariadb MARIADB_ROOT_PASSWORD mariadb
+mariadb_c="$CHECKED_CONTAINER"
 
 # Both must be alive at the same time.
 docker exec "$mysql_c" mysql -uroot -pdbtk-throwaway-verify -e "SELECT 1" >/dev/null 2>&1 \

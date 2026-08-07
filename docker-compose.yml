@@ -29,7 +29,10 @@ services:
   pg:
     profiles: [pg]
     build:
-      context: ./images/pg
+      # Context is images/, so the MySQL-family images can share
+      # images/_shared. Every Dockerfile is addressed by path within it.
+      context: ./images
+      dockerfile: pg/Dockerfile
       args:
         ENGINE_VERSION: ${DBTK_PG_VERSION:-17}
     image: ghcr.io/simtabi/db-toolkit-pg:${DBTK_PG_VERSION:-17}
@@ -79,6 +82,105 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
+  # MySQL
+  # ---------------------------------------------------------------------------
+  mysql:
+    profiles: [mysql]
+    build:
+      context: ./images
+      dockerfile: mysql/Dockerfile
+      args:
+        ENGINE_VERSION: ${DBTK_MYSQL_VERSION:-8.4}
+    image: ghcr.io/simtabi/db-toolkit-mysql:${DBTK_MYSQL_VERSION:-8.4}
+    restart: unless-stopped
+    <<: *hardening
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password.txt
+      DBTK_MYSQL_DATABASES: ${DBTK_MYSQL_DATABASES:-}
+      DBTK_MYSQL_SLOW_SECONDS: ${DBTK_MYSQL_SLOW_SECONDS:-1}
+      DBTK_MYSQL_NOFILE: ${DBTK_MYSQL_NOFILE:-10240}
+      DBTK_MYSQL_NATIVE_PASSWORD_COMPAT: ${DBTK_MYSQL_NATIVE_PASSWORD_COMPAT:-false}
+      DBTK_TLS_ENFORCE: ${DBTK_TLS_ENFORCE:-false}
+      DBTK_MEM: ${DBTK_MEM:-4}
+      DBTK_TZ: ${DBTK_TZ:-UTC}
+      DBTK_MYSQL_EMBED_EXPORTER: "false"
+      DBTK_MYSQL_EMBED_BACKUP: "false"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./certs:/certs:ro
+      - ./secrets:/run/secrets:ro
+      - ./overrides/mysql:/etc/mysql/conf.d/overrides:ro
+    ports:
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_MYSQL_HOST_PORT:-3306}:3306"
+    ulimits:
+      nofile:
+        soft: ${DBTK_MYSQL_NOFILE:-10240}
+        hard: ${DBTK_MYSQL_NOFILE:-10240}
+    stop_grace_period: ${DBTK_STOP_GRACE:-60s}
+    networks: [dbtk]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # MariaDB — runs concurrently with MySQL; only the host port differs
+  # ---------------------------------------------------------------------------
+  mariadb:
+    profiles: [mariadb]
+    build:
+      context: ./images
+      dockerfile: mariadb/Dockerfile
+      args:
+        ENGINE_VERSION: ${DBTK_MARIADB_VERSION:-11.4}
+    image: ghcr.io/simtabi/db-toolkit-mariadb:${DBTK_MARIADB_VERSION:-11.4}
+    restart: unless-stopped
+    <<: *hardening
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/mariadb_root_password.txt
+      DBTK_MARIADB_DATABASES: ${DBTK_MARIADB_DATABASES:-}
+      DBTK_MARIADB_SLOW_SECONDS: ${DBTK_MARIADB_SLOW_SECONDS:-1}
+      DBTK_MARIADB_NOFILE: ${DBTK_MARIADB_NOFILE:-10240}
+      DBTK_TLS_ENFORCE: ${DBTK_TLS_ENFORCE:-false}
+      DBTK_MEM: ${DBTK_MEM:-4}
+      DBTK_TZ: ${DBTK_TZ:-UTC}
+      DBTK_MARIADB_EMBED_EXPORTER: "false"
+      DBTK_MARIADB_EMBED_BACKUP: "false"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./certs:/certs:ro
+      - ./secrets:/run/secrets:ro
+      - ./overrides/mariadb:/etc/mysql/conf.d/overrides:ro
+    ports:
+      # Internal port stays 3306 for both engines; only the host side moves.
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_MARIADB_HOST_PORT:-3307}:3306"
+    ulimits:
+      nofile:
+        soft: ${DBTK_MARIADB_NOFILE:-10240}
+        hard: ${DBTK_MARIADB_NOFILE:-10240}
+    stop_grace_period: ${DBTK_STOP_GRACE:-60s}
+    networks: [dbtk]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # phpMyAdmin — one instance serving BOTH MySQL-family servers via PMA_HOSTS
+  # ---------------------------------------------------------------------------
+  phpmyadmin:
+    profiles: [ui]
+    image: phpmyadmin:5.2.3@sha256:5e2289bcd500868ed4ac9261ddd7cbcc6e20036f83031ade72667b15dca31c60
+    restart: unless-stopped
+    <<: *hardening
+    environment:
+      # A comma-separated list, which is what lets a single instance offer both
+      # servers on the login screen (SPEC section 18).
+      PMA_HOSTS: ${DBTK_PMA_HOSTS:-mysql,mariadb}
+      PMA_PORTS: ${DBTK_PMA_PORTS:-3306,3306}
+      UPLOAD_LIMIT: ${DBTK_PMA_UPLOAD_LIMIT:-256M}
+    ports:
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_PMA_HOST_PORT:-8081}:80"
+    networks: [dbtk]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
   # Adminer — speaks PostgreSQL, MySQL, and MariaDB
   # ---------------------------------------------------------------------------
   adminer:
@@ -109,3 +211,7 @@ volumes:
   # (SPEC decision 2).
   pg_data:
     name: ${COMPOSE_PROJECT_NAME:-dbtk}_pg${DBTK_PG_VERSION:-17}_data
+  mysql_data:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_mysql${DBTK_MYSQL_VERSION:-8.4}_data
+  mariadb_data:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_mariadb${DBTK_MARIADB_VERSION:-11.4}_data

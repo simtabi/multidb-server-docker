@@ -13,7 +13,7 @@ need_docker
 # replace them. This check is what proves we did not quietly reimplement them.
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+add_cleanup "rm -rf '$tmp'"
 
 # --- POSTGRES_* scenarios -----------------------------------------------------
 img="$(image_name pg)"

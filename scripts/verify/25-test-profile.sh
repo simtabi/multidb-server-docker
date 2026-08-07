@@ -16,7 +16,7 @@ cd "$DBTK_ROOT" || exit 1
 need_file "$DBTK_ROOT/docker-compose.yml"
 
 make test-profile >/dev/null 2>&1 || vfail "make test-profile failed"
-trap 'make down >/dev/null 2>&1 || true' EXIT
+add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 90 "the test-profile pg to report healthy" bash -c \

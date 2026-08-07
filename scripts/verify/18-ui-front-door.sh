@@ -18,7 +18,7 @@ need_file "$DBTK_ROOT/docker-compose.yml"
 domain="$(env_get DBTK_UI_DOMAIN db.localhost)"
 
 make up PROFILES=pg,mysql,mariadb,ui >/dev/null 2>&1 || vfail "make up with the ui profile failed"
-trap 'make down >/dev/null 2>&1 || true' EXIT
+add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 90 "caddy to start" bash -c \

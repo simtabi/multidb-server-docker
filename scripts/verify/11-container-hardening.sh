@@ -23,7 +23,7 @@ need_image "$img"
 name="dbtk-verify-harden-$$"
 vol="dbtk-verify-harden-vol-$$"
 track_container "$name"
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm -f "$vol" >/dev/null 2>&1 || true' EXIT
+track_volume "$vol"
 
 docker volume create "$vol" >/dev/null
 

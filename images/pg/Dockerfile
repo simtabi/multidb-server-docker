@@ -163,12 +163,12 @@ RUN set -eux; \
     tar -C / -Jxpf /tmp/s6-arch.tar.xz; \
     rm -f /tmp/s6-noarch.tar.xz /tmp/s6-arch.tar.xz
 
-COPY s6/ /etc/s6-overlay/s6-rc.d/
+COPY pg/s6/ /etc/s6-overlay/s6-rc.d/
 # The user bundle goes in user-bundles.d, not s6-rc.d/user. The legacy location
 # is deprecated and, more importantly, makes s6 rewrite files under /etc during
 # boot -- which fails outright on a read-only root filesystem.
-COPY user-bundles.d/ /etc/s6-overlay/user-bundles.d/
-COPY scripts/ /usr/local/lib/dbtk/
+COPY pg/user-bundles.d/ /etc/s6-overlay/user-bundles.d/
+COPY pg/scripts/ /usr/local/lib/dbtk/
 
 RUN set -eux; \
     chmod +x /usr/local/lib/dbtk/*.sh; \

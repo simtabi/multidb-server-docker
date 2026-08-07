@@ -50,7 +50,7 @@ cd "$DBTK_ROOT" || exit 1
 need_file "$DBTK_ROOT/docker-compose.yml"
 
 make up PROFILES=pg,metrics >/dev/null 2>&1 || vfail "make up PROFILES=pg,metrics failed"
-trap 'make down >/dev/null 2>&1 || true' EXIT
+add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 60 "the pg-exporter service" bash -c \

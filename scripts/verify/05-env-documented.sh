@@ -20,6 +20,19 @@ done < <(
         | sed -E 's/^#?[[:space:]]*//; s/=$//' | sort -u
 )
 
+# Internal variables, deliberately NOT documented in .env.example.
+#
+# These are not user configuration: they are set by the toolkit itself or baked
+# into an image at build time. DBTK_ENGINE in particular is an ENV in each
+# MySQL-family Dockerfile that selects which half of the shared init scripts
+# applies (D-29); documenting it in .env.example would invite a user to set it
+# and quietly mismatch the image they are running.
+#
+# The rule this check enforces is "every variable a user can meaningfully set
+# is documented", so the list is kept explicit and short rather than allowing a
+# pattern that could hide a real omission.
+INTERNAL_VARS='DBTK_ROOT|DBTK_ENV_FILE|DBTK_IMAGE_PREFIX|DBTK_ENGINE|DBTK_STAGE|DBTK_CONF_DIR|DBTK_CERT_DIR|DBTK_INITDB_DIR|DBTK_DATA_DIR|DBTK_OVERRIDE_CONF_DIR|DBTK_DAEMON|DBTK_CLIENT|DBTK_ADMIN|DBTK_CONF_SECTION|DBTK_ROOT_PW_ENV'
+
 # Only files that actually consume variables at runtime. Scripts under
 # scripts/verify are excluded: they name variables in order to assert on them,
 # which is not the same as depending on them being configured.
@@ -31,7 +44,7 @@ done < <(
         --include='*.yml' --include='*.yaml' --include='Dockerfile*' \
         --include='*.tmpl' --include='*.cnf' \
         images caddy overrides . 2>/dev/null \
-        | grep -vE '^DBTK_(ROOT|ENV_FILE|IMAGE_PREFIX)$' | sort -u
+        | grep -vE "^(${INTERNAL_VARS})\$" | sort -u
 )
 
 if (( ${#used[@]} == 0 )); then

@@ -52,9 +52,11 @@ for engine in "${engines[@]}"; do
     version="$(version_for "$engine")"
     tag="$PREFIX/db-toolkit-$engine:$version"
 
+    # The build context is images/, not images/<engine>/, so the MySQL and
+    # MariaDB images can share one set of init scripts (images/_shared).
     if [[ "$engine" == "cli" ]]; then
         printf 'building %s\n' "$tag"
-        docker build -t "$tag" "$ROOT/images/cli"
+        docker build -f "$ROOT/images/cli/Dockerfile" -t "$tag" "$ROOT/images"
         continue
     fi
 
@@ -66,9 +68,10 @@ for engine in "${engines[@]}"; do
 
     printf 'building %s\n  from %s\n' "$tag" "$base"
     docker build \
+        -f "$ROOT/images/$engine/Dockerfile" \
         --build-arg "BASE_IMAGE=$base" \
         --build-arg "ENGINE_VERSION=$version" \
-        -t "$tag" "$ROOT/images/$engine"
+        -t "$tag" "$ROOT/images"
 done
 
 printf '✓ built %d image(s)\n' "${#engines[@]}"

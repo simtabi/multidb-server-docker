@@ -115,11 +115,13 @@ psql: ## PostgreSQL shell (socket-first)
 
 .PHONY: mysql
 mysql: ## MySQL shell (socket-first)
-	$(call unimplemented,3)
+	@$(COMPOSE) exec mysql mysql --protocol=socket -uroot \
+		-p"$$(cat secrets/mysql_root_password.txt)"
 
 .PHONY: mariadb
 mariadb: ## MariaDB shell (socket-first)
-	$(call unimplemented,3)
+	@$(COMPOSE) exec mariadb mariadb --protocol=socket -uroot \
+		-p"$$(cat secrets/mariadb_root_password.txt)"
 
 .PHONY: shell
 shell: ## Open the cli image

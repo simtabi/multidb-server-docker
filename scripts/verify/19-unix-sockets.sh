@@ -18,7 +18,7 @@ need_image "$img"
 sockvol="dbtk-verify-sock-$$"
 name="dbtk-verify-sockpg-$$"
 track_container "$name"
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm -f "$sockvol" >/dev/null 2>&1 || true' EXIT
+track_volume "$sockvol"
 
 docker volume create "$sockvol" >/dev/null
 

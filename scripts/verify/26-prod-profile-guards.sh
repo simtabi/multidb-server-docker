@@ -16,7 +16,8 @@ cd "$DBTK_ROOT" || exit 1
 need_file "$DBTK_ROOT/compose.prod.yml"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"; make down >/dev/null 2>&1 || true' EXIT
+add_cleanup "rm -rf '$tmp'"
+add_cleanup 'make down'
 
 make init-prod ENV_FILE="$tmp/.env.prod" >/dev/null 2>&1 \
     || vfail "make init-prod failed"
