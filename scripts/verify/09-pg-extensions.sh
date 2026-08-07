@@ -16,7 +16,7 @@ need_image "$img"
 name="dbtk-verify-pg-ext-$$"
 track_container "$name"
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=verifyonly \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -e DBTK_PG_SHARED_PRELOAD=pg_stat_statements,pg_cron \
     --shm-size=256m "$img" >/dev/null || vfail "container failed to start"
 

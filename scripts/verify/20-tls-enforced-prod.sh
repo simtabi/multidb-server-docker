@@ -24,7 +24,7 @@ check_family() {
     docker volume create "$sockvol" >/dev/null
 
     docker run -d --name "$name" \
-        -e "$pw_env=verifyonly" \
+        -e "$pw_env=dbtk-throwaway-verify" \
         -e DBTK_TLS_ENFORCE=true \
         -e DBTK_SOCKETS=true \
         -v "$DBTK_ROOT/certs:/certs:ro" \
@@ -32,25 +32,25 @@ check_family() {
         "$img" >/dev/null || vfail "$engine failed to start with DBTK_TLS_ENFORCE=true"
 
     wait_for 90 "$engine to accept connections" \
-        docker exec "$name" "$client" -uroot -pverifyonly --protocol=socket -e "SELECT 1"
+        docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -e "SELECT 1"
 
     # require_secure_transport must actually be ON.
     local rst
-    rst="$(docker exec "$name" "$client" -uroot -pverifyonly --protocol=socket -N -B \
+    rst="$(docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -N -B \
         -e "SELECT @@require_secure_transport" 2>/dev/null | tr -d ' \r')"
     [[ "$rst" == "1" || "$rst" == "ON" ]] \
         || vfail "$engine require_secure_transport is '$rst', expected ON"
     vinfo "$engine require_secure_transport=ON"
 
     # A plaintext TCP connection must be REFUSED BY THE SERVER.
-    if docker run --rm --network "container:$name" -e MYSQL_PWD=verifyonly "$img" \
+    if docker run --rm --network "container:$name" -e MYSQL_PWD=dbtk-throwaway-verify "$img" \
         "$client" -h 127.0.0.1 -uroot --ssl-mode=DISABLED -e "SELECT 1" >/dev/null 2>&1; then
         vfail "$engine accepted a plaintext TCP connection under TLS enforcement"
     fi
     vinfo "$engine refused plaintext TCP"
 
     # ...but the socket must still work (SPEC section 9.1).
-    docker exec "$name" "$client" -uroot -pverifyonly --protocol=socket -e "SELECT 1" >/dev/null 2>&1 \
+    docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -e "SELECT 1" >/dev/null 2>&1 \
         || vfail "$engine broke socket connections under TLS enforcement; sockets are a secure transport"
     vinfo "$engine socket connections still work"
 
@@ -66,7 +66,7 @@ need_image "$img"
 name="dbtk-verify-tlsenf-pg-$$"
 track_container "$name"
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=verifyonly -e DBTK_TLS_ENFORCE=true \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify -e DBTK_TLS_ENFORCE=true \
     -v "$DBTK_ROOT/certs:/certs:ro" "$img" >/dev/null \
     || vfail "PG failed to start with TLS enforcement"
 wait_for 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres

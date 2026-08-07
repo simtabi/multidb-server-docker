@@ -19,7 +19,7 @@ need_image "$img"
 # --- EMBED off (the compose default) -----------------------------------------
 off="dbtk-verify-embed-off-$$"
 track_container "$off"
-docker run -d --name "$off" -e POSTGRES_PASSWORD=verifyonly "$img" >/dev/null \
+docker run -d --name "$off" -e POSTGRES_PASSWORD=dbtk-throwaway-verify "$img" >/dev/null \
     || vfail "container failed to start"
 wait_for 60 "postgres to accept connections" docker exec "$off" pg_isready -U postgres
 
@@ -32,7 +32,7 @@ vinfo "embedded exporter correctly off by default"
 on="dbtk-verify-embed-on-$$"
 track_container "$on"
 docker run -d --name "$on" \
-    -e POSTGRES_PASSWORD=verifyonly \
+    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -e DBTK_PG_EMBED_EXPORTER=true \
     "$img" >/dev/null || vfail "container failed to start with the exporter embedded"
 wait_for 60 "postgres to accept connections" docker exec "$on" pg_isready -U postgres

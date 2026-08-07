@@ -25,7 +25,7 @@ vinfo "sentinel password rejected"
 
 # A plaintext password (rather than a _FILE reference) must be rejected.
 cp "$DBTK_ROOT/.env.example" "$tmp/.env2"
-printf 'DBTK_PG_SUPERUSER_PASSWORD=hunter2\n' >> "$tmp/.env2"
+printf 'DBTK_PG_SUPERUSER_PASSWORD=dbtk-throwaway-plaintext\n' >> "$tmp/.env2"
 
 if DBTK_ENV_FILE="$tmp/.env2" "$DBTK_ROOT/scripts/check-env" >/dev/null 2>&1; then
     vfail "check-env accepted a plaintext password; the _FILE convention is mandatory"

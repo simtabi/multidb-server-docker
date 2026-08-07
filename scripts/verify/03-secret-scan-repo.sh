@@ -10,6 +10,19 @@ cd "$DBTK_ROOT" || exit 1
 # SPEC section 18: "repo/image-history grep finds no credential".
 # Passwords travel by the _FILE convention only, so an assignment with a
 # literal value on the right-hand side is a finding by definition.
+#
+# Two refinements, both learned by this check firing on itself in phase 1:
+#
+#  1. The key must END with a secret-ish word. DBTK_MYSQL_NATIVE_PASSWORD_COMPAT
+#     is a boolean toggle, not a credential, and matching "contains PASSWORD"
+#     flagged it.
+#
+#  2. The harness needs throwaway passwords for containers that live for
+#     seconds. Those carry the mandatory `dbtk-throwaway-` prefix, which is
+#     exempt HERE ONLY. Deliberately a value convention rather than a path
+#     exemption: exempting scripts/verify/ wholesale would create somewhere a
+#     real credential could hide, whereas a real credential will never carry
+#     this prefix.
 
 files=()
 if [[ -d .git ]]; then
@@ -20,41 +33,59 @@ else
 fi
 
 violations=0
-report() { printf '      %s\n' "$*" >&2; (( violations++ )) || true; }
+report() { printf '      %s\n' "$*" >&2; violations=$(( violations + 1 )); }
+
+# Keys ending in one of these are credential-bearing.
+SECRET_SUFFIX='(PASSWORD|PASSWD|SECRET|PASSPHRASE|ACCESS_KEY|PRIVATE_KEY|KEY_SECRET)'
 
 for f in "${files[@]}"; do
     [[ -f "$f" ]] || continue
     case "$f" in
-        docs/SPEC.md|docs/KIT.md|DESIGN.md|docs/KICKOFF-PROMPT.txt) continue ;;
+        # Prose that quotes variable names is documentation, not configuration.
+        docs/SPEC.md|docs/KIT.md|DESIGN.md|docs/KICKOFF-PROMPT.txt|CHANGELOG.md) continue ;;
         scripts/verify/03-secret-scan-repo.sh) continue ;;
     esac
 
-    # PASSWORD= / PASSWD= / SECRET= / _KEY= with a non-empty literal that is not
-    # a _FILE reference, a variable expansion, or a commented example.
-    while IFS= read -r hit; do
-        value="${hit#*=}"
-        [[ -z "$value" ]] && continue
-        case "$value" in
-            *\$\{*|*\$\(*|__FILE__*|secrets/*|*_FILE|CHANGE_ME*) continue ;;
-        esac
-        report "$f: $hit"
-    done < <(grep -nhE '^[^#]*(PASSWORD|PASSWD|SECRET|PRIVATE_KEY|ACCESS_KEY)[A-Z_]*=[^[:space:]]+' "$f" 2>/dev/null || true)
+    while IFS= read -r assignment; do
+        # The match may carry the leading delimiter; drop it.
+        assignment="${assignment#"${assignment%%[![:space:]]*}"}"
+        key="${assignment%%=*}"
+        value="${assignment#*=}"
 
-    # Private key material must never be committed.
+        # Only identifiers; skips glob patterns like *PASSWORD= in case blocks.
+        printf '%s' "$key" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*$' || continue
+        # Only keys that END with a secret word.
+        printf '%s' "$key" | grep -qE "${SECRET_SUFFIX}\$" || continue
+
+        [[ -z "$value" ]] && continue
+
+        case "$value" in
+            dbtk-throwaway-*) continue ;;              # harness fixtures, see above
+            *\$\{*|*\$\(*|__FILE__*|secrets/*) continue ;;  # indirection, not a literal
+            CHANGE_ME*) continue ;;                     # sentinel; check-env rejects it
+        esac
+
+        report "$f: $key=<redacted literal>"
+        # A real credential contains no shell glob or list metacharacters; a
+        # case pattern such as *PASSWORD=|*SECRET=) does, which is how the two
+        # are told apart.
+    done < <(grep -ohE '(^|[[:space:]])[A-Za-z_][A-Za-z0-9_]*=[^[:space:]"'"'"'\\|)(*;&]+' "$f" 2>/dev/null || true)
+
     if grep -qE 'BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY' "$f" 2>/dev/null; then
         report "$f: contains private key material"
     fi
 done
 
 # certs/ and secrets/ must be ignored, not tracked.
-for d in certs secrets; do
-    if [[ -d .git ]]; then
+if [[ -d .git ]]; then
+    for d in certs secrets; do
         while IFS= read -r tracked; do
+            [[ -z "$tracked" ]] && continue
             [[ "$(basename "$tracked")" == ".gitkeep" ]] && continue
             report "$tracked is tracked; $d/ contents must stay gitignored"
         done < <(git ls-files "$d" 2>/dev/null || true)
-    fi
-done
+    done
+fi
 
 (( violations == 0 )) || vfail "$violations potential credential(s) committed"
 

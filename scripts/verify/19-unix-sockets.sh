@@ -23,7 +23,7 @@ trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm -f "$sockvo
 docker volume create "$sockvol" >/dev/null
 
 docker run -d --name "$name" \
-    -e POSTGRES_PASSWORD=verifyonly \
+    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -e DBTK_SOCKETS=true \
     -v "$sockvol:/var/run/postgresql" \
     "$img" >/dev/null || vfail "container failed to start with DBTK_SOCKETS=true"
@@ -39,7 +39,7 @@ vinfo "socket present in the shared volume"
 # --network none is what makes "no TCP" an assertion rather than a claim.
 out="$(docker run --rm --network none \
     -v "$sockvol:/var/run/postgresql" \
-    -e PGPASSWORD=verifyonly \
+    -e PGPASSWORD=dbtk-throwaway-verify \
     "$img" \
     psql -h /var/run/postgresql -U postgres -tAc "SELECT 'socket-ok'" 2>&1 || true)"
 

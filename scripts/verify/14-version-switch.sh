@@ -34,7 +34,7 @@ docker volume create "$vol16" >/dev/null
 docker volume create "$vol17" >/dev/null
 
 # --- start on 16 and write a marker row --------------------------------------
-docker run -d --name "$c16" -e POSTGRES_PASSWORD=verifyonly \
+docker run -d --name "$c16" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$vol16:/var/lib/postgresql/data" "$old_img" >/dev/null \
     || vfail "PG 16 container failed to start"
 wait_for 60 "PG 16 to accept connections" docker exec "$c16" pg_isready -U postgres
@@ -48,7 +48,7 @@ vinfo "PG 16 running (server_version_num prefix $major16), marker row written"
 docker stop -t 30 "$c16" >/dev/null
 
 # --- switch to 17, which must use a DIFFERENT volume -------------------------
-docker run -d --name "$c17" -e POSTGRES_PASSWORD=verifyonly \
+docker run -d --name "$c17" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$vol17:/var/lib/postgresql/data" "$new_img" >/dev/null \
     || vfail "PG 17 container failed to start on its own volume"
 wait_for 60 "PG 17 to accept connections" docker exec "$c17" pg_isready -U postgres

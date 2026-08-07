@@ -30,7 +30,7 @@ trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm -f "$vol" >
 
 docker volume create "$vol" >/dev/null
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=verifyonly \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$vol:/var/lib/postgresql/data" "$img" >/dev/null \
     || vfail "container failed to start"
 
@@ -74,7 +74,7 @@ docker rm -f "$name" >/dev/null 2>&1 || true
 name2="dbtk-verify-s6-restart-$$"
 track_container "$name2"
 
-docker run -d --name "$name2" -e POSTGRES_PASSWORD=verifyonly \
+docker run -d --name "$name2" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$vol:/var/lib/postgresql/data" "$img" >/dev/null
 
 wait_for 60 "postgres to accept connections after restart" docker exec "$name2" pg_isready -U postgres

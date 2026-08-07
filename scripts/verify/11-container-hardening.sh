@@ -24,7 +24,7 @@ name="dbtk-verify-harden-$$"
 track_container "$name"
 
 docker run -d --name "$name" \
-    -e POSTGRES_PASSWORD=verifyonly \
+    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     --read-only \
     --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add DAC_OVERRIDE \
     --security-opt no-new-privileges \

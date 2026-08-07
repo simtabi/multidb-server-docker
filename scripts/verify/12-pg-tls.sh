@@ -29,7 +29,7 @@ trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker network rm "$net" >/d
 docker network create "$net" >/dev/null
 
 docker run -d --name "$name" --network "$net" --network-alias pg \
-    -e POSTGRES_PASSWORD=verifyonly \
+    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$DBTK_ROOT/certs:/certs:ro" \
     "$img" >/dev/null || vfail "container failed to start with certs mounted"
 
@@ -48,7 +48,7 @@ vinfo "local session TLS version: ${cipher:-none}"
 # verify-full from a separate container, trusting only the toolkit CA.
 out="$(docker run --rm --network "$net" \
     -v "$DBTK_ROOT/certs/ca.crt:/ca.crt:ro" \
-    -e PGPASSWORD=verifyonly \
+    -e PGPASSWORD=dbtk-throwaway-verify \
     "$img" \
     psql "host=pg user=postgres dbname=postgres sslmode=verify-full sslrootcert=/ca.crt" \
     -tAc "SELECT 'verify-full-ok'" 2>&1 || true)"

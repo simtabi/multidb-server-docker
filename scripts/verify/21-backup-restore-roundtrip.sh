@@ -60,7 +60,7 @@ vinfo "pg: 500 rows and the stored function restored"
 # --- MySQL family -------------------------------------------------------------
 roundtrip_mysql_family() {
     local engine="$1" client="$2"
-    docker compose exec -T "$engine" "$client" -uroot -pverifyonly -e "
+    docker compose exec -T "$engine" "$client" -uroot -pdbtk-throwaway-verify -e "
         CREATE DATABASE IF NOT EXISTS roundtrip;
         USE roundtrip;
         CREATE TABLE items(id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64));
@@ -72,7 +72,7 @@ roundtrip_mysql_family() {
     make backup ENGINE="$engine" DB=roundtrip >/dev/null 2>&1 \
         || vfail "make backup ENGINE=$engine failed"
 
-    docker compose exec -T "$engine" "$client" -uroot -pverifyonly \
+    docker compose exec -T "$engine" "$client" -uroot -pdbtk-throwaway-verify \
         -e "DROP DATABASE roundtrip;" >/dev/null 2>&1
 
     local latest
@@ -83,17 +83,17 @@ roundtrip_mysql_family() {
         || vfail "make restore ENGINE=$engine failed"
 
     local rows routines events
-    rows="$(docker compose exec -T "$engine" "$client" -uroot -pverifyonly -N -B \
+    rows="$(docker compose exec -T "$engine" "$client" -uroot -pdbtk-throwaway-verify -N -B \
         -e "SELECT count(*) FROM roundtrip.items" 2>/dev/null | tr -d ' \r')"
     [[ "$rows" == "3" ]] || vfail "$engine restored $rows rows, expected 3"
 
     # The flags SPEC section 11 insists on: --routines and --events. Their
     # absence is invisible until the day you need them.
-    routines="$(docker compose exec -T "$engine" "$client" -uroot -pverifyonly -N -B \
+    routines="$(docker compose exec -T "$engine" "$client" -uroot -pdbtk-throwaway-verify -N -B \
         -e "SELECT count(*) FROM information_schema.routines WHERE routine_schema='roundtrip'" 2>/dev/null | tr -d ' \r')"
     [[ "$routines" == "1" ]] || vfail "$engine restore lost stored routines (--routines missing?)"
 
-    events="$(docker compose exec -T "$engine" "$client" -uroot -pverifyonly -N -B \
+    events="$(docker compose exec -T "$engine" "$client" -uroot -pdbtk-throwaway-verify -N -B \
         -e "SELECT count(*) FROM information_schema.events WHERE event_schema='roundtrip'" 2>/dev/null | tr -d ' \r')"
     [[ "$events" == "1" ]] || vfail "$engine restore lost events (--events missing?)"
 
