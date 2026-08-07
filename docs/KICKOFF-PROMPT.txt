@@ -1,0 +1,107 @@
+You are the senior database and DevOps engineer building db-toolkit end to end.
+
+Ground rules, before anything else:
+1. Read docs/SPEC.md, docs/KIT.md, and CLAUDE.md completely. SPEC.md is the
+   contract, KIT.md is the method, CLAUDE.md binds every session.
+2. Verify docker works (docker info). If it does not, stop and say so.
+
+VERIFIED RESEARCH BASELINE. The following facts were already confirmed against
+sources during spec design. Treat them as settled: verify currency and exact
+versions, do not re-litigate the conclusions.
+- Postgres data directories are major-version-specific; changing the image
+  major on an existing volume fails ("database files are incompatible with
+  server"); minor bumps are safe. Hence per-engine per-major volumes.
+  (github.com/docker-library/postgres/issues/37)
+- PG 18+ images store data in major-versioned subdirs and expect the mount at
+  /var/lib/postgresql (not .../data) so pg_upgrade --link works.
+  (github.com/docker-library/postgres/issues/1377)
+- Base the PG image on pgvector/pgvector (official, tags per PG major, built
+  via PG_MAJOR build arg). Parallel HNSW builds need shm-size at least
+  maintenance_work_mem. (github.com/pgvector/pgvector)
+- The official image entrypoints own first-run init, POSTGRES_*/MYSQL_* envs,
+  the _FILE secret convention, and /docker-entrypoint-initdb.d. s6-overlay
+  wraps and invokes them as the supervised service; it never replaces them.
+  (hub.docker.com/_/postgres, _/mysql, _/mariadb)
+- Multi-DB provisioning uses the database:username:password triplet format
+  (vendored script; pattern from danielptv/postgres-multiple-databases,
+  mechanism from mrts/docker-postgresql-multiple-databases; initdb.d works
+  identically on mysql and mariadb images).
+- tiredofit/docker-db-backup natively covers postgres, mysql, and mariadb with
+  per-job DBnn_ config, S3-compatible targets, compression, encryption,
+  checksums, notifications, and restore helpers. One dump helper script is
+  shared by sidecar jobs and make targets so flags never drift.
+- mysqldump defaults include triggers but EXCLUDE stored routines and events;
+  a complete dump requires --single-transaction --routines --triggers
+  --events --quick. Per-DB pg_dump misses roles/grants; run
+  pg_dumpall --globals-only alongside every backup run.
+- Cert hot-reload differs: MySQL uses ALTER INSTANCE RELOAD TLS, MariaDB uses
+  FLUSH SSL. require_secure_transport works on MariaDB 10.5+ and secure
+  transports include unix sockets, so sockets survive prod TLS enforcement.
+  MySQL 8.4+ drops mysql_native_password by default (compat toggle needed).
+- Unix sockets are shared between containers via a named volume holding the
+  socket dir; host-to-container sockets work only on native Linux (Docker
+  Desktop's VM blocks it on macOS/Windows; hosts there use loopback TCP).
+- One service per container is Docker's own guidance; multi-daemon containers
+  break lifecycle/healthchecks and interleave stdout into unparsable logs.
+  s6-overlay supervision is legitimate only for a single engine plus its own
+  helpers (linuxserver.io pattern). Sail and DDEV both isolate databases as
+  separate containers. (docs.docker.com multi-service_container)
+- phpMyAdmin's official image serves multiple servers via PMA_HOSTS (comma
+  list), PMA_ARBITRARY for ad-hoc, PMA_SSLS for per-host TLS. Adminer speaks
+  all three engines. pgAdmin pre-provisions via a mounted servers.json.
+- Caddy provides automatic HTTPS: internal CA in dev (*.localhost resolves to
+  127.0.0.1 natively), Let's Encrypt in prod, basic auth on UI routes.
+- Postgres has no built-in automatic failover; the standard HA stack is
+  Patroni (leader election via etcd) + HAProxy routing writes/reads through
+  Patroni's REST health checks (/primary, /replica; one write port, one read
+  port) + pgBouncer per node + pgBackRest shared repo. libpq multi-host with
+  target_session_attrs=read-write is the client fallback. ~500 direct PG
+  connections cost roughly 5GB, which is why pooling is mandatory in prod.
+  A single HAProxy or pgBouncer container is itself a SPOF; note mitigations.
+- Security baseline: pinned digests, secrets only via _FILE/docker secrets,
+  internal networks with nothing published by default, hostssl-only pg_hba,
+  non-root, cap_drop ALL, no-new-privileges, resource limits, and the
+  Tailscale sidecar pattern (network_mode: service:ts) for private prod access.
+
+NAMED UNKNOWNS. Spend your research budget here, not above:
+- Current exact tags and digests for every image in the stack.
+- arm64 availability and build recipes for pg_graphql, pg_net, pgsodium,
+  pgjwt, http, pg_partman on our PG majors; document any true gaps.
+- tiredofit/db-backup env names for passing per-job dump flags.
+- The right Patroni container approach (official patroni image vs Spilo vs
+  custom on our engine image) and the etcd version to pin.
+- Concrete s6-overlay v3 + official-entrypoint integration examples.
+- How MariaDB 11.4's automatic TLS interacts with our CA-issued certs.
+- Anything else you find stale, contradictory, or missing while reading the
+  spec like a skeptical principal engineer; log every finding.
+
+Step 1, research and finalize (no implementation code yet):
+- Resolve every Named Unknown with current sources; pin versions.
+- Reconcile SPEC.md section 21 (scale, HA, sync) with the rest of the spec:
+  fold its requirements into services, env, commands, CI, and acceptance.
+- Produce DESIGN.md: final service map, complete env table (name, default,
+  description, profile), pinned version table with links, the capacity truth
+  table required by section 21, the decision log including every spec issue
+  found and how you resolved it, and anything undeliverable on arm64 with its
+  workaround.
+- STOP for my approval of DESIGN.md. No implementation code before approval.
+
+Step 2, build (after approval):
+- Execute KIT.md phases 1 through 7 in order, one phase at a time.
+- Phase 1 builds the complete `make verify` harness first, red where features
+  do not exist yet.
+- Every task follows the CLAUDE.md loop: plan, research, implement, verify,
+  self-heal. Done means its check passes. Root cause, never symptom. Three
+  failed attempts on one issue means stop and present options.
+- Spec gaps found mid-build go in the DESIGN.md decision log, never silently.
+- Commit on every green `make verify` with the phase and task in the message.
+- End every phase with `make verify` green, then a summary of what changed,
+  what you researched, and any decision-log entries added.
+- Unanswered section 19 questions resolve to their stated defaults; ha is
+  phase 7 unless I say otherwise.
+
+Definition of done: SPEC.md section 18 acceptance criteria all pass, phase 7
+included if instructed, CI green on both architectures, and a final report
+mapping each acceptance criterion to the check that proves it.
+
+Begin with step 1 now.

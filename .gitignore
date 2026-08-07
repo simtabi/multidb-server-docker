@@ -1,0 +1,21 @@
+# CLAUDE.md is a tracked build contract in this repo (KIT.md section 2).
+# The user's global excludes file ignores it; this negation wins because a
+# repo .gitignore takes precedence over core.excludesFile.
+!CLAUDE.md
+
+# Generated secrets and certificates: never committed (SPEC.md section 15).
+secrets/
+certs/
+
+# Local environment files.
+.env
+.env.prod
+.env.local
+!.env.example
+
+# Build output.
+build/dist/
+
+# OS noise.
+.DS_Store
+Thumbs.db
