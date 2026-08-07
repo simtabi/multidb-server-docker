@@ -16,11 +16,17 @@ need_image "$img"
 name="dbtk-verify-pg-ext-$$"
 track_container "$name"
 
+# pgaudit, pg_cron, and pg_net are background-worker or hook extensions: they
+# refuse to be created at all unless they are in shared_preload_libraries
+# ("pgaudit must be loaded via shared_preload_libraries"). Preloading them here
+# is correct usage, not an accommodation -- but it is also why the shipped
+# default in .env.example lists only pg_stat_statements: preloading costs
+# startup time and memory, so the others are opt-in.
 docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
-    -e DBTK_PG_SHARED_PRELOAD=pg_stat_statements,pg_cron \
+    -e DBTK_PG_SHARED_PRELOAD=pg_stat_statements,pg_cron,pgaudit,pg_net \
     --shm-size=256m "$img" >/dev/null || vfail "container failed to start"
 
-wait_for 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 
 # pg_cron only creates in its configured database; postgis brings companions.
 extensions=(

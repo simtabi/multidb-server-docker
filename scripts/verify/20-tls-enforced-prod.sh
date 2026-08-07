@@ -31,7 +31,7 @@ check_family() {
         -v "$sockvol:/var/run/mysqld" \
         "$img" >/dev/null || vfail "$engine failed to start with DBTK_TLS_ENFORCE=true"
 
-    wait_for 90 "$engine to accept connections" \
+    wait_ready 90 "$engine to accept connections" \
         docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -e "SELECT 1"
 
     # require_secure_transport must actually be ON.
@@ -69,7 +69,7 @@ track_container "$name"
 docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify -e DBTK_TLS_ENFORCE=true \
     -v "$DBTK_ROOT/certs:/certs:ro" "$img" >/dev/null \
     || vfail "PG failed to start with TLS enforcement"
-wait_for 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 
 if docker exec "$name" sh -c "grep -E '^host[[:space:]]' /var/lib/postgresql/data/pg_hba.conf | grep -v replication" 2>/dev/null | grep -q .; then
     vfail "pg_hba.conf still has plain 'host' rules; TLS enforcement requires hostssl only"

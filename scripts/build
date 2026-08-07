@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# Build the db-toolkit images for this architecture.
+#
+# Bases come from images/bases.tsv, the single source of truth for what every
+# image is built FROM, so a digest is never written twice.
+#
+# Usage: scripts/build [engine ...]     (default: every engine with a Dockerfile)
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+
+PREFIX="${DBTK_IMAGE_PREFIX:-ghcr.io/simtabi}"
+
+get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+
+version_for() {
+    case "$1" in
+        pg)      v="$(get DBTK_PG_VERSION)";      printf '%s' "${v:-17}" ;;
+        mysql)   v="$(get DBTK_MYSQL_VERSION)";   printf '%s' "${v:-8.4}" ;;
+        mariadb) v="$(get DBTK_MARIADB_VERSION)"; printf '%s' "${v:-11.4}" ;;
+        cli)     printf 'dev' ;;
+    esac
+}
+
+base_for() {
+    awk -v e="$1" -v v="$2" '$1==e && $2==v {print $3; exit}' "$ROOT/images/bases.tsv"
+}
+
+engines=("$@")
+if [[ ${#engines[@]} -eq 0 ]]; then
+    engines=()
+    for e in pg mysql mariadb cli; do
+        [[ -f "$ROOT/images/$e/Dockerfile" ]] && engines+=("$e")
+    done
+fi
+
+if [[ ${#engines[@]} -eq 0 ]]; then
+    printf 'no images have a Dockerfile yet\n' >&2
+    exit 1
+fi
+
+for engine in "${engines[@]}"; do
+    [[ -f "$ROOT/images/$engine/Dockerfile" ]] \
+        || { printf 'images/%s/Dockerfile does not exist\n' "$engine" >&2; exit 1; }
+
+    version="$(version_for "$engine")"
+    tag="$PREFIX/db-toolkit-$engine:$version"
+
+    if [[ "$engine" == "cli" ]]; then
+        printf 'building %s\n' "$tag"
+        docker build -t "$tag" "$ROOT/images/cli"
+        continue
+    fi
+
+    base="$(base_for "$engine" "$version")"
+    [[ -n "$base" ]] || {
+        printf 'no base pinned for %s %s in images/bases.tsv\n' "$engine" "$version" >&2
+        exit 1
+    }
+
+    printf 'building %s\n  from %s\n' "$tag" "$base"
+    docker build \
+        --build-arg "BASE_IMAGE=$base" \
+        --build-arg "ENGINE_VERSION=$version" \
+        -t "$tag" "$ROOT/images/$engine"
+done
+
+printf '✓ built %d image(s)\n' "${#engines[@]}"

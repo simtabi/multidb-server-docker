@@ -37,11 +37,43 @@ for f in "${candidates[@]}"; do
     while IFS= read -r line; do
         case "$line" in
             *@sha256:*|*\$\{*|*scratch*) continue ;;
+            # Images this repository builds have no digest until they are
+            # published. The rule exists to pin what we consume, not what we
+            # produce; their bases are pinned in images/bases.tsv, validated
+            # below.
+            *ghcr.io/simtabi/db-toolkit-*) continue ;;
         esac
         printf '      %s: not digest-pinned: %s\n' "${f#./}" "$line" >&2
         (( violations++ )) || true
     done < <(grep -nE '^[^#]*(FROM|image:)[[:space:]]+[a-zA-Z0-9]' "$f" || true)
 done
+
+# A Dockerfile may write `FROM ${BASE_IMAGE}` because the base varies by engine
+# major. That indirection is only legitimate if the thing it resolves to is
+# itself pinned, so images/bases.tsv is validated as the real source of truth
+# rather than treated as an exemption.
+bases="$DBTK_ROOT/images/bases.tsv"
+if [[ -f "$bases" ]]; then
+    entries=0
+    while IFS= read -r line; do
+        case "$line" in ''|'#'*) continue ;; esac
+        ref="$(printf '%s' "$line" | awk '{print $3}')"
+        [[ -n "$ref" ]] || continue
+        entries=$(( entries + 1 ))
+        case "$ref" in
+            *@sha256:*) ;;
+            *) printf '      bases.tsv: not digest-pinned: %s\n' "$ref" >&2
+               violations=$(( violations + 1 )) ;;
+        esac
+        case "$ref" in
+            *:latest*) printf '      bases.tsv: floating tag: %s\n' "$ref" >&2
+                       violations=$(( violations + 1 )) ;;
+        esac
+    done < "$bases"
+    vinfo "images/bases.tsv: $entries pinned base(s)"
+else
+    vfail "images/bases.tsv is missing; it is the single source of truth for base pins"
+fi
 
 (( violations == 0 )) || vfail "$violations unpinned image reference(s); CLAUDE.md requires pinned digests, no latest"
 

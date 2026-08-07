@@ -21,7 +21,7 @@ off="dbtk-verify-embed-off-$$"
 track_container "$off"
 docker run -d --name "$off" -e POSTGRES_PASSWORD=dbtk-throwaway-verify "$img" >/dev/null \
     || vfail "container failed to start"
-wait_for 60 "postgres to accept connections" docker exec "$off" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$off" pg_isready -U postgres
 
 if docker exec "$off" sh -c 'ps -eo comm | grep -q exporter' 2>/dev/null; then
     vfail "an exporter is running with DBTK_PG_EMBED_EXPORTER unset; it must default off"
@@ -35,7 +35,7 @@ docker run -d --name "$on" \
     -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -e DBTK_PG_EMBED_EXPORTER=true \
     "$img" >/dev/null || vfail "container failed to start with the exporter embedded"
-wait_for 60 "postgres to accept connections" docker exec "$on" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$on" pg_isready -U postgres
 
 wait_for 30 "the embedded exporter to serve metrics" \
     docker exec "$on" sh -c 'wget -qO- http://127.0.0.1:9187/metrics | head -1'

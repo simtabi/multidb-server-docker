@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify: no credential is present in any built image layer or history
 # tags: security
-# phase: 2
+# phase: 5
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 

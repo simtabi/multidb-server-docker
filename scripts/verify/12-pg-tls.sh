@@ -33,7 +33,7 @@ docker run -d --name "$name" --network "$net" --network-alias pg \
     -v "$DBTK_ROOT/certs:/certs:ro" \
     "$img" >/dev/null || vfail "container failed to start with certs mounted"
 
-wait_for 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 
 # TLS must be on.
 ssl_on="$(docker exec "$name" psql -U postgres -tAc "SHOW ssl" 2>/dev/null | tr -d ' ')"

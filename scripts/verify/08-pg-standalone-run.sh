@@ -20,7 +20,7 @@ track_container "$name"
 docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify "$img" >/dev/null \
     || vfail "docker run failed with only POSTGRES_PASSWORD set"
 
-wait_for 60 "postgres to accept connections" \
+wait_ready 60 "postgres to accept connections" \
     docker exec "$name" pg_isready -U postgres
 
 # A fully configured server, not merely a running one.

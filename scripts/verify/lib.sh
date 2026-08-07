@@ -89,6 +89,38 @@ need_image() {
     image_exists "$img" || vfail "image not built yet: $img (run: make build)"
 }
 
+# Resolve the digest-pinned upstream base for an engine + version from the
+# single source of truth in images/bases.tsv.
+base_image() {
+    local engine="$1" version="$2" line
+    line="$(awk -v e="$engine" -v v="$version" \
+        '$1==e && $2==v {print $3; exit}' "$DBTK_ROOT/images/bases.tsv" 2>/dev/null || true)"
+    [[ -n "$line" ]] || vfail "no base pinned for $engine $version in images/bases.tsv"
+    printf '%s\n' "$line"
+}
+
+# Build one of our images, passing the pinned base and the engine version.
+build_image() {
+    local engine="$1" tag="$2" version base
+    case "$engine" in
+        pg)      version="$(env_get DBTK_PG_VERSION 17)" ;;
+        mysql)   version="$(env_get DBTK_MYSQL_VERSION 8.4)" ;;
+        mariadb) version="$(env_get DBTK_MARIADB_VERSION 11.4)" ;;
+        cli)     version="dev" ;;
+    esac
+
+    if [[ "$engine" == "cli" ]]; then
+        docker build -t "$tag" "$DBTK_ROOT/images/cli"
+        return
+    fi
+
+    base="$(base_image "$engine" "$version")"
+    docker build \
+        --build-arg "BASE_IMAGE=$base" \
+        --build-arg "ENGINE_VERSION=$version" \
+        -t "$tag" "$DBTK_ROOT/images/$engine"
+}
+
 # Run a throwaway container and always clean it up.
 CLEANUP_CONTAINERS=()
 cleanup_containers() {
@@ -107,6 +139,32 @@ wait_for() {
     local i
     for (( i = 0; i < budget; i++ )); do
         if "$@" >/dev/null 2>&1; then return 0; fi
+        sleep 1
+    done
+    vfail "timed out after ${budget}s waiting for: $what"
+}
+
+# Wait for a DATABASE to be genuinely ready, which is not the same as answering.
+#
+# The official entrypoints start a TEMPORARY server during first-run
+# initialisation (socket-only, to run initdb.d), shut it down, and then start
+# the real one. A single successful probe can land on that temporary server and
+# the very next command then fails with "no such file or directory" as the
+# socket disappears underneath it.
+#
+# Requiring consecutive successes rides out that restart window. Verified
+# against the real log sequence: "ready to accept connections" (temp) ->
+# "shutting down" -> "init process complete" -> "ready to accept connections".
+wait_ready() {
+    local budget="$1" what="$2"; shift 2
+    local i streak=0 needed=3
+    for (( i = 0; i < budget; i++ )); do
+        if "$@" >/dev/null 2>&1; then
+            streak=$(( streak + 1 ))
+            (( streak >= needed )) && return 0
+        else
+            streak=0
+        fi
         sleep 1
     done
     vfail "timed out after ${budget}s waiting for: $what"

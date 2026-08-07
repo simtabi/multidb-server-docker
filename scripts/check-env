@@ -94,6 +94,26 @@ check_menu DBTK_PG_VERSION      15 16 17 18
 check_menu DBTK_MYSQL_VERSION   8.0 8.4 9.7
 check_menu DBTK_MARIADB_VERSION 10.11 11.4 11.8
 
+# PostgreSQL 18 moved the expected mount point. Up to 17 the data directory is
+# /var/lib/postgresql/data; from 18 the image stores data in major-versioned
+# subdirectories and expects the volume one level up at /var/lib/postgresql, so
+# that pg_upgrade --link can work across majors.
+#
+# Getting this pair wrong does not fail loudly at boot -- it silently
+# initialises a second, empty database in the wrong place -- so it is checked
+# here rather than discovered later.
+pg_version="$(get DBTK_PG_VERSION)"
+pg_mount="$(get DBTK_PG_DATA_MOUNT)"
+if [[ -n "$pg_version" && -n "$pg_mount" ]]; then
+    if (( ${pg_version%%.*} >= 18 )); then
+        [[ "$pg_mount" == "/var/lib/postgresql" ]] \
+            || err "DBTK_PG_VERSION=$pg_version needs DBTK_PG_DATA_MOUNT=/var/lib/postgresql (got $pg_mount)"
+    else
+        [[ "$pg_mount" == "/var/lib/postgresql/data" ]] \
+            || err "DBTK_PG_VERSION=$pg_version needs DBTK_PG_DATA_MOUNT=/var/lib/postgresql/data (got $pg_mount)"
+    fi
+fi
+
 # -----------------------------------------------------------------------------
 # 4. Host port collisions
 # -----------------------------------------------------------------------------

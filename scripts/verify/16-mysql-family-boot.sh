@@ -24,7 +24,7 @@ check_engine() {
     docker run -d --name "$name" -e "$pw_env=dbtk-throwaway-verify" "$img" >/dev/null \
         || vfail "$engine failed to start with only $pw_env set"
 
-    wait_for 90 "$engine to accept connections" \
+    wait_ready 90 "$engine to accept connections" \
         docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify -e "SELECT 1"
 
     # Baked defaults from SPEC section 6 must actually be in effect.

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+#
+# Initialise a db-toolkit checkout: environment file, generated secrets, and the
+# TLS certificates PostgreSQL needs in order to start at all (SPEC section 13).
+#
+# Idempotent, and refuses to overwrite an existing environment file without
+# FORCE=1, because doing so would orphan every password already in use.
+#
+# Usage: scripts/init [--prod]
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+PROD=0
+[[ "${1:-}" == "--prod" ]] && PROD=1
+
+TARGET="$ROOT/.env"
+(( PROD )) && TARGET="$ROOT/.env.prod"
+[[ -n "${ENV_FILE:-}" ]] && TARGET="$ENV_FILE"
+
+if [[ -f "$TARGET" ]] && [[ "${FORCE:-0}" != "1" ]]; then
+    printf '%s already exists.\n' "${TARGET#"$ROOT"/}" >&2
+    printf 'Refusing to overwrite it: the passwords in secrets/ are already in use\n' >&2
+    printf 'by any database you have created. Re-run with FORCE=1 to replace it.\n' >&2
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# 1. Environment file
+# -----------------------------------------------------------------------------
+cp "$ROOT/.env.example" "$TARGET"
+printf '✓ wrote %s\n' "${TARGET#"$ROOT"/}"
+
+# -----------------------------------------------------------------------------
+# 2. Secrets
+# -----------------------------------------------------------------------------
+mkdir -p "$ROOT/secrets"
+chmod 0700 "$ROOT/secrets"
+
+gen_secret() {
+    name="$1"
+    file="$ROOT/secrets/$name"
+    if [[ -s "$file" ]]; then
+        printf '  %s already exists, keeping it\n' "$name"
+        return 0
+    fi
+    # Base64 minus the characters that need escaping in connection URIs and
+    # configuration files, so a generated password never needs quoting.
+    #
+    # Sourced from `openssl rand` rather than /dev/urandom because the latter is
+    # infinite: `head -c` would close the pipe, kill `tr` with SIGPIPE, and
+    # `set -o pipefail` would turn that into a fatal error 141 after the file
+    # had already been written but before it was chmodded.
+    openssl rand -base64 96 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-40 > "$file"
+    chmod 0600 "$file"
+    printf '  generated %s\n' "$name"
+}
+
+printf 'generating secrets\n'
+gen_secret pg_superuser_password.txt
+gen_secret mysql_root_password.txt
+gen_secret mariadb_root_password.txt
+gen_secret pgadmin_password.txt
+
+# -----------------------------------------------------------------------------
+# 3. Certificates
+# -----------------------------------------------------------------------------
+# PostgreSQL TLS is always on (SPEC decision 5), so without certificates the
+# stack cannot boot. Generating them here is what makes `make init && make up`
+# actually two commands.
+printf 'generating certificates\n'
+DBTK_ENV_FILE="$TARGET" "$ROOT/scripts/certs"
+
+# -----------------------------------------------------------------------------
+# 4. Prod hardening
+# -----------------------------------------------------------------------------
+if (( PROD )); then
+    printf 'applying prod-safe values\n'
+    # BSD and GNU sed disagree about -i, so edit through a temporary file.
+    tmp="$(mktemp)"
+    sed -e 's|^DBTK_TLS_ENFORCE=.*|DBTK_TLS_ENFORCE=true|' \
+        -e 's|^DBTK_PROFILES=.*|DBTK_PROFILES=pg,prod,backup|' \
+        -e 's|^DBTK_PG_SLOW_MS=.*|DBTK_PG_SLOW_MS=0|' \
+        -e 's|^DBTK_BACKUP_ENCRYPT=.*|DBTK_BACKUP_ENCRYPT=true|' \
+        -e 's|^#DBTK_PG_HOST_PORT=.*|#DBTK_PG_HOST_PORT=|' \
+        "$TARGET" > "$tmp"
+    mv "$tmp" "$TARGET"
+    printf '  TLS enforced, no engine ports published, backups encrypted\n'
+    printf '  set DBTK_UI_BASIC_AUTH_USER and _HASH before starting: caddy hash-password\n'
+fi
+
+# -----------------------------------------------------------------------------
+# 5. Validate
+# -----------------------------------------------------------------------------
+DBTK_ENV_FILE="$TARGET" "$ROOT/scripts/check-env"
+
+printf '\nNext: make up\n'

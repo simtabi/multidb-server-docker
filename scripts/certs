@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# Create the toolkit-internal certificate authority and per-engine server
+# certificates (SPEC section 9.1).
+#
+# Distinct from Caddy's web certificates: engines never share the web certs.
+# Idempotent — the CA is created once and reused, so client trust stores stay
+# valid across runs. `certs-renew` rotates only the server certificates.
+#
+# Usage: scripts/certs [--renew]
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CERT_DIR="$ROOT/certs"
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+
+RENEW=0
+[[ "${1:-}" == "--renew" ]] && RENEW=1
+
+get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+
+CERT_DAYS="$(get DBTK_CERT_DAYS)"; CERT_DAYS="${CERT_DAYS:-825}"
+EXTRA_SANS="$(get DBTK_EXTRA_SANS)"
+
+command -v openssl >/dev/null 2>&1 || { printf 'openssl is required\n' >&2; exit 1; }
+
+mkdir -p "$CERT_DIR"
+
+# -----------------------------------------------------------------------------
+# The CA, created once.
+# -----------------------------------------------------------------------------
+if [[ ! -s "$CERT_DIR/ca.crt" ]]; then
+    printf 'creating the toolkit CA\n'
+    openssl req -x509 -newkey rsa:4096 -nodes \
+        -days 3650 \
+        -subj "/O=Simtabi LLC/OU=db-toolkit/CN=db-toolkit local CA" \
+        -keyout "$CERT_DIR/ca.key" \
+        -out "$CERT_DIR/ca.crt" 2>/dev/null
+    chmod 0600 "$CERT_DIR/ca.key"
+    chmod 0644 "$CERT_DIR/ca.crt"
+else
+    printf 'reusing the existing toolkit CA\n'
+fi
+
+# -----------------------------------------------------------------------------
+# Per-engine server certificates.
+# -----------------------------------------------------------------------------
+issue() {
+    engine="$1"
+    dir="$CERT_DIR/$engine"
+    mkdir -p "$dir"
+
+    if [[ -s "$dir/server.crt" ]] && (( ! RENEW )); then
+        printf '  %s: certificate already present\n' "$engine"
+        return 0
+    fi
+
+    # SANs cover the compose service name, the container hostname, and
+    # localhost, so sslmode=verify-full works from inside the network and from
+    # a published port without a second certificate.
+    sans="DNS:${engine},DNS:localhost,IP:127.0.0.1,IP:::1"
+    case "$engine" in
+        pg) sans="$sans,DNS:postgres,DNS:pgbouncer,DNS:haproxy" ;;
+    esac
+    if [[ -n "$EXTRA_SANS" ]]; then
+        old_ifs="$IFS"; IFS=','
+        for s in $EXTRA_SANS; do
+            [[ -n "$s" ]] && sans="$sans,DNS:$s"
+        done
+        IFS="$old_ifs"
+    fi
+
+    openssl req -newkey rsa:2048 -nodes \
+        -subj "/O=Simtabi LLC/OU=db-toolkit/CN=${engine}" \
+        -keyout "$dir/server.key" \
+        -out "$dir/server.csr" 2>/dev/null
+
+    openssl x509 -req \
+        -in "$dir/server.csr" \
+        -CA "$CERT_DIR/ca.crt" -CAkey "$CERT_DIR/ca.key" -CAcreateserial \
+        -days "$CERT_DAYS" \
+        -extfile <(printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\n' "$sans") \
+        -out "$dir/server.crt" 2>/dev/null
+
+    rm -f "$dir/server.csr"
+
+    # PostgreSQL refuses to start if the key is group- or world-readable.
+    chmod 0600 "$dir/server.key"
+    chmod 0644 "$dir/server.crt"
+
+    printf '  %s: certificate issued (%s days, SAN %s)\n' "$engine" "$CERT_DAYS" "$sans"
+}
+
+for engine in pg mysql mariadb; do
+    issue "$engine"
+done
+
+printf '✓ certificates ready in %s\n' "${CERT_DIR#"$ROOT"/}"
+printf '  clients trust %s and connect with sslmode=verify-full\n' "certs/ca.crt"

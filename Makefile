@@ -14,11 +14,17 @@ export COMPOSE_PROJECT_NAME
 ENV_FILE ?= .env
 COMPOSE  := docker compose
 
-# PROFILES=pg,ui on the command line overrides DBTK_PROFILES for one run.
-ifdef PROFILES
-COMPOSE_PROFILES := $(PROFILES)
+# Profile selection, in precedence order: PROFILES= on the command line for a
+# single run, then DBTK_PROFILES in .env permanently, then the documented
+# default (SPEC section 7).
+env_profiles := $(shell grep -E '^DBTK_PROFILES=' $(ENV_FILE) 2>/dev/null | tail -1 | cut -d= -f2-)
+COMPOSE_PROFILES := $(or $(PROFILES),$(env_profiles),pg,ui)
 export COMPOSE_PROFILES
-endif
+
+# down, status, and logs must see every service regardless of the selected
+# profiles, or a running container from another profile becomes invisible and
+# un-stoppable through the Makefile.
+all_profiles := --profile '*'
 
 # Emit a consistent "not implemented" failure. $(1) is the owning phase.
 define unimplemented
@@ -40,7 +46,7 @@ help: ## Show this help
 
 .PHONY: init
 init: ## Create .env, generate secrets and certs, run check-env
-	$(call unimplemented,2)
+	@scripts/init
 
 .PHONY: init-prod
 init-prod: ## Render .env.prod with prod-safe values
@@ -52,7 +58,11 @@ check-env: ## Validate env: sentinels, required vars, port collisions
 
 .PHONY: certs
 certs: ## Create the toolkit CA and per-engine server certificates
-	$(call unimplemented,2)
+	@scripts/certs
+
+.PHONY: build
+build: ## Build every engine image for this architecture
+	@scripts/build
 
 .PHONY: certs-renew
 certs-renew: ## Rotate server certs with live reload (no downtime)
@@ -68,19 +78,22 @@ rotate-secrets: ## Rotate every database password and secret file, applied live
 
 .PHONY: up
 up: ## Boot the stack (never touches data)
-	$(call unimplemented,2)
+	@scripts/check-env --quiet
+	@$(COMPOSE) up -d --wait
 
 .PHONY: down
 down: ## Stop the stack (never touches data)
-	$(call unimplemented,2)
+	@# No -v, ever. Removing volumes is `make destroy`, which demands a typed
+	@# confirmation naming the volume (SPEC section 15).
+	@$(COMPOSE) $(all_profiles) down --remove-orphans
 
 .PHONY: status
 status: ## Show service status
-	$(call unimplemented,2)
+	@$(COMPOSE) $(all_profiles) ps
 
 .PHONY: logs
 logs: ## Tail service logs
-	$(call unimplemented,2)
+	@$(COMPOSE) $(all_profiles) logs -f --tail=100
 
 .PHONY: destroy
 destroy: ## Delete data volumes (typed confirmation required)
@@ -96,7 +109,9 @@ test-profile: ## Boot the tmpfs speed profile and run its checks
 
 .PHONY: psql
 psql: ## PostgreSQL shell (socket-first)
-	$(call unimplemented,2)
+	@# Socket-first: faster than TCP and it removes a network surface entirely
+	@# (SPEC section 10.1).
+	@$(COMPOSE) exec pg psql -h /var/run/postgresql -U $(or $(USER_NAME),postgres)
 
 .PHONY: mysql
 mysql: ## MySQL shell (socket-first)

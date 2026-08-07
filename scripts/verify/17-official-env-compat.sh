@@ -35,7 +35,7 @@ docker run -d --name "$name" \
     -v "$tmp/01-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro" \
     "$img" >/dev/null || vfail "PG failed to start with POSTGRES_PASSWORD_FILE"
 
-wait_for 60 "custom_user to accept connections" \
+wait_ready 60 "custom_user to accept connections" \
     docker exec "$name" pg_isready -U custom_user -d custom_db
 
 docker exec -e PGPASSWORD=dbtk-throwaway-pgfile "$name" \
@@ -70,7 +70,7 @@ compat_mysql_family() {
         -v "$tmp/${engine}-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro" \
         "$img" >/dev/null || vfail "$engine failed to start with ${prefix}_ROOT_PASSWORD_FILE"
 
-    wait_for 90 "$engine custom_user to connect" \
+    wait_ready 90 "$engine custom_user to connect" \
         docker exec "$name" "$client" -ucustom_user -pdbtk-throwaway-user custom_db -e "SELECT 1"
 
     docker exec "$name" "$client" -uroot -pdbtk-throwaway-myfile -e "SELECT 1" >/dev/null 2>&1 \

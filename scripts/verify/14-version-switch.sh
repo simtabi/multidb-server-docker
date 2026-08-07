@@ -37,7 +37,7 @@ docker volume create "$vol17" >/dev/null
 docker run -d --name "$c16" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$vol16:/var/lib/postgresql/data" "$old_img" >/dev/null \
     || vfail "PG 16 container failed to start"
-wait_for 60 "PG 16 to accept connections" docker exec "$c16" pg_isready -U postgres
+wait_ready 60 "PG 16 to accept connections" docker exec "$c16" pg_isready -U postgres
 
 docker exec "$c16" psql -U postgres -q \
     -c "CREATE TABLE marker(v text); INSERT INTO marker VALUES ('pg16-data');" >/dev/null 2>&1 \
@@ -51,7 +51,7 @@ docker stop -t 30 "$c16" >/dev/null
 docker run -d --name "$c17" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     -v "$vol17:/var/lib/postgresql/data" "$new_img" >/dev/null \
     || vfail "PG 17 container failed to start on its own volume"
-wait_for 60 "PG 17 to accept connections" docker exec "$c17" pg_isready -U postgres
+wait_ready 60 "PG 17 to accept connections" docker exec "$c17" pg_isready -U postgres
 
 ver17="$(docker exec "$c17" psql -U postgres -tAc "SHOW server_version_num")"
 [[ "${ver17:0:2}" == "17" ]] || vfail "expected PG 17, got server_version_num=$ver17"
@@ -66,7 +66,7 @@ vinfo "PG 17 volume is independent of PG 16"
 
 # --- the reversibility half: old data must still be intact -------------------
 docker start "$c16" >/dev/null
-wait_for 60 "PG 16 to accept connections again" docker exec "$c16" pg_isready -U postgres
+wait_ready 60 "PG 16 to accept connections again" docker exec "$c16" pg_isready -U postgres
 
 val="$(docker exec "$c16" psql -U postgres -tAc "SELECT v FROM marker" 2>/dev/null | tr -d ' ')"
 [[ "$val" == "pg16-data" ]] || vfail "PG 16 data was lost or altered by the switch (got '$val')"

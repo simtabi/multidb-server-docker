@@ -31,8 +31,14 @@ docker compose ps --format '{{.Service}}' | grep -q '^adminer$' \
 vinfo "adminer is up"
 
 # Write a marker, take the stack down, bring it back, and prove data survived.
+# The volume deliberately outlives this check, so the marker must be reset
+# rather than appended: otherwise a second run finds two rows, a third finds
+# three, and the assertion below fails for a reason that has nothing to do with
+# whether data survived.
 docker compose exec -T pg psql -U postgres -q \
-    -c "CREATE TABLE IF NOT EXISTS lifecycle_marker(v text); INSERT INTO lifecycle_marker VALUES ('survived');" \
+    -c "CREATE TABLE IF NOT EXISTS lifecycle_marker(v text);
+        DELETE FROM lifecycle_marker;
+        INSERT INTO lifecycle_marker VALUES ('survived');" \
     >/dev/null 2>&1 || vfail "could not write the marker row"
 
 make down >/dev/null 2>&1 || vfail "make down failed"

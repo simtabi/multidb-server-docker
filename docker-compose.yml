@@ -1,0 +1,111 @@
+# db-toolkit — a thin orchestrator. Selection and wiring only.
+#
+# Everything that configures an engine lives in its image (SPEC decision 11), so
+# this file chooses which engines run and how they are exposed. Nothing here is
+# published to the host by default: apps join the dbtk network by service name.
+#
+# Internal container ports are fixed and never change. Every host-side binding
+# is ${DBTK_*_HOST_PORT}-driven, so resolving a port collision on any machine is
+# a one-line .env change and never an edit to this file (SPEC section 7).
+
+name: ${COMPOSE_PROJECT_NAME:-dbtk}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DBTK_LOG_MAX_SIZE:-10m}
+    max-file: "${DBTK_LOG_MAX_FILE:-3}"
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  pg:
+    profiles: [pg]
+    build:
+      context: ./images/pg
+      args:
+        ENGINE_VERSION: ${DBTK_PG_VERSION:-17}
+    image: ghcr.io/simtabi/db-toolkit-pg:${DBTK_PG_VERSION:-17}
+    restart: unless-stopped
+    <<: *hardening
+    # The engine needs these back: CHOWN/SETUID/SETGID for the s6 init stages
+    # and the entrypoint's drop to the postgres user, DAC_OVERRIDE for the data
+    # directory, FOWNER for permission fixes on an existing volume.
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password.txt
+      POSTGRES_DB: ${DBTK_PG_DEFAULT_DB:-postgres}
+      DBTK_PG_DATABASES: ${DBTK_PG_DATABASES:-}
+      DBTK_PG_INIT_EXTENSIONS: ${DBTK_PG_INIT_EXTENSIONS:-vector,pg_stat_statements}
+      DBTK_PG_SHARED_PRELOAD: ${DBTK_PG_SHARED_PRELOAD:-pg_stat_statements}
+      DBTK_PG_SLOW_MS: ${DBTK_PG_SLOW_MS:-500}
+      DBTK_PG_PLPYTHON: ${DBTK_PG_PLPYTHON:-false}
+      DBTK_TLS_ENFORCE: ${DBTK_TLS_ENFORCE:-false}
+      DBTK_MTLS: ${DBTK_MTLS:-false}
+      DBTK_EXTRA_SANS: ${DBTK_EXTRA_SANS:-}
+      DBTK_MEM: ${DBTK_MEM:-4}
+      DBTK_CPUS: ${DBTK_CPUS:-2}
+      DBTK_TZ: ${DBTK_TZ:-UTC}
+      DBTK_SOCKETS: ${DBTK_SOCKETS:-false}
+      # Embedded helpers stay OFF under compose: this layer runs them as
+      # separate services instead (SPEC section 6.1).
+      DBTK_PG_EMBED_EXPORTER: "false"
+      DBTK_PG_EMBED_BACKUP: "false"
+    volumes:
+      - pg_data:${DBTK_PG_DATA_MOUNT:-/var/lib/postgresql/data}
+      - ./certs:/certs:ro
+      - ./secrets:/run/secrets:ro
+      - ./overrides/pg:/etc/postgresql/conf.d/overrides:ro
+    ports:
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_PG_HOST_PORT:-5432}:5432"
+    # Parallel HNSW index builds need shared memory of at least
+    # maintenance_work_mem; Docker's 64m default silently fails them.
+    shm_size: ${DBTK_PG_SHM:-256m}
+    # Docker's 10s default force-kills a database mid-checkpoint.
+    stop_grace_period: ${DBTK_STOP_GRACE:-60s}
+    networks: [dbtk]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Adminer — speaks PostgreSQL, MySQL, and MariaDB
+  # ---------------------------------------------------------------------------
+  adminer:
+    profiles: [ui]
+    image: adminer:5.4.1@sha256:a3167350c4eb9ae4473b8ea0f49c8e5ae74c87b240ee2f6086521dba2a6bf243
+    restart: unless-stopped
+    <<: *hardening
+    environment:
+      # Pre-wired so the UI opens ready to log in rather than asking for a
+      # hostname (SPEC section 7).
+      ADMINER_DEFAULT_SERVER: ${DBTK_ADMINER_DEFAULT_SERVER:-pg}
+    ports:
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_ADMINER_HOST_PORT:-8080}:8080"
+    networks: [dbtk]
+    logging: *default-logging
+
+networks:
+  dbtk:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_net
+    ipam:
+      config:
+        - subnet: ${DBTK_NETWORK_SUBNET:-172.28.0.0/16}
+
+volumes:
+  # Per-engine, per-major volumes. Pointing a new PostgreSQL major at an old
+  # data directory fails hard ("database files are incompatible with server"),
+  # so the major is part of the volume name and versions coexist safely
+  # (SPEC decision 2).
+  pg_data:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_pg${DBTK_PG_VERSION:-17}_data

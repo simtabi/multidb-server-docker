@@ -1,27 +1,43 @@
 #!/usr/bin/env bash
-# verify: every engine image and the cli image build for this architecture
+# verify: every image that has a Dockerfile builds, and all four eventually exist
 # tags: build
-# phase: 2
+# phase: 5
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
 
+# Ordering matters: this check runs before every check that needs an image, and
+# building is its deliberate side effect. So it builds everything present FIRST
+# and only then asserts completeness -- otherwise a missing phase-3 Dockerfile
+# would abort before the phase-2 PG image was ever built, and every downstream
+# PG check would fail for the wrong reason.
+
 built=0
+missing=()
+
 for engine in pg mysql mariadb cli; do
     dockerfile="$DBTK_ROOT/images/$engine/Dockerfile"
     if [[ ! -f "$dockerfile" ]]; then
-        vfail "images/$engine/Dockerfile does not exist yet"
+        missing+=("images/$engine/Dockerfile")
+        continue
     fi
 
     img="$(image_name "$engine")"
+    log="/tmp/dbtk-build-$engine.log"
     vinfo "building $img"
-    if ! docker build -t "$img" "$DBTK_ROOT/images/$engine" >/tmp/dbtk-build-$engine.log 2>&1; then
-        printf '      build failed; last 25 lines:\n' >&2
-        tail -25 "/tmp/dbtk-build-$engine.log" >&2
+
+    if ! build_image "$engine" "$img" >"$log" 2>&1; then
+        printf '      build failed; last 30 lines of %s:\n' "$log" >&2
+        tail -30 "$log" >&2
         vfail "images/$engine failed to build"
     fi
-    (( built++ )) || true
+    built=$(( built + 1 ))
 done
 
 vinfo "$built image(s) built on $(uname -m)"
+
+if (( ${#missing[@]} )); then
+    printf '      not written yet: %s\n' "${missing[*]}" >&2
+    vfail "${#missing[@]} image(s) still missing a Dockerfile"
+fi

@@ -20,9 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (mandatory pooling, UI basic auth, 3-node etcd quorum).
 - CI workflows for static analysis and the amd64/arm64 verify matrix.
 
+- `db-toolkit-pg`: PostgreSQL 15–18 with the full extension suite (vector,
+  PostGIS, pg_cron, pgaudit, pg_repack, pg_partman, pgtap, http, hypopg,
+  pg_graphql, pg_net, pgsodium, pgjwt), supervised by s6-overlay v3.
+- Ordered s6 init: permissions, configuration, certificates, provisioning, then
+  the engine — wrapping the official entrypoint rather than replacing it.
+- Multi-project triplet provisioning with cross-project access denied.
+- `make init`, `certs`, `build`, `up`, `down`, `status`, `logs`, `psql`.
+- `docker-compose.yml` with the `pg` and `ui` profiles and per-major volumes.
+
 ### Fixed
 
 - All shell is bash 3.2 compatible, so the toolkit runs on stock macOS
   (see `DESIGN.md` D-24).
+- PostgreSQL now shuts down cleanly under s6 via a per-service `down-signal`,
+  so the next boot performs no crash recovery (D-09, D-27).
+- `pg_graphql`'s packaged symlinks are flattened, which also protects against
+  the PG 18 volume mount shadowing them (D-26).
 
 [Unreleased]: https://github.com/simtabi/db-toolkit-docker/commits/main

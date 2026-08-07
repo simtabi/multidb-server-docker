@@ -21,17 +21,41 @@ img="$(image_name pg)"
 need_image "$img"
 
 name="dbtk-verify-harden-$$"
+vol="dbtk-verify-harden-vol-$$"
 track_container "$name"
+trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm -f "$vol" >/dev/null 2>&1 || true' EXIT
 
+docker volume create "$vol" >/dev/null
+
+# This is the explicit tmpfs list D-18 promised. read_only applies to the ROOT
+# filesystem, so everything the engine legitimately writes to needs somewhere
+# real to live:
+#   PGDATA                      -> a volume; data is not ephemeral
+#   /run                        -> s6 state, and our generated conf and certs
+#   /var/run/postgresql         -> the unix socket
+#   /tmp                        -> query temp files
+#   /docker-entrypoint-initdb.d -> the provisioning scripts we generate for
+#                                  the official entrypoint to consume
+#
+# Two of those need `exec`, because Docker mounts --tmpfs noexec by default:
+# s6 executes /run/s6/basedir/bin/init, and the official entrypoint executes
+# the initdb.d scripts. Without it the container dies at stage0 with
+# "Permission denied" and exit 126, which reads like a file-ownership problem
+# and is not one.
 docker run -d --name "$name" \
     -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
     --read-only \
-    --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add DAC_OVERRIDE \
+    --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
+    --cap-add DAC_OVERRIDE --cap-add FOWNER \
     --security-opt no-new-privileges \
-    --tmpfs /run --tmpfs /tmp --tmpfs /var/run/postgresql \
+    -v "$vol:/var/lib/postgresql/data" \
+    --tmpfs /run:rw,exec,nosuid,size=64m \
+    --tmpfs /tmp:rw,nosuid,size=64m \
+    --tmpfs /var/run/postgresql:rw,nosuid,size=8m \
+    --tmpfs /docker-entrypoint-initdb.d:rw,exec,nosuid,size=8m \
     "$img" >/dev/null || vfail "container failed to start read-only with dropped capabilities"
 
-wait_for 60 "postgres to accept connections read-only" docker exec "$name" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections read-only" docker exec "$name" pg_isready -U postgres
 vinfo "engine boots with --read-only, cap-drop ALL, and no-new-privileges"
 
 # No engine process may run as root.

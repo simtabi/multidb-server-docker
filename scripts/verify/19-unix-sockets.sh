@@ -28,7 +28,7 @@ docker run -d --name "$name" \
     -v "$sockvol:/var/run/postgresql" \
     "$img" >/dev/null || vfail "container failed to start with DBTK_SOCKETS=true"
 
-wait_for 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 
 # The socket file must exist in the shared volume.
 docker exec "$name" test -S /var/run/postgresql/.s.PGSQL.5432 \

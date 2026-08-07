@@ -22,7 +22,7 @@ docker run -d --name "$name" \
     -e DBTK_PG_DATABASES="alpha:alpha_user:dbtk-throwaway-alpha,beta:beta_user:dbtk-throwaway-beta" \
     "$img" >/dev/null || vfail "container failed to start with triplet provisioning"
 
-wait_for 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
+wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 
 # Both databases and both roles must exist.
 for db in alpha beta; do
