@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#
+# Emit the CI build matrix as JSON, derived from the engine descriptors.
+#
+# The workflow could list "4 PG majors x 3 MySQL x 3 MariaDB" by hand, and then
+# adding a version to a descriptor would silently not be built or tested. Every
+# other consumer in this repository reads the descriptors; CI is not an
+# exception worth making.
+#
+# Usage:
+#   scripts/ci-matrix versions   every (engine, version) pair we build
+#   scripts/ci-matrix engines    one entry per buildable engine
+#
+# Output is a single line of JSON for GITHUB_OUTPUT.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+
+mode="${1:-versions}"
+
+# Only engines we actually build. A referenced engine (MongoDB, per its
+# licence) has no Dockerfile of ours, and an engine that is declared but not
+# yet implemented has none either -- neither belongs in a build matrix.
+buildable() {
+    [ "${DBTK_ENGINE_PUBLISH:-derive}" = "derive" ] \
+        && [ -f "$ROOT/images/$DBTK_ENGINE_NAME/Dockerfile" ]
+}
+
+first=1
+printf '['
+for engine in $(engine_list); do
+    engine_load "$engine" || continue
+    buildable || continue
+
+    case "$mode" in
+        engines)
+            [ "$first" -eq 1 ] || printf ','
+            printf '{"engine":"%s","version":"%s"}' \
+                "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_DEFAULT_VERSION"
+            first=0
+            ;;
+        versions)
+            for v in $DBTK_ENGINE_VERSIONS; do
+                # A version with no pinned base cannot be built. Check 31
+                # already fails on that, so this stays silent rather than
+                # reporting the same gap in a second, less clear place.
+                awk -v e="$DBTK_ENGINE_NAME" -v ver="$v" \
+                    '$1==e && $2==ver {found=1} END{exit !found}' images/bases.tsv || continue
+                [ "$first" -eq 1 ] || printf ','
+                printf '{"engine":"%s","version":"%s"}' "$DBTK_ENGINE_NAME" "$v"
+                first=0
+            done
+            ;;
+        *)
+            printf ']\n'
+            printf 'ci-matrix: unknown mode "%s" (want: versions|engines)\n' "$mode" >&2
+            exit 1
+            ;;
+    esac
+done
+printf ']\n'

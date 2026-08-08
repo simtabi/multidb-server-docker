@@ -52,10 +52,30 @@ for engine in $(engine_list); do
         img="$(awk -v e="$engine" -v v="$ver" '$1==e && $2==v {print $3; exit}' images/bases.tsv)"
     fi
 
+    # A missing image used to SKIP, and this check still exited 0 having
+    # verified almost nothing. That is how a scoping bug that disabled the
+    # probe for four of six engines went unnoticed: the run reported "pass"
+    # with five engines skipped. Every other check in this harness treats a
+    # missing image as a failure (need_image), and so does this one now.
+    #
+    # Three cases, distinguished because they mean different things:
     if ! image_exists "$img"; then
-        vinfo "$engine: SKIPPED, image not built ($img)"
-        skipped=$(( skipped + 1 ))
-        continue
+        if [[ "${DBTK_ENGINE_PUBLISH:-derive}" == "reference" ]]; then
+            # We do not build it, so fetch it. The reference is digest-pinned,
+            # which makes this deterministic rather than a moving target.
+            vinfo "$engine: pulling the referenced image"
+            docker pull -q "$img" >/dev/null 2>&1 \
+                || vfail "$engine: could not pull $img; auth cannot be proven"
+        elif [[ -f "$DBTK_ROOT/images/$engine/Dockerfile" ]]; then
+            vfail "$engine: image not built yet ($img); run: make build"
+        else
+            # No Dockerfile at all: the engine is declared but not implemented.
+            # That is a real gap, but it is not this check's to report, and
+            # failing here would block the harness on unfinished work.
+            vinfo "$engine: SKIPPED, declared but not implemented (no images/$engine/Dockerfile)"
+            skipped=$(( skipped + 1 ))
+            continue
+        fi
     fi
 
     name="dbtk-verify-auth-${engine}-$$"
@@ -143,4 +163,10 @@ for engine in $(engine_list); do
 done
 
 (( checked > 0 )) || vfail "no engines were checked; this proves nothing"
+
+# Skips are only ever unimplemented engines now, so name them. A count alone
+# reads as noise; a name is something someone can act on.
+if (( skipped > 0 )); then
+    vinfo "note: $skipped engine(s) are declared but not yet implemented"
+fi
 vinfo "$checked engine(s) enforce authentication${skipped:+, $skipped skipped}"

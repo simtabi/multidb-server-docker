@@ -8,12 +8,80 @@ on:
 permissions:
   contents: read
 
-# The full build matrix (4 PG majors x 3 MySQL x 3 MariaDB x amd64/arm64,
-# full and slim) lands in phase 6. Phase 1 establishes the harness gate.
+# A superseded run proves nothing about the commit that replaced it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # The build matrix comes from the engine descriptors, not from this file.
+  # Listing versions here would mean adding one to a descriptor and having it
+  # silently never built, which is the failure the descriptors exist to prevent.
+  # ---------------------------------------------------------------------------
+  matrix:
+    name: resolve matrix
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.gen.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: gen
+        run: echo "versions=$(scripts/ci-matrix versions)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Every declared version builds, on both architectures.
+  #
+  # This is separate from `verify` on purpose: a version that appears on an
+  # engine's menu but cannot be built is a broken promise, and finding that out
+  # does not require running the whole acceptance harness against it.
+  # ---------------------------------------------------------------------------
+  build:
+    name: build ${{ matrix.entry.engine }} ${{ matrix.entry.version }} (${{ matrix.arch }})
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Two dimensions, crossed: every declared version on every architecture.
+        entry: ${{ fromJSON(needs.matrix.outputs.versions) }}
+        arch: [amd64, arm64]
+        # `include` entries that match an existing combination ADD fields to
+        # it rather than creating new ones, which is how each arch gets its
+        # runner without naming every pair.
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Confirm docker is available
+        run: docker info
+
+      - name: Build ${{ matrix.entry.engine }} ${{ matrix.entry.version }}
+        env:
+          ENGINE: ${{ matrix.entry.engine }}
+          VERSION: ${{ matrix.entry.version }}
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          upper="$(printf '%s' "$ENGINE" | tr '[:lower:]-' '[:upper:]_')"
+          # The version is chosen the same way `make build` chooses it, through
+          # .env, rather than by a second mechanism that could disagree.
+          sed -i "s/^DBTK_${upper}_VERSION=.*/DBTK_${upper}_VERSION=${VERSION}/" .env
+          scripts/build "$ENGINE"
+
+  # ---------------------------------------------------------------------------
+  # The acceptance harness, on default versions, on both architectures.
+  # ---------------------------------------------------------------------------
   verify:
     name: verify (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -29,13 +97,35 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
+      # CLAUDE.md is explicit that docker is required and never mocked, so a
+      # runner without it must fail here rather than silently skipping checks.
       - name: Confirm docker is available
         run: docker info
 
-      # CLAUDE.md is explicit that docker is required and never mocked, so a
-      # runner without it must fail here rather than silently skipping checks.
       - name: Harness structure
         run: make verify-structure
 
+      # Without this there is no .env, no secrets/ and no certs/, so every
+      # check that boots an engine fails on setup rather than on its subject.
+      - name: Initialise the checkout
+        run: make init
+
+      # Explicit, because check 32 now FAILS on a missing image rather than
+      # skipping it. Relying on an earlier check to have built what a later one
+      # needs is how that check came to verify one engine out of six.
+      - name: Build the engine images
+        run: make build
+
       - name: Full acceptance harness
         run: make verify
+
+      # A failure is usually explained by the engine's own log, which the
+      # harness cannot print for a container it has already cleaned up.
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          docker ps -a --format '{{.Names}}\t{{.Status}}'
+          for c in $(docker ps -aq); do
+            echo "=== $(docker inspect -f '{{.Name}}' "$c") ==="
+            docker logs --tail 50 "$c" 2>&1 || true
+          done
