@@ -71,11 +71,11 @@ build: ## Build every engine image for this architecture
 
 .PHONY: certs-renew
 certs-renew: ## Rotate server certs with live reload (no downtime)
-	$(call unimplemented,4)
+	@scripts/certs-renew
 
 .PHONY: rotate-secrets
 rotate-secrets: ## Rotate every database password and secret file, applied live
-	$(call unimplemented,4)
+	@scripts/rotate-secrets $(if $(YES),--yes,)
 
 # -----------------------------------------------------------------------------
 # Lifecycle
