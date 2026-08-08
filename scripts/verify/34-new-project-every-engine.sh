@@ -67,4 +67,70 @@ if grep -qE '^\s*(pg|mysql|mariadb|mongodb|cassandra|ferretdb)\)' "$DBTK_ROOT/sc
 fi
 vinfo "new-project contains no per-engine branch"
 
-vinfo "$checked engine(s) can provision a project through their family hook"
+vinfo "$checked engine(s) declare a provisioning hook"
+
+# -----------------------------------------------------------------------------
+# Behavioural half
+# -----------------------------------------------------------------------------
+# The structural half above passed while Cassandra's hook was broken: cqlsh -e
+# splits on ';', so a statement string beginning with a newline produced an
+# empty leading statement, and cqlsh exited non-zero AFTER running everything
+# else. The keyspace and roles existed and provisioning reported failure.
+#
+# So the hook is actually invoked, against every engine that happens to be
+# running. Engines that are not up are named rather than silently passed over --
+# a check that quietly covers nothing reads exactly like one that covers
+# everything.
+if ! docker info >/dev/null 2>&1; then
+    vinfo "docker unavailable; skipped the behavioural half"
+    exit 0
+fi
+
+running=""
+while IFS= read -r svc; do
+    [[ -n "$svc" ]] && running+="$svc "
+done < <(cd "$DBTK_ROOT" && docker compose ps --services --status running 2>/dev/null || true)
+
+provisioned=0
+skipped=""
+
+while IFS= read -r engine; do
+    [[ -z "$engine" ]] && continue
+    engine_load "$engine" || continue
+    name="$DBTK_ENGINE_NAME"
+
+    case " $running " in
+        *" $name "*) ;;
+        *) skipped+="$name "; continue ;;
+    esac
+
+    proj="vfy$$"
+    add_cleanup "rm -f '$DBTK_ROOT'/secrets/${name}_${proj}_user*_password.txt"
+
+    # </dev/null is load-bearing. new-project reaches the engine through
+    # `docker compose exec -T`, which READS STDIN -- and inside this loop
+    # stdin is the engine list being iterated. Without it the first engine
+    # swallows the rest, the loop ends after one pass, and the check reports
+    # success having exercised a single engine.
+    if ! (cd "$DBTK_ROOT" && ./scripts/new-project --name "$proj" --engine "$name" \
+            </dev/null >/dev/null 2>&1); then
+        vfail "new-project failed against a running $name"
+    fi
+
+    # Idempotent: people re-run this to reprint the connection block.
+    if ! (cd "$DBTK_ROOT" && ./scripts/new-project --name "$proj" --engine "$name" \
+            </dev/null >/dev/null 2>&1); then
+        vfail "new-project is not idempotent on $name; a second run failed"
+    fi
+
+    vinfo "$name: provisioned '$proj' and re-ran cleanly"
+    provisioned=$(( provisioned + 1 ))
+done < <(engine_list)
+
+[[ -n "$skipped" ]] && vinfo "not running, so not exercised: ${skipped% }"
+
+if (( provisioned == 0 )); then
+    vinfo "no engines were running; only the structural half ran"
+else
+    vinfo "$provisioned engine(s) provisioned a project for real"
+fi

@@ -82,15 +82,68 @@ hook_auth_enforced() {
 # something to guess here, so it is documented rather than defaulted.
 hook_provision_project() {
     local ks="$1" user="$2" pw="$3" ro_pw="${5:-$3}"
-    local esc_pw="${pw//\'/\'\'}" esc_ro="${ro_pw//\'/\'\'}"
+    local stmt
+    # CQL map keys are single-quoted, which would otherwise need three levels
+    # of escaping inside a double-quoted shell string.
+    local q="'"
+    local repl="{${q}class${q}:${q}SimpleStrategy${q},${q}replication_factor${q}:1}"
 
-    _cqlsh -e "
-        CREATE KEYSPACE IF NOT EXISTS ${ks}
-          WITH replication = {'class':'SimpleStrategy','replication_factor':1};
-        CREATE ROLE IF NOT EXISTS ${user} WITH PASSWORD = '${esc_pw}' AND LOGIN = true;
-        ALTER ROLE ${user} WITH PASSWORD = '${esc_pw}';
-        CREATE ROLE IF NOT EXISTS ${user}_readonly WITH PASSWORD = '${esc_ro}' AND LOGIN = true;
-        GRANT ALL PERMISSIONS ON KEYSPACE ${ks} TO ${user};
-        GRANT SELECT ON KEYSPACE ${ks} TO ${user}_readonly;
-    " >/dev/null 2>&1 || return 1
+    # One statement per invocation, not a heredoc of several.
+    #
+    # `cqlsh -e` splits its argument on ';', so a string that begins with a
+    # newline yields an empty leading statement and cqlsh exits non-zero with
+    # "no viable alternative at input ';'" -- AFTER having run everything else.
+    # The keyspace and roles existed and provisioning still reported failure.
+    for stmt in \
+        "CREATE KEYSPACE IF NOT EXISTS ${ks} WITH replication = ${repl}" \
+        "CREATE ROLE IF NOT EXISTS ${user} WITH PASSWORD = '$(_cql_quote "$pw")' AND LOGIN = true" \
+        "CREATE ROLE IF NOT EXISTS ${user}_readonly WITH PASSWORD = '$(_cql_quote "$ro_pw")' AND LOGIN = true" \
+        "GRANT ALL PERMISSIONS ON KEYSPACE ${ks} TO ${user}" \
+        "GRANT SELECT ON KEYSPACE ${ks} TO ${user}_readonly"
+    do
+        _cqlsh -e "$stmt" >/dev/null 2>&1 || {
+            printf '  cassandra: statement failed: %s...\n' "${stmt%% *}" >&2
+            return 1
+        }
+    done
+
+    _cass_set_password "$user" "$pw" || return 1
+    _cass_set_password "${user}_readonly" "$ro_pw" || return 1
+}
+
+_cql_quote() { printf '%s' "${1//$_CQL_SQ/$_CQL_SQ$_CQL_SQ}"; }
+_CQL_SQ="'"
+
+# Bring a role's password to the intended value, if it is not already there.
+#
+# The obvious CREATE-then-ALTER pair does not work: Cassandra rate-limits
+# password changes per role -- "Password for role X can only be changed every
+# 5000ms" -- and reports it as code=1001 "Coordinator node overloaded", which
+# names neither the role nor the real cause. Creating a role and immediately
+# resetting its password therefore fails EVERY time, not intermittently.
+#
+# So the password is only altered when it is actually wrong, tested by logging
+# in with it. On a fresh create that login already succeeds and nothing is
+# altered; on a re-run with an unchanged secret the same holds, which is why
+# `make new-project` can be re-run to reprint the connection block.
+_cass_set_password() {
+    local role="$1" pw="$2" i
+
+    if engine_exec "$DBTK_ENGINE_NAME" cqlsh -u "$role" -p "$pw" \
+         -e "SELECT release_version FROM system.local" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # It is genuinely wrong, so it must change -- waiting out the limiter.
+    for i in 1 2 3; do
+        if _cqlsh -e "ALTER ROLE ${role} WITH PASSWORD = '$(_cql_quote "$pw")'" >/dev/null 2>&1; then
+            return 0
+        fi
+        # An `[ ] && sleep` list would return 1 on the last iteration, which
+        # `set -e` treats as a failure in every caller that does not already
+        # neutralise it.
+        if [ "$i" -lt 3 ]; then sleep 3; fi
+    done
+    printf '  cassandra: could not set the password for %s\n' "$role" >&2
+    return 1
 }
