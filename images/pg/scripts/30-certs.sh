@@ -78,17 +78,58 @@ tls_conf="$DBTK_CONF_DIR/15-dbtk-tls.conf"
 
 stage "wrote $tls_conf"
 
+# -----------------------------------------------------------------------------
+# Authentication hardening (SPEC section 9: no trust, anywhere, including
+# localhost).
+# -----------------------------------------------------------------------------
+# initdb generates a pg_hba.conf that trusts the local socket AND loopback TCP.
+# That means any process inside the container -- a compromised extension, a
+# sidecar sharing the network namespace, an untrusted procedural language --
+# connects as the superuser with no credential. It also makes password rotation
+# impossible to verify, because a loopback connection succeeds whatever the
+# password is.
+#
+# What replaces it:
+#   local  -> peer with an ident map, so identity is the OS user rather than
+#             nothing at all. SPEC section 10.1 reserves peer for exactly this,
+#             "make-driven maintenance as the engine user".
+#   host   -> scram-sha-256, loopback included. No exceptions for 127.0.0.1.
+
+if pgdata_initialised; then
+    harden_hba "$PGDATA_DIR/pg_hba.conf"
+    write_ident_map "$PGDATA_DIR/pg_ident.conf"
+    stage "hardened pg_hba: no trust rules remain"
+else
+    # On a first run PGDATA does not exist yet, so this is deferred to an
+    # initdb.d hook. It sources the same functions rather than duplicating
+    # them, so the rules cannot drift between the two paths.
+    cat > "$DBTK_INITDB_DIR/01-dbtk-auth.sh" <<'EOF'
+#!/usr/bin/env bash
+# Added by db-toolkit: replace the trust rules initdb generates
+# (SPEC section 9 forbids trust anywhere, including localhost).
+set -eu
+DBTK_STAGE=dbtk-auth
+export DBTK_STAGE
+# shellcheck source=/dev/null
+source /usr/local/lib/dbtk/dbtk-lib.sh
+harden_hba "$PGDATA/pg_hba.conf"
+write_ident_map "$PGDATA/pg_ident.conf"
+EOF
+    chmod +x "$DBTK_INITDB_DIR/01-dbtk-auth.sh"
+    stage "queued pg_hba hardening for first initdb"
+fi
+
 # Under enforcement every TCP rule becomes hostssl, so plaintext TCP is refused
 # by the server. Unix sockets are a secure transport and keep working, which
 # SPEC section 9.1 requires explicitly.
 if is_true "${DBTK_TLS_ENFORCE:-false}"; then
     stage "TLS enforcement on: pg_hba will be hostssl-only"
-    cat > "$DBTK_INITDB_DIR/01-dbtk-hba.sh" <<'EOF'
+    cat > "$DBTK_INITDB_DIR/02-dbtk-tls-hba.sh" <<'EOF'
 #!/usr/bin/env bash
 set -eu
 sed -i 's/^host\([[:space:]]\)/hostssl\1/' "$PGDATA/pg_hba.conf"
 EOF
-    chmod +x "$DBTK_INITDB_DIR/01-dbtk-hba.sh"
+    chmod +x "$DBTK_INITDB_DIR/02-dbtk-tls-hba.sh"
 
     if pgdata_initialised; then
         sed -i 's/^host\([[:space:]]\)/hostssl\1/' "$PGDATA_DIR/pg_hba.conf"
