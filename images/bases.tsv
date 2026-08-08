@@ -21,3 +21,12 @@ mariadb	11.4	mariadb:11.4.12@sha256:67873d30a17f6a9c331f06363b2fa15f38abca415529
 mariadb	11.8	mariadb:11.8.8@sha256:d9f7eb2637296652f24b484afd5d246f759f49f5babcadc6a9e344c9acb75fbf
 
 cli	dev	debian:12-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+
+# MongoDB is SSPL: source-available, NOT OSI open source. A derived image is
+# permitted but must be labelled. See docs/licensing.md and SPEC section 22.5.
+mongodb	7.0	mongo:7.0.39@sha256:35a5926f71f8b6cb19206bee928c5a85f241a8be99f20c81abe35ae78a73415d
+mongodb	8.0	mongo:8.0.28@sha256:98605bfa1bb2a15dd82109e1d78ad31527a9a744909fab4606076fa71a0ae515
+mongodb	8.3	mongo:8.3.7@sha256:2f02e2184c6d91c3208e5ab75a0707d1386a05377b20fdaf49a314815774d863
+
+cassandra	4.1	cassandra:4.1.11@sha256:dad4cd7ee4281df4e96944a1faebfebd2e50ee19a9f0a1d42ac0bb17c820dd74
+cassandra	5.0	cassandra:5.0.8@sha256:259578bbeac315a7326c2a99e60eab86f3415e9e895207bf2a032af4de8c16b5

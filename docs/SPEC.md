@@ -344,3 +344,105 @@ PostgreSQL has no built-in automatic failover; something outside the engine must
 - The read port serves only replicas; writes against it are refused.
 - `make ha-reinit NODE=pg3` rebuilds that replica from the pgBackRest repo and it rejoins streaming.
 - Capacity: a prod-profile boot without a reachable pooler fails `check-env` rather than starting unpooled.
+
+## 22. The engine model, NoSQL support, and pooling policy
+
+Amendment. Section 4 placed Mongo and friends under Future and out of scope for
+v1; that is superseded here at the maintainer's direction. The change is not
+"add two engines" — it is "stop hardcoding engines", so that adding the next one
+is a descriptor and a Dockerfile rather than an edit to every script, compose
+file, and check.
+
+### 22.1 Engines are declared, not hardcoded
+
+Every engine ships a **descriptor**: a single declarative file stating what the
+generic machinery needs to know about it. Nothing else in the toolkit may
+contain an `if engine == ...` branch that a descriptor could express.
+
+A descriptor declares: family and paradigm; supported versions; data directory,
+socket path and internal port; the client, admin/ping, dump and restore commands
+with their required flags; the provisioning hook; health check; TLS
+configuration keys; pooling capability; and the backup strategy.
+
+The test of the abstraction is not that it works for a new engine. It is that
+the three engines that already exist fit it without special cases. If they do
+not, the abstraction is wrong, and that is much cheaper to discover before two
+more engines are built on top of it.
+
+### 22.2 Paradigms, and what stays common
+
+| Paradigm | Engines | "Database" means | Provisioning |
+|---|---|---|---|
+| Relational | PostgreSQL, MySQL, MariaDB | database + owner role | SQL |
+| Document | MongoDB | database + user with roles | JS via mongosh |
+| Wide-column | Cassandra | keyspace + role | CQL |
+
+What is genuinely common across all of them, and therefore stays in the generic
+layer: image build and pinning, s6 supervision and ordered init, TLS material
+and rotation, secret handling via `_FILE`, the multi-project triplet contract,
+scheduled and manual backup with checksums and verified restore, health checks,
+container hardening, and the acceptance harness.
+
+What is genuinely per-engine, and therefore lives only in the descriptor and its
+hooks: the wire protocol, the provisioning statements, the dump and restore
+commands, and the pooling story.
+
+### 22.3 Authentication is ON by default, on every engine
+
+Both new engines ship insecure by default and this is the single most important
+thing the toolkit corrects:
+
+- **MongoDB** runs with **no authentication** unless root credentials are
+  supplied. Any client that reaches the port is an administrator.
+- **Cassandra** ships `AllowAllAuthenticator` **and** `AllowAllAuthorizer`.
+  Not weak authentication — none, and no authorization either.
+
+SPEC section 9 already forbids trust and empty-password auth anywhere. Every
+engine image in this toolkit therefore enables authentication as a build-time
+default, and `check-env` refuses to start one that has it disabled.
+
+### 22.4 Pooling is a capability, not a service every engine gets
+
+Connection pooling is not a universal concept, and pretending otherwise would
+ship three-quarters of a lie:
+
+| Engine | Pooling | Why |
+|---|---|---|
+| PostgreSQL | **pgBouncer, mandatory in prod** | One OS process per connection, ~10 MB each. ~500 connections cost ~5 GB before a query runs (section 21.1). |
+| MySQL / MariaDB | **ProxySQL, optional** | Thread-per-connection is far cheaper than a process, so pooling is a scaling aid rather than a survival requirement. ProxySQL also provides routing and query rules. |
+| MongoDB | **Driver-side only** | Drivers implement pooling natively (the CMAP specification). An external pooler in front of MongoDB is an anti-pattern: it breaks server discovery, topology monitoring and retryable writes. |
+| Cassandra | **Driver-side only** | The driver holds connections per node under a load-balancing policy and multiplexes thousands of concurrent requests per connection. A proxy would defeat token-aware routing. |
+
+So the descriptor declares `pooling=external:<image>` or `pooling=driver`, and
+the docs explain the difference rather than shipping a proxy nobody should use.
+The correct guidance for MongoDB and Cassandra is to reuse one client instance
+per process, which is a documentation problem, not an infrastructure one.
+
+### 22.5 Licensing, because this ships as open source
+
+The repository is MIT. Published images inherit the licence of what they are
+built FROM, which was already true for the SQL engines (PostgreSQL licence,
+GPLv2) and becomes more pointed now:
+
+- **MongoDB Community is SSPL**, which the Open Source Initiative has
+  explicitly declined to recognise as an open source licence. Redistribution is
+  permitted, so a derived image is allowed, but it is source-available rather
+  than open source and **must be labelled as such** on the image and in the
+  docs. The SSPL's service clause binds anyone offering MongoDB *as a service*;
+  running it as a development dependency does not trigger it.
+- **Cassandra is Apache 2.0**, with no such complication.
+
+Every published image therefore carries an accurate `org.opencontainers.image.licenses`
+label for its own contents, and the docs state plainly which engines are open
+source and which are source-available. Users who cannot accept SSPL are pointed
+at the alternatives rather than left to discover the problem themselves.
+
+### 22.6 Acceptance additions
+
+- Adding an engine requires no edit to compose, backup, restore, provisioning,
+  or any check; a descriptor and a Dockerfile are sufficient.
+- Every engine, including new ones, is covered by the generic boot, auth, TLS,
+  isolation, backup round-trip and hardening checks by virtue of being declared.
+- No engine accepts unauthenticated connections, on any transport.
+- `make verify` proves pooling works where the descriptor claims it, and the
+  docs explain driver-side pooling where it claims that instead.
