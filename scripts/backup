@@ -242,9 +242,7 @@ wait_for_engine() {
     engine_load "$engine" >/dev/null 2>&1 || return 1
     engine_load_hooks >/dev/null 2>&1 || return 1
     for (( i = 0; i < 180; i++ )); do
-        # A successful database listing means the engine is genuinely
-        # answering, which a port check does not.
-        if hook_list_databases >/dev/null 2>&1; then return 0; fi
+        if hook_ping; then return 0; fi
         sleep 2
     done
     log "WARNING: $engine did not become reachable within 360s"
@@ -265,15 +263,25 @@ if (( SCHEDULE )); then
 fi
 
 if (( ALL )); then
-    # COMPOSE_PROFILES wins when set, because `make up PROFILES=...` selects the
-    # engines for THIS run; falling back to the .env default would back up a
-    # different set of engines than the one actually running.
-    profiles="${COMPOSE_PROFILES:-$(get DBTK_PROFILES)}"
+    # Back up what is RUNNING, not what a profile list claims.
+    #
+    # Profiles are per-`make` invocation, so `make up PROFILES=pg,mysql` then
+    # `make backup-all` would consult a different list than the one that
+    # started the engines and silently skip half of them. Asking docker what is
+    # actually up cannot disagree with reality.
+    running="$( ( cd "$ROOT" && docker compose ps --format '{{.Service}}' 2>/dev/null ) || true )"
+
+    if [ -z "$running" ]; then
+        log "no engines are running; nothing to back up"
+        exit 0
+    fi
+
     for engine in $(engine_list); do
-        case ",${profiles}," in
-            *",${engine},"*) run_engine_backup "$engine" ;;
-            *) log "$engine not in DBTK_PROFILES; skipping" ;;
-        esac
+        if printf '%s\n' "$running" | grep -qx "$engine"; then
+            run_engine_backup "$engine"
+        else
+            log "$engine is not running; skipping"
+        fi
     done
     prune
     push_s3

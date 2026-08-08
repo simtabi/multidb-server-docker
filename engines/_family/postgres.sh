@@ -19,6 +19,13 @@ if [ "${IN_CONTAINER:-0}" = "1" ] && [ -r "/run/secrets/${DBTK_ENGINE_ROOT_SECRE
     export PGPASSWORD
 fi
 
+# Readiness. Deliberately NOT hook_list_databases: that answers "are there
+# user databases", and a healthy fresh server has none, so using it as a
+# readiness probe waits forever on a container that is already up.
+hook_ping() {
+    engine_exec "$DBTK_ENGINE_NAME" pg_isready -U postgres >/dev/null 2>&1
+}
+
 # Databases a backup should cover: everything connectable that is not a
 # template.
 hook_list_databases() {
@@ -60,6 +67,16 @@ hook_recreate_database() {
 hook_restore_database() {
     local db="$1"
     engine_exec "$DBTK_ENGINE_NAME" pg_restore -U postgres -d "$db" --no-owner --clean --if-exists
+}
+
+# Tables present, as distinct from rows. A database with no tables was empty
+# at dump time, which is a legitimate state; a database WITH tables but no
+# rows means the restore lost the data. Only the second is a failure.
+hook_object_count() {
+    local db="$1"
+    engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -d "$db" -tAc \
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema')" \
+        2>/dev/null | tr -d ' \r'
 }
 
 hook_row_count() {

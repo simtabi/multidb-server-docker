@@ -26,6 +26,13 @@ _mysql_run() {
     engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${args[@]+"${args[@]}"} "$@"
 }
 
+# Readiness. Deliberately NOT hook_list_databases: that answers "are there
+# user databases", and a healthy fresh server has none, so using it as a
+# readiness probe waits forever on a container that is already up.
+hook_ping() {
+    _mysql_run -N -B -e "SELECT 1" >/dev/null 2>&1
+}
+
 hook_list_databases() {
     _mysql_run -N -B -e \
         "SELECT schema_name FROM information_schema.schemata
@@ -65,6 +72,16 @@ hook_restore_database() {
     local args=()
     while IFS= read -r a; do [ -n "$a" ] && args+=("$a"); done < <(_mysql_args)
     engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${args[@]+"${args[@]}"} "$db"
+}
+
+# Tables present, as distinct from rows. A database with no tables was empty
+# at dump time, which is a legitimate state; a database WITH tables but no
+# rows means the restore lost the data. Only the second is a failure.
+hook_object_count() {
+    local db="$1"
+    _mysql_run -N -B -e \
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema = '$db'" \
+        2>/dev/null | tr -d ' \r'
 }
 
 hook_row_count() {

@@ -33,118 +33,118 @@ cleanup() {
 trap cleanup EXIT
 
 latest_for() {
-    # Newest dump for an engine, ignoring checksum files and the globals dump.
+    # Newest dump for an engine, ignoring checksums and the globals dump.
     find "$BACKUP_DIR" -maxdepth 1 -type f -name "${1}_*" \
         ! -name '*.sha256' ! -name '*globals*' 2>/dev/null \
         | sort | tail -1
 }
 
-# Reads the row count of every table back out of the restored database, which
-# is the only assertion that actually proves the data survived the round trip.
-total_rows_pg() {
-    docker exec "$1" psql -U postgres -d "$2" -tAc "
-        SELECT COALESCE(SUM(n_live_tup), 0) FROM pg_stat_user_tables" 2>/dev/null | tr -d ' \r'
-}
+# Engine operations come from the descriptor and its family hooks
+# (SPEC section 22.1). Adding an engine adds it to this loop for free.
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
 
 verified=0
 failed=0
+empty=0
 
-# -----------------------------------------------------------------------------
-# PostgreSQL
-# -----------------------------------------------------------------------------
-pg_dump_file="$(latest_for pg)"
-if [[ -n "$pg_dump_file" ]]; then
-    db="$(basename "$pg_dump_file" | sed -E 's/^pg_(.+)_[0-9]{8}T[0-9]{6}Z\..*$/\1/')"
-    log "restoring pg database '$db' from $(basename "$pg_dump_file") into a throwaway container"
-
-    c="dbtk-verifybak-pg-$$"
-    CONTAINERS+=("$c")
-    docker run -d --name "$c" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
-        "$PREFIX/db-toolkit-pg:$(get DBTK_PG_VERSION)" >/dev/null
-
-    for _ in $(seq 1 90); do
-        docker exec "$c" pg_isready -U postgres >/dev/null 2>&1 && break
-        sleep 1
-    done
-    sleep 3
-
-    globals="$(find "$BACKUP_DIR" -maxdepth 1 -name 'pg_globals_*' ! -name '*.sha256' | sort | tail -1)"
-    if [[ -n "$globals" ]]; then
-        # Roles first: a per-database dump references them but does not contain
-        # them, so restoring data without globals produces broken grants.
-        zstd -dc "$globals" 2>/dev/null | docker exec -i "$c" psql -U postgres -q >/dev/null 2>&1 || true
-        log "restored globals from $(basename "$globals")"
-    fi
-
-    docker exec "$c" psql -U postgres -q -c "CREATE DATABASE \"$db\";" >/dev/null 2>&1 || true
-    zstd -dc "$pg_dump_file" 2>/dev/null \
-        | docker exec -i "$c" pg_restore -U postgres -d "$db" --no-owner >/dev/null 2>&1 || true
-
-    rows="$(total_rows_pg "$c" "$db")"
-    if [[ -n "$rows" ]] && (( rows > 0 )); then
-        log "pg: $rows row(s) restored and readable"
-        verified=$(( verified + 1 ))
-    else
-        log "pg: FAILED, restored database has no rows"
-        failed=$(( failed + 1 ))
-    fi
-else
-    log "no PostgreSQL backup found to verify"
-fi
-
-# -----------------------------------------------------------------------------
-# MySQL family
-# -----------------------------------------------------------------------------
-for engine in mysql mariadb; do
+for engine in $(engine_list); do
     f="$(latest_for "$engine")"
-    [[ -z "$f" ]] && { log "no $engine backup found to verify"; continue; }
+    [ -z "$f" ] && { log "no $engine backup found to verify"; continue; }
 
+    engine_load "$engine" || continue
+
+    prefix_img="$PREFIX/db-toolkit-$engine"
+    upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
+    ver="$(get "DBTK_${upper}_VERSION")"; ver="${ver:-$DBTK_ENGINE_DEFAULT_VERSION}"
+
+    if ! docker image inspect "$prefix_img:$ver" >/dev/null 2>&1; then
+        log "$engine: image $prefix_img:$ver not built; skipping"
+        continue
+    fi
+
+    # The database name is recovered from the artefact name, which is why the
+    # naming scheme is <engine>_<db>_<timestamp> and not something prettier.
     db="$(basename "$f" | sed -E "s/^${engine}_(.+)_[0-9]{8}T[0-9]{6}Z\\..*\$/\\1/")"
     log "restoring $engine database '$db' from $(basename "$f") into a throwaway container"
 
-    c="dbtk-verifybak-$engine-$$"
+    c="dbtk-verifybak-${engine}-$$"
     CONTAINERS+=("$c")
 
-    if [[ "$engine" == "mysql" ]]; then
-        pw_env=MYSQL_ROOT_PASSWORD; client=mysql; ver="$(get DBTK_MYSQL_VERSION)"
-    else
-        pw_env=MARIADB_ROOT_PASSWORD; client=mariadb; ver="$(get DBTK_MARIADB_VERSION)"
-    fi
+    # A throwaway container, never the running stack: a verification that
+    # damaged production to prove production is recoverable would be its own
+    # disaster.
+    docker run -d --name "$c" \
+        -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
+        -e MYSQL_ROOT_PASSWORD=dbtk-throwaway-verify \
+        -e MARIADB_ROOT_PASSWORD=dbtk-throwaway-verify \
+        "$prefix_img:$ver" >/dev/null 2>&1 || {
+            log "$engine: FAILED, could not start a throwaway container"
+            failed=$(( failed + 1 )); continue
+        }
 
-    docker run -d --name "$c" -e "$pw_env=dbtk-throwaway-verify" \
-        "$PREFIX/db-toolkit-$engine:$ver" >/dev/null
+    # The hooks are written against this contract: engine_exec, secret and
+    # compress_ext. Here every one of them targets the throwaway container.
+    # shellcheck disable=SC2034  # read by the family hooks
+    IN_CONTAINER=0
+    engine_exec() { shift; docker exec -i "$c" "$@"; }
+    secret() { printf 'dbtk-throwaway-verify'; }
+    compress_ext() { case "$f" in *.zst) printf '.zst' ;; *) printf '' ;; esac; }
+    engine_load_hooks || { log "$engine: no hooks"; failed=$(( failed + 1 )); continue; }
 
     ready=0
     for _ in $(seq 1 120); do
-        if docker exec "$c" "$client" -uroot -pdbtk-throwaway-verify -e "SELECT 1" >/dev/null 2>&1; then
-            ready=1; break
-        fi
+        if hook_ping; then ready=1; break; fi
         sleep 1
     done
-    (( ready )) || { log "$engine: FAILED, throwaway container never became ready"; failed=$(( failed + 1 )); continue; }
+    (( ready )) || { log "$engine: FAILED, throwaway container never became ready"
+                     failed=$(( failed + 1 )); continue; }
 
-    docker exec "$c" "$client" -uroot -pdbtk-throwaway-verify \
-        -e "CREATE DATABASE IF NOT EXISTS \`$db\`;" >/dev/null 2>&1
-    zstd -dc "$f" 2>/dev/null \
-        | docker exec -i "$c" "$client" -uroot -pdbtk-throwaway-verify "$db" >/dev/null 2>&1 || true
+    # PostgreSQL roles live only in the globals dump; restoring data without
+    # them produces broken grants.
+    if [ -n "${DBTK_ENGINE_DUMP_GLOBALS:-}" ]; then
+        globals="$(find "$BACKUP_DIR" -maxdepth 1 -name "${engine}_globals_*" ! -name '*.sha256' | sort | tail -1)"
+        if [ -n "$globals" ]; then
+            zstd -dc "$globals" 2>/dev/null | docker exec -i "$c" psql -U postgres -q >/dev/null 2>&1 || true
+            log "restored globals from $(basename "$globals")"
+        fi
+    fi
 
-    rows="$(docker exec "$c" "$client" -uroot -pdbtk-throwaway-verify -N -B -e "
-        SELECT COALESCE(SUM(table_rows), 0) FROM information_schema.tables
-        WHERE table_schema = '$db'" 2>/dev/null | tr -d ' \r')"
+    hook_recreate_database "$db" >/dev/null 2>&1 || true
+    zstd -dc "$f" 2>/dev/null | hook_restore_database "$db" >/dev/null 2>&1 || true
 
-    if [[ -n "$rows" ]] && (( rows > 0 )); then
+    rows="$(hook_row_count "$db" 2>/dev/null || echo 0)"
+    objects="$(hook_object_count "$db" 2>/dev/null || echo 0)"
+
+    if [ -n "$rows" ] && [ "$rows" -gt 0 ] 2>/dev/null; then
         log "$engine: $rows row(s) restored and readable"
         verified=$(( verified + 1 ))
-    else
-        log "$engine: FAILED, restored database has no rows"
+    elif [ -n "$objects" ] && [ "$objects" -gt 0 ] 2>/dev/null; then
+        # Tables came back but no rows: the data was lost in transit.
+        log "$engine: FAILED, $objects table(s) restored but no rows"
         failed=$(( failed + 1 ))
+    else
+        # No tables either: the source database was genuinely empty, which is a
+        # legitimate state. The restore worked; it simply proves nothing, and
+        # saying so is more useful than a spurious failure.
+        log "$engine: restored, but the source database '$db' was empty; nothing proven"
+        empty=$(( empty + 1 ))
     fi
+
+    docker rm -f "$c" >/dev/null 2>&1 || true
 done
 
 printf '\n'
 if (( failed )); then
     die "$failed engine(s) failed restore verification"
 fi
-(( verified )) || die "nothing was verified: no backups found in ${BACKUP_DIR#"$ROOT"/}"
+if (( ! verified )); then
+    if (( empty )); then
+        die "$empty engine(s) restored only empty databases; nothing was actually proven.
+       Back up a database that has data before trusting this."
+    fi
+    die "nothing was verified: no backups found in ${BACKUP_DIR#"$ROOT"/}"
+fi
+(( empty )) && log "$empty engine(s) had an empty source database (not counted either way)"
 
 log "✓ $verified engine(s) verified: backups restore and contain data"

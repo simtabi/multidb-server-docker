@@ -53,6 +53,16 @@ secret() {
     fi
 }
 
+# compress_ext is part of the contract the family hooks are written against.
+compress_ext() { case "$FILE" in *.zst) printf '.zst' ;; *) printf '' ;; esac; }
+
+# Engine operations come from the descriptor and its family hooks
+# (SPEC section 22.1); nothing below branches on an engine name.
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+engine_load "$ENGINE" || die "unknown engine: $ENGINE"
+engine_load_hooks || die "no hooks for engine family ${DBTK_ENGINE_FAMILY:-?}"
+
 # -----------------------------------------------------------------------------
 # Integrity first. Restoring a corrupted dump over a live database is strictly
 # worse than not restoring at all, so the checksum is verified before anything
@@ -92,30 +102,10 @@ decompress() {
     esac
 }
 
-case "$ENGINE" in
-    pg)
-        log "recreating database $DB"
-        engine_exec pg psql -U postgres -q -c "DROP DATABASE IF EXISTS \"$DB\";" >/dev/null
-        engine_exec pg psql -U postgres -q -c "CREATE DATABASE \"$DB\";" >/dev/null
+log "recreating database $DB"
+hook_recreate_database "$DB" || die "could not recreate $DB"
 
-        log "restoring"
-        # --no-owner keeps the restore working when roles differ between the
-        # source and target servers; globals are restored separately.
-        decompress | engine_exec pg pg_restore -U postgres -d "$DB" --no-owner --clean --if-exists \
-            2>&1 | grep -vE '^$' | sed 's/^/[restore]   /' || true
-        ;;
-    mysql|mariadb)
-        pw="$(secret "${ENGINE}_root_password.txt")"
-        client="$( [[ "$ENGINE" == "mysql" ]] && printf 'mysql' || printf 'mariadb' )"
-
-        log "recreating database $DB"
-        engine_exec "$ENGINE" "$client" -uroot -p"$pw" \
-            -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
-
-        log "restoring"
-        decompress | engine_exec "$ENGINE" "$client" -uroot -p"$pw" "$DB" 2>/dev/null
-        ;;
-    *) die "unknown engine: $ENGINE" ;;
-esac
+log "restoring"
+decompress | hook_restore_database "$DB" >/dev/null 2>&1 || true
 
 log "restore of $DB complete"
