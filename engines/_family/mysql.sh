@@ -14,10 +14,12 @@ _mysql_host_args() {
 }
 
 _mysql_args() {
-    local pw; pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
+    # _dbtk_pw, not pw: `local pw` would shadow a caller's own $pw, and a
+    # caller whose secret() returns "$pw" would read this empty local instead.
+    local _dbtk_pw; _dbtk_pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
     local hargs=()
     while IFS= read -r a; do [ -n "$a" ] && hargs+=("$a"); done < <(_mysql_host_args)
-    printf '%s\n' ${hargs[@]+"${hargs[@]}"} "-uroot" "-p$pw"
+    printf '%s\n' ${hargs[@]+"${hargs[@]}"} "-uroot" "-p$_dbtk_pw"
 }
 
 _mysql_run() {

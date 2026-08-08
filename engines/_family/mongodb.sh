@@ -9,14 +9,16 @@
 # engine cost a descriptor file and nothing here.
 
 _mongo_uri() {
-    local pw user host
-    pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
+    # _dbtk_pw, not pw: `local pw` would shadow a caller's own $pw, and a
+    # caller whose secret() returns "$pw" would read this empty local instead.
+    local _dbtk_pw user host
+    _dbtk_pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
     user="${DBTK_MONGODB_ROOT_USER:-root}"
     if [ "${IN_CONTAINER:-0}" = "1" ]; then host="$DBTK_ENGINE_NAME"; else host="127.0.0.1"; fi
     # authSource=admin because the root user is created in the admin database,
     # not in whichever database is being addressed.
     printf 'mongodb://%s:%s@%s:%s/?authSource=admin' \
-        "$user" "$pw" "$host" "$DBTK_ENGINE_PORT"
+        "$user" "$_dbtk_pw" "$host" "$DBTK_ENGINE_PORT"
 }
 
 _mongosh() {

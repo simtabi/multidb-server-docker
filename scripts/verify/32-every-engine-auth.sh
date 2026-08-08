@@ -61,7 +61,13 @@ for engine in $(engine_list); do
     name="dbtk-verify-auth-${engine}-$$"
     track_container "$name"
 
-    pw="dbtk-throwaway-verify"
+    # Deliberately NOT named pw. The family helpers declare `local pw` for
+    # their own use, and bash locals are dynamically scoped, so a secret()
+    # that returned "$pw" would read the helper's empty local rather than this
+    # value -- every probe would then run with an empty password and the
+    # engine would look like it never became ready. The hooks were also fixed;
+    # this side is named so neither depends on the other.
+    auth_pw="dbtk-throwaway-verify"
 
     # Not every engine takes its root password from an environment variable.
     # Cassandra reads it from a mounted secret file, so an env-only container
@@ -80,17 +86,17 @@ for engine in $(engine_list); do
 
     secrets_dir="$(mktemp -d)"
     add_cleanup "rm -rf '$secrets_dir'"
-    printf '%s' "$pw" > "$secrets_dir/${DBTK_ENGINE_ROOT_SECRET}"
+    printf '%s' "$auth_pw" > "$secrets_dir/${DBTK_ENGINE_ROOT_SECRET}"
     chmod 0644 "$secrets_dir/${DBTK_ENGINE_ROOT_SECRET}"
     # Every engine's root password reaches it by a different variable name,
     # which the descriptor already declares. Passing them all is harmless: an
     # engine ignores the ones that are not its own.
     docker run -d --name "$name" \
-        -e POSTGRES_PASSWORD="$pw" \
-        -e MYSQL_ROOT_PASSWORD="$pw" \
-        -e MARIADB_ROOT_PASSWORD="$pw" \
+        -e POSTGRES_PASSWORD="$auth_pw" \
+        -e MYSQL_ROOT_PASSWORD="$auth_pw" \
+        -e MARIADB_ROOT_PASSWORD="$auth_pw" \
         -e MONGO_INITDB_ROOT_USERNAME=root \
-        -e MONGO_INITDB_ROOT_PASSWORD="$pw" \
+        -e MONGO_INITDB_ROOT_PASSWORD="$auth_pw" \
         -e MAX_HEAP_SIZE=1G -e HEAP_NEWSIZE=200M \
         -v "$secrets_dir:/run/secrets:ro" \
         -v "$vol:${DBTK_ENGINE_DATA_DIR}" \
@@ -102,7 +108,7 @@ for engine in $(engine_list); do
     # shellcheck disable=SC2034  # read by the family hooks
     IN_CONTAINER=0
     engine_exec() { shift; docker exec -i "$name" "$@"; }
-    secret() { printf '%s' "$pw"; }
+    secret() { printf '%s' "$auth_pw"; }
     compress_ext() { printf ''; }
 
     # Cassandra is genuinely slow to become queryable: a JVM to warm and a

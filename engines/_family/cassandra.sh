@@ -16,8 +16,13 @@
 # documented as such rather than pretended away.
 
 _cqlsh() {
-    local pw; pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
-    engine_exec "$DBTK_ENGINE_NAME" cqlsh -u cassandra -p "$pw" "$@"
+    # _dbtk_pw, not pw. `local pw` here SHADOWS a caller's own $pw, and a
+    # caller whose secret() returns "$pw" then reads this function's empty
+    # local instead of its own value -- bash locals are dynamically scoped.
+    # Check 32 does exactly that, so every probe ran with an empty password
+    # and the engine reported "never became ready" for five minutes.
+    local _dbtk_pw; _dbtk_pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
+    engine_exec "$DBTK_ENGINE_NAME" cqlsh -u cassandra -p "$_dbtk_pw" "$@"
 }
 
 hook_ping() {
