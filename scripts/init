@@ -70,6 +70,12 @@ for engine in $(engine_list); do
     gen_secret "$DBTK_ENGINE_ROOT_SECRET"
 done
 
+# HA roles. Generated unconditionally rather than only when DBTK_HA_ENABLE is
+# true: enabling HA later must not require re-running an init that refuses to
+# run twice.
+gen_secret pg_replication_password.txt
+gen_secret patroni_rest_password.txt
+
 # Poolers hold a credential of their own. pgBouncer never stores an application
 # user's password -- it looks verifiers up with auth_query -- so this is the
 # only one it has. See docs/pooling.md.

@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+#
+# Generate this node's Patroni configuration and hand over to Patroni.
+#
+# Patroni reads most of its settings from PATRONI_* environment variables, but
+# the parts that matter here -- the bootstrap block, pg_hba, and the TLS and
+# authentication settings the standalone image already enforces -- have no
+# environment equivalent. So the config is written here, from the same values
+# the rest of the toolkit uses, rather than duplicated into compose.
+
+DBTK_STAGE=dbtk-patroni
+export DBTK_STAGE
+# The absolute path is correct inside the image; this tells shellcheck where
+# to find the same file in the repository.
+# shellcheck source=../../pg/scripts/dbtk-lib.sh
+source /usr/local/lib/dbtk/dbtk-lib.sh
+
+name="${PATRONI_NAME:?PATRONI_NAME is required}"
+scope="${PATRONI_SCOPE:-dbtk-pg}"
+etcd_hosts="${PATRONI_ETCD3_HOSTS:?PATRONI_ETCD3_HOSTS is required}"
+
+# Accept the comma-separated form compose passes and emit YAML list items.
+# Quotes are stripped so both "a:1,b:2" and "'a:1','b:2'" work; getting that
+# wrong is silent, because a quoted host is still a valid YAML string.
+etcd_hosts_yaml="$(printf '%s' "$etcd_hosts" \
+    | tr ',' '\n' \
+    | sed "s/^[[:space:]]*['\"]*//; s/['\"]*[[:space:]]*$//" \
+    | sed '/^$/d; s/^/    - /')"
+data_dir="${PGDATA:-/var/lib/postgresql/data}"
+conf=/etc/patroni/patroni.yml
+
+read_secret() {
+    local f="/run/secrets/$1"
+    [[ -r "$f" ]] || die "secret not readable: $f"
+    tr -d '\n' < "$f"
+}
+
+super_pw="$(read_secret "${DBTK_PG_SUPERUSER_SECRET:-pg_superuser_password.txt}")"
+
+# Replication gets a credential of its own rather than reusing the superuser's.
+# A replica only needs REPLICATION, and handing every standby the superuser
+# password makes each one a full compromise of the primary.
+repl_pw="$(read_secret "${DBTK_REPLICATION_SECRET:-pg_replication_password.txt}")"
+
+# Patroni's own REST API is what HAProxy trusts to decide where writes go, so
+# its write endpoints are authenticated. Reads (/primary, /replica) stay open:
+# HAProxy polls them constantly and they disclose only role, not data.
+rest_pw="$(read_secret "${DBTK_PATRONI_REST_SECRET:-patroni_rest_password.txt}")"
+
+stage "writing $conf for node $name in scope $scope"
+
+# YAML, generated rather than templated with sed: the values include generated
+# passwords, and a substitution into a checked-in template is how a credential
+# ends up in a file someone later commits.
+cat > "$conf" <<YAML
+scope: ${scope}
+name: ${name}
+namespace: /db-toolkit/
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: ${name}:8008
+  authentication:
+    username: patroni
+    password: '${rest_pw}'
+
+etcd3:
+  # A YAML LIST. PATRONI_ETCD3_HOSTS is a comma-separated scalar when Patroni
+  # reads it from the environment, and writing that form straight into the file
+  # is a parse error at the first comma -- Patroni exits before it ever contacts
+  # etcd, and the container just looks unhealthy.
+  hosts:
+${etcd_hosts_yaml}
+
+bootstrap:
+  # DCS values are written to etcd once, by whichever node bootstraps, and are
+  # the cluster-wide settings from then on. Editing them here later changes
+  # nothing; use \`patronictl edit-config\`.
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    # How far behind a replica may be and still be promoted, in bytes. 0 would
+    # forbid any data loss and also forbid failover whenever no replica is
+    # exactly current -- availability traded for durability, which is a choice
+    # to make deliberately rather than inherit.
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: ${DBTK_PG_SYNC_MODE:-false}
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: 'on'
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 128MB
+        ssl: 'on'
+        ssl_cert_file: /certs/pg/server.crt
+        ssl_key_file: /certs/pg/server.key
+        ssl_ca_file: /certs/ca.crt
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+    # NOT --auth=trust. initdb defaults to trust for local connections, which
+    # check 30 fails the build over: any process in the container would then be
+    # superuser with no credential.
+    - auth-host: scram-sha-256
+    - auth-local: peer
+
+  # pg_hba as Patroni writes it on bootstrap. Same shape the standalone image
+  # generates, plus the replication rules the cluster needs.
+  pg_hba:
+    - local   all             postgres                    peer
+    - local   all             all                         scram-sha-256
+    - hostssl all             all         127.0.0.1/32    scram-sha-256
+    - hostssl all             all         ::1/128         scram-sha-256
+    - hostssl all             all         0.0.0.0/0       scram-sha-256
+    - hostssl replication     replicator  0.0.0.0/0       scram-sha-256
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: ${name}:5432
+  data_dir: ${data_dir}
+  bin_dir: /usr/lib/postgresql/${PG_MAJOR:-17}/bin
+  pgpass: /tmp/pgpass0
+  authentication:
+    superuser:
+      username: postgres
+      password: '${super_pw}'
+    replication:
+      username: replicator
+      password: '${repl_pw}'
+  parameters:
+    shared_buffers: ${DBTK_PG_SHARED_BUFFERS:-256MB}
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+YAML
+
+chown postgres:postgres "$conf"
+chmod 0600 "$conf"
+
+# The data directory must belong to postgres and be 0700, or PostgreSQL refuses
+# to start with an error that names permissions rather than ownership.
+mkdir -p "$data_dir"
+chown -R postgres:postgres "$data_dir"
+chmod 0700 "$data_dir"
+
+# HOME must be postgres's, not root's.
+#
+# s6-setuidgid changes the uid but not the environment, so HOME stayed /root.
+# libpq looks for an optional client certificate at $HOME/.postgresql/ and, as
+# postgres, gets EACCES on /root -- which it treats as a failure to start TLS
+# and RETRIES THE CONNECTION UNENCRYPTED. The leader's pg_hba then refuses it,
+# and the only error you see is "no pg_hba.conf entry ... no encryption", which
+# points at the rule rather than at the permission problem that caused it.
+export HOME=/var/lib/postgresql
+export PGSSLMODE="${PGSSLMODE:-require}"
+
+stage "starting Patroni"
+exec s6-setuidgid postgres env HOME="$HOME" PGSSLMODE="$PGSSLMODE" \
+    /usr/local/bin/patroni "$conf"

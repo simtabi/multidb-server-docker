@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# Cluster operations for the Patroni topology (SPEC section 21.5).
+#
+# One script, three verbs, because they share every piece of plumbing: finding a
+# running Patroni node to talk to, reading the REST credential, and rendering
+# patronictl output. Splitting them would mean three copies of that.
+#
+# Usage:
+#   scripts/ha status                 topology and replication lag
+#   scripts/ha failover [--node N]    controlled switchover, typed confirmation
+#   scripts/ha reinit --node N        rebuild one replica from the leader
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+log() { printf '[ha] %s\n' "$*"; }
+die() { printf '[ha] ERROR: %s\n' "$*" >&2; exit 1; }
+
+verb="${1:-status}"
+shift || true
+
+NODE=""
+while (( $# )); do
+    case "$1" in
+        --node) NODE="${2:-}"; shift 2 ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+# Any running Patroni node can answer for the whole cluster -- the state lives
+# in etcd, not on a particular node -- so this deliberately does not care which
+# one it finds. Requiring a specific node would make `make ha-status` fail
+# exactly when that node is the one that died.
+node_container() {
+    local svc
+    for svc in patroni1 patroni2 patroni3; do
+        if docker compose ps --status running --services 2>/dev/null | grep -qx "$svc"; then
+            printf '%s' "$svc"
+            return 0
+        fi
+    done
+    return 1
+}
+
+svc="$(node_container || true)"
+[[ -n "$svc" ]] || die "no Patroni node is running (try: make up PROFILES=pg,ha)"
+
+patronictl() {
+    docker compose exec -T "$svc" patronictl -c /etc/patroni/patroni.yml "$@"
+}
+
+case "$verb" in
+    status)
+        # `list` is the topology; `history` is why it looks like that. Showing
+        # both means a surprising leader comes with the election that caused it.
+        patronictl list
+        printf '\n'
+        patronictl history 2>/dev/null | tail -6 || true
+        ;;
+
+    failover)
+        # A switchover, not a failover, when the cluster is healthy: it hands
+        # the leader role over cleanly rather than simulating a crash. patronictl
+        # calls the healthy-cluster case `switchover`, and using `failover` on a
+        # healthy cluster is how people lose the transactions in flight.
+        log "current topology:"
+        patronictl list
+        printf '\n'
+        printf 'This promotes a different node to leader. In-flight transactions on the\n'
+        printf 'current leader will be terminated.\n\n'
+        printf 'Type the cluster name (%s) to continue: ' "$(grep -E '^DBTK_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2- || printf 'dbtk-pg')"
+        read -r answer
+        expected="$(grep -E '^DBTK_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2-)"
+        expected="${expected:-dbtk-pg}"
+        [[ "$answer" == "$expected" ]] || die "confirmation did not match; nothing was changed"
+
+        if [[ -n "$NODE" ]]; then
+            patronictl switchover --candidate "$NODE" --force
+        else
+            patronictl switchover --force
+        fi
+        log "switchover complete"
+        patronictl list
+        ;;
+
+    reinit)
+        [[ -n "$NODE" ]] || die "specify the node to rebuild: make ha-reinit NODE=patroni2"
+        printf 'This DESTROYS the data directory on %s and rebuilds it from the leader.\n' "$NODE"
+        printf 'Type %s to continue: ' "$NODE"
+        read -r answer
+        [[ "$answer" == "$NODE" ]] || die "confirmation did not match; nothing was changed"
+        patronictl reinit --force "$(grep -E '^DBTK_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2- || printf 'dbtk-pg')" "$NODE"
+        log "reinit requested; watch progress with: make ha-status"
+        ;;
+
+    *)
+        die "unknown verb: $verb (want: status|failover|reinit)"
+        ;;
+esac

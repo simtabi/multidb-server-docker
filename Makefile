@@ -194,15 +194,15 @@ upgrade: ## Guided major-version migration (ENGINE= FROM= TO=)
 
 .PHONY: ha-status
 ha-status: ## Show cluster topology and replication lag
-	$(call unimplemented,7)
+	@scripts/ha status
 
 .PHONY: ha-failover
 ha-failover: ## Controlled switchover (typed confirmation required)
-	$(call unimplemented,7)
+	@scripts/ha failover $(if $(NODE),--node "$(NODE)",)
 
 .PHONY: ha-reinit
 ha-reinit: ## Rebuild a replica from the pgBackRest repo (NODE=)
-	$(call unimplemented,7)
+	@scripts/ha reinit --node "$(NODE)"
 
 # -----------------------------------------------------------------------------
 # Verification — real from phase 1, because everything heals against it
