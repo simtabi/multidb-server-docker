@@ -68,6 +68,16 @@ for engine in $(engine_list); do
     # keeps the default credential and every probe with the throwaway password
     # fails -- which looks like "never became ready" rather than the setup
     # error it is. The descriptor already names the file, so mount one.
+    # A fresh, tracked volume for the data directory. Without one, Docker
+    # creates an ANONYMOUS volume (the engine images declare VOLUME), and any
+    # data surviving from a previous run makes the entrypoint skip first-run
+    # initialisation -- so the root user keeps its OLD password and every probe
+    # fails with a storedKey mismatch that looks like a broken engine.
+    vol="dbtk-verify-auth-${engine}-vol-$$"
+    docker volume rm -f "$vol" >/dev/null 2>&1 || true
+    docker volume create "$vol" >/dev/null
+    track_volume "$vol"
+
     secrets_dir="$(mktemp -d)"
     add_cleanup "rm -rf '$secrets_dir'"
     printf '%s' "$pw" > "$secrets_dir/${DBTK_ENGINE_ROOT_SECRET}"
@@ -83,6 +93,7 @@ for engine in $(engine_list); do
         -e MONGO_INITDB_ROOT_PASSWORD="$pw" \
         -e MAX_HEAP_SIZE=1G -e HEAP_NEWSIZE=200M \
         -v "$secrets_dir:/run/secrets:ro" \
+        -v "$vol:${DBTK_ENGINE_DATA_DIR}" \
         "$img" >/dev/null 2>&1 \
         || vfail "$engine: container failed to start from $img"
 
@@ -97,8 +108,11 @@ for engine in $(engine_list); do
     # Cassandra is genuinely slow to become queryable: a JVM to warm and a
     # gossip round to complete. The budget reflects that rather than assuming
     # every engine behaves like PostgreSQL.
+    # An if, not `engine_is_heavy && budget=300`: that form returns non-zero
+    # for every engine that is NOT heavy, which aborts the whole check under
+    # set -e at the first light engine.
     budget=90
-    engine_is_heavy && budget=300
+    if engine_is_heavy; then budget=300; fi
 
     ready=0
     for (( i = 0; i < budget; i++ )); do
