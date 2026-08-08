@@ -252,6 +252,93 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
+  # Scheduled backups — one sidecar per engine.
+  #
+  # Per-engine rather than one shared sidecar so each gets its OWN native dump
+  # client from its own image: mariadb-dump against a MySQL 8.4 server is the
+  # kind of thing that works until it does not. The alternative, a single
+  # container with all three clients, is the cli image, and reaching into other
+  # containers would mean mounting the docker socket -- a far larger grant than
+  # a backup job needs.
+  #
+  # Every one of these runs scripts/backup, the SAME file the make targets run,
+  # so the dump flags cannot drift between the nightly path and the manual one
+  # (SPEC section 11).
+  # ---------------------------------------------------------------------------
+  backup-pg:
+    profiles: [backup]
+    image: ghcr.io/simtabi/db-toolkit-pg:${DBTK_PG_VERSION:-17}
+    restart: unless-stopped
+    <<: *hardening
+    entrypoint: ["/dbtk/scripts/backup", "--engine", "pg", "--schedule"]
+    # The sidecar runs on the engine's image but is NOT the engine, so the
+    # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
+    # is not running here and reports the container unhealthy forever.
+    healthcheck:
+      disable: true
+    environment:
+      DBTK_IN_CONTAINER: "1"
+      DBTK_BACKUP_DIR: /backups
+      PGHOST: pg
+      PGUSER: postgres
+    volumes:
+      - ./scripts:/dbtk/scripts:ro
+      - ./secrets:/run/secrets:ro
+      - ./backups:/backups
+      - ./.env:/dbtk/.env:ro
+    working_dir: /dbtk
+    networks: [dbtk]
+    logging: *default-logging
+
+  backup-mysql:
+    profiles: [backup]
+    image: ghcr.io/simtabi/db-toolkit-mysql:${DBTK_MYSQL_VERSION:-8.4}
+    restart: unless-stopped
+    <<: *hardening
+    entrypoint: ["/dbtk/scripts/backup", "--engine", "mysql", "--schedule"]
+    # The sidecar runs on the engine's image but is NOT the engine, so the
+    # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
+    # is not running here and reports the container unhealthy forever.
+    healthcheck:
+      disable: true
+    environment:
+      DBTK_IN_CONTAINER: "1"
+      DBTK_BACKUP_DIR: /backups
+      MYSQL_HOST: mysql
+    volumes:
+      - ./scripts:/dbtk/scripts:ro
+      - ./secrets:/run/secrets:ro
+      - ./backups:/backups
+      - ./.env:/dbtk/.env:ro
+    working_dir: /dbtk
+    networks: [dbtk]
+    logging: *default-logging
+
+  backup-mariadb:
+    profiles: [backup]
+    image: ghcr.io/simtabi/db-toolkit-mariadb:${DBTK_MARIADB_VERSION:-11.4}
+    restart: unless-stopped
+    <<: *hardening
+    entrypoint: ["/dbtk/scripts/backup", "--engine", "mariadb", "--schedule"]
+    # The sidecar runs on the engine's image but is NOT the engine, so the
+    # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
+    # is not running here and reports the container unhealthy forever.
+    healthcheck:
+      disable: true
+    environment:
+      DBTK_IN_CONTAINER: "1"
+      DBTK_BACKUP_DIR: /backups
+      MYSQL_HOST: mariadb
+    volumes:
+      - ./scripts:/dbtk/scripts:ro
+      - ./secrets:/run/secrets:ro
+      - ./backups:/backups
+      - ./.env:/dbtk/.env:ro
+    working_dir: /dbtk
+    networks: [dbtk]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
   # Metrics — exporters on the internal network, published to nothing.
   #
   # Prometheus and Grafana are out of scope (SPEC section 12); these expose the

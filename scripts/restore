@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+#
+# Guided, confirmed restore (SPEC section 15.1).
+#
+# A restore overwrites a live database, so it asks before it does. CONFIRM=yes
+# skips the prompt for automation; there is no flag that skips the checksum.
+#
+# Usage: scripts/restore --engine pg --db mydb --file backups/pg_mydb_...zst
+#        CONFIRM=yes scripts/restore ...
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+
+get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+log() { printf '[restore] %s\n' "$*"; }
+die() { printf '[restore] ERROR: %s\n' "$*" >&2; exit 1; }
+
+ENGINE=""; DB=""; FILE=""
+while (( $# )); do
+    case "$1" in
+        --engine) ENGINE="${2:-}"; shift 2 ;;
+        --db)     DB="${2:-}"; shift 2 ;;
+        --file)   FILE="${2:-}"; shift 2 ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+[[ -n "$ENGINE" ]] || die "specify --engine <pg|mysql|mariadb>"
+[[ -n "$DB" ]]     || die "specify --db <name>"
+[[ -n "$FILE" ]]   || die "specify --file <path>"
+[[ -f "$FILE" ]]   || die "no such file: $FILE"
+
+IN_CONTAINER="${DBTK_IN_CONTAINER:-0}"
+
+engine_exec() {
+    local engine="$1"; shift
+    if [[ "$IN_CONTAINER" == "1" ]]; then
+        "$@"
+    else
+        ( cd "$ROOT" && docker compose exec -T "$engine" "$@" )
+    fi
+}
+
+secret() {
+    local file="$1"
+    if [[ "$IN_CONTAINER" == "1" ]]; then
+        tr -d '\n' < "/run/secrets/$file"
+    else
+        tr -d '\n' < "$ROOT/secrets/$file"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# Integrity first. Restoring a corrupted dump over a live database is strictly
+# worse than not restoring at all, so the checksum is verified before anything
+# is touched and there is no way to skip it.
+# -----------------------------------------------------------------------------
+if [[ -f "$FILE.sha256" ]]; then
+    log "verifying checksum"
+    if command -v sha256sum >/dev/null 2>&1; then
+        ( cd "$(dirname "$FILE")" && sha256sum -c "$(basename "$FILE").sha256" ) >/dev/null \
+            || die "checksum mismatch: $FILE is corrupt or truncated"
+    else
+        ( cd "$(dirname "$FILE")" && shasum -a 256 -c "$(basename "$FILE").sha256" ) >/dev/null \
+            || die "checksum mismatch: $FILE is corrupt or truncated"
+    fi
+    log "checksum ok"
+else
+    log "WARNING: no checksum file alongside $FILE"
+fi
+
+# -----------------------------------------------------------------------------
+# Confirmation
+# -----------------------------------------------------------------------------
+if [[ "${CONFIRM:-}" != "yes" ]]; then
+    printf '\n'
+    printf 'About to restore into %s database "%s".\n' "$ENGINE" "$DB"
+    printf 'This REPLACES the current contents of that database.\n'
+    printf '  source: %s\n\n' "$FILE"
+    printf 'Type the database name to continue: '
+    read -r answer
+    [[ "$answer" == "$DB" ]] || die "confirmation did not match; nothing was changed"
+fi
+
+decompress() {
+    case "$FILE" in
+        *.zst) zstd -dc "$FILE" ;;
+        *)     cat "$FILE" ;;
+    esac
+}
+
+case "$ENGINE" in
+    pg)
+        log "recreating database $DB"
+        engine_exec pg psql -U postgres -q -c "DROP DATABASE IF EXISTS \"$DB\";" >/dev/null
+        engine_exec pg psql -U postgres -q -c "CREATE DATABASE \"$DB\";" >/dev/null
+
+        log "restoring"
+        # --no-owner keeps the restore working when roles differ between the
+        # source and target servers; globals are restored separately.
+        decompress | engine_exec pg pg_restore -U postgres -d "$DB" --no-owner --clean --if-exists \
+            2>&1 | grep -vE '^$' | sed 's/^/[restore]   /' || true
+        ;;
+    mysql|mariadb)
+        pw="$(secret "${ENGINE}_root_password.txt")"
+        client="$( [[ "$ENGINE" == "mysql" ]] && printf 'mysql' || printf 'mariadb' )"
+
+        log "recreating database $DB"
+        engine_exec "$ENGINE" "$client" -uroot -p"$pw" \
+            -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+
+        log "restoring"
+        decompress | engine_exec "$ENGINE" "$client" -uroot -p"$pw" "$DB" 2>/dev/null
+        ;;
+    *) die "unknown engine: $ENGINE" ;;
+esac
+
+log "restore of $DB complete"

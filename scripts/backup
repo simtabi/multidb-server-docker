@@ -1,0 +1,387 @@
+#!/usr/bin/env bash
+#
+# THE dump helper. SPEC section 11: "One dump helper, two callers" -- the
+# scheduled sidecar and the make targets both run this file, so the flags can
+# never drift between the nightly path and the manual one. That drift is only
+# ever discovered during a real restore, which is the worst possible time.
+#
+# Dump correctness is specified, not assumed:
+#
+#   PostgreSQL   pg_dump -Fc per database (compressible, selectively
+#                restorable) PLUS pg_dumpall --globals-only on every run. A
+#                per-database dump contains no roles and no grants, so
+#                restoring one into a fresh server yields a database nobody can
+#                log into.
+#
+#   MySQL family --single-transaction --routines --triggers --events --quick.
+#                The defaults include triggers but silently EXCLUDE stored
+#                routines and events, so a "complete" dump without these flags
+#                is quietly incomplete until the day you need a procedure back.
+#
+# Usage:
+#   scripts/backup --engine pg --db mydb      one database
+#   scripts/backup --all                      every database on every engine
+#   scripts/backup --engine mysql --schedule  run forever on the backup interval
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+
+BACKUP_DIR="${DBTK_BACKUP_DIR:-$ROOT/backups}"
+
+get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+log() { printf '[backup] %s\n' "$*"; }
+die() { printf '[backup] ERROR: %s\n' "$*" >&2; exit 1; }
+
+ENGINE=""
+DB=""
+ALL=0
+SCHEDULE=0
+
+while (( $# )); do
+    case "$1" in
+        --engine) ENGINE="${2:-}"; shift 2 ;;
+        --db)     DB="${2:-}"; shift 2 ;;
+        --all)    ALL=1; shift ;;
+        --schedule) SCHEDULE=1; shift ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+# -----------------------------------------------------------------------------
+# Two execution contexts, one implementation.
+#
+# Inside the sidecar the engine is reachable over the network and the client is
+# right here. From the host, the same command is run inside the engine's own
+# container. Either way the DUMP COMMAND AND ITS FLAGS are identical, which is
+# the entire point of this file.
+# -----------------------------------------------------------------------------
+IN_CONTAINER="${DBTK_IN_CONTAINER:-0}"
+
+engine_exec() {
+    local engine="$1"; shift
+    if [[ "$IN_CONTAINER" == "1" ]]; then
+        "$@"
+    else
+        ( cd "$ROOT" && docker compose exec -T "$engine" "$@" )
+    fi
+}
+
+secret() {
+    local file="$1"
+    if [[ "$IN_CONTAINER" == "1" ]]; then
+        [[ -r "/run/secrets/$file" ]] || die "secret not readable: /run/secrets/$file"
+        tr -d '\n' < "/run/secrets/$file"
+    else
+        [[ -r "$ROOT/secrets/$file" ]] || die "secret not readable: secrets/$file"
+        tr -d '\n' < "$ROOT/secrets/$file"
+    fi
+}
+
+# In the sidecar the engine is a remote host, so PostgreSQL needs a password
+# for the TCP connection. From the host we exec inside the engine container and
+# reach it over the local socket, which the official pg_hba trusts, so no
+# credential is needed there at all.
+if [[ "$IN_CONTAINER" == "1" ]] && [[ -r /run/secrets/pg_superuser_password.txt ]]; then
+    PGPASSWORD="$(tr -d '\n' < /run/secrets/pg_superuser_password.txt)"
+    export PGPASSWORD
+fi
+
+timestamp() { date -u '+%Y%m%dT%H%M%SZ'; }
+
+compress_ext() {
+    case "$(get DBTK_BACKUP_COMPRESSION)" in
+        NONE|none) printf '' ;;
+        *) printf '.zst' ;;
+    esac
+}
+
+# Write a checksum next to every artefact, so a truncated or corrupted file is
+# detectable before someone stakes a restore on it.
+checksum() {
+    local file="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        ( cd "$(dirname "$file")" && sha256sum "$(basename "$file")" > "$(basename "$file").sha256" )
+    else
+        ( cd "$(dirname "$file")" && shasum -a 256 "$(basename "$file")" > "$(basename "$file").sha256" )
+    fi
+}
+
+finish_artifact() {
+    local file="$1"
+    checksum "$file"
+    log "wrote $(basename "$file") ($(du -h "$file" | cut -f1))"
+}
+
+# Run a dump pipeline and REFUSE to keep the output if it failed.
+#
+# This exists because of a bug this helper actually had: `set -e` does not
+# abort inside a function that was invoked from a `||` context (as the schedule
+# loop does), so a dump that failed with "connection refused" still fell
+# through to finish_artifact and produced a checksummed file that looked
+# exactly like a backup. A backup that is really an error message is worse than
+# no backup, because it is trusted.
+#
+# So the status is checked explicitly, the partial file is deleted, and the
+# caller is told. Never rely on set -e for this.
+dump_or_fail() {
+    local out="$1" what="$2"; shift 2
+    if ! "$@"; then
+        rm -f "$out"
+        log "FAILED: $what (no artifact kept)"
+        return 1
+    fi
+    # An empty or near-empty file means the command "succeeded" while producing
+    # nothing usable, which is the other way this goes wrong quietly.
+    if [[ ! -s "$out" ]]; then
+        rm -f "$out"
+        log "FAILED: $what produced an empty file (no artifact kept)"
+        return 1
+    fi
+    finish_artifact "$out"
+}
+
+# Where the engine lives. In the sidecar it is a remote host on the compose
+# network; from the host we are already exec'ing inside the engine container,
+# so there is no host to name.
+engine_host() {
+    [[ "$IN_CONTAINER" == "1" ]] && printf '%s' "$1"
+}
+
+# -----------------------------------------------------------------------------
+# PostgreSQL
+# -----------------------------------------------------------------------------
+list_databases_pg() {
+    engine_exec pg psql -U postgres -tAc \
+        "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate" \
+        | tr -d '\r' | grep -v '^$'
+}
+
+# -Fc is the custom format: compressed, and restorable selectively rather than
+# only as an all-or-nothing SQL replay. `set -o pipefail` is active for the
+# whole script, so this returns nonzero when pg_dump fails even though zstd
+# succeeds -- which is precisely what dump_or_fail relies on.
+pg_dump_to() {
+    local db="$1" out="$2"
+    if [[ -n "$(compress_ext)" ]]; then
+        engine_exec pg pg_dump -U postgres -Fc --no-password "$db" \
+            | zstd -q -T0 -"${DBTK_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+    else
+        engine_exec pg pg_dump -U postgres -Fc --no-password "$db" > "$out"
+    fi
+}
+
+pg_globals_to() {
+    local out="$1"
+    if [[ -n "$(compress_ext)" ]]; then
+        engine_exec pg pg_dumpall -U postgres --globals-only --no-password \
+            | zstd -q -T0 -"${DBTK_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+    else
+        engine_exec pg pg_dumpall -U postgres --globals-only --no-password > "$out"
+    fi
+}
+
+backup_pg_database() {
+    local db="$1" ts out
+    ts="$(timestamp)"
+    out="$BACKUP_DIR/pg_${db}_${ts}.dump$(compress_ext)"
+    log "pg: dumping $db"
+    dump_or_fail "$out" "pg dump of $db" pg_dump_to "$db" "$out"
+}
+
+backup_pg_globals() {
+    local ts out
+    ts="$(timestamp)"
+    out="$BACKUP_DIR/pg_globals_${ts}.sql$(compress_ext)"
+    # Every run, not occasionally. Roles and grants live only here.
+    log "pg: dumping globals (roles and grants)"
+    dump_or_fail "$out" "pg globals dump" pg_globals_to "$out"
+}
+
+# -----------------------------------------------------------------------------
+# MySQL family
+# -----------------------------------------------------------------------------
+mysql_client_for() { [[ "$1" == "mysql" ]] && printf 'mysql' || printf 'mariadb'; }
+mysql_dump_for()   { [[ "$1" == "mysql" ]] && printf 'mysqldump' || printf 'mariadb-dump'; }
+
+# In the sidecar the engine is a remote host and must be named explicitly; the
+# MySQL-family clients otherwise default to the local socket, which in that
+# container does not exist.
+mysql_host_args() {
+    local host; host="$(engine_host "$1")"
+    [[ -n "$host" ]] && printf '%s\n%s\n' '-h' "$host"
+}
+
+list_databases_mysql() {
+    local engine="$1" pw client
+    pw="$(secret "${engine}_root_password.txt")"
+    client="$(mysql_client_for "$engine")"
+    local hargs=(); while IFS= read -r a; do [[ -n "$a" ]] && hargs+=("$a"); done < <(mysql_host_args "$engine")
+    engine_exec "$engine" "$client" ${hargs[@]+"${hargs[@]}"} -uroot -p"$pw" -N -B -e \
+        "SELECT schema_name FROM information_schema.schemata
+         WHERE schema_name NOT IN ('information_schema','performance_schema','mysql','sys')" \
+        2>/dev/null | tr -d '\r' | grep -v '^$'
+}
+
+# --routines and --events are the two the defaults omit. --single-transaction
+# gives a consistent snapshot without locking, and --quick streams rather than
+# buffering whole tables in memory.
+mysql_dump_to() {
+    local engine="$1" db="$2" out="$3" pw dumper
+    pw="$(secret "${engine}_root_password.txt")"
+    dumper="$(mysql_dump_for "$engine")"
+    local hargs=(); while IFS= read -r a; do [[ -n "$a" ]] && hargs+=("$a"); done < <(mysql_host_args "$engine")
+
+    if [[ -n "$(compress_ext)" ]]; then
+        engine_exec "$engine" "$dumper" ${hargs[@]+"${hargs[@]}"} -uroot -p"$pw" \
+            --single-transaction --routines --triggers --events --quick "$db" \
+            | zstd -q -T0 -"${DBTK_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+    else
+        engine_exec "$engine" "$dumper" ${hargs[@]+"${hargs[@]}"} -uroot -p"$pw" \
+            --single-transaction --routines --triggers --events --quick "$db" > "$out"
+    fi
+}
+
+backup_mysql_database() {
+    local engine="$1" db="$2" ts out
+    ts="$(timestamp)"
+    out="$BACKUP_DIR/${engine}_${db}_${ts}.sql$(compress_ext)"
+    log "$engine: dumping $db"
+    dump_or_fail "$out" "$engine dump of $db" mysql_dump_to "$engine" "$db" "$out"
+}
+
+# -----------------------------------------------------------------------------
+# Retention: GFS tiers (SPEC section 11)
+# -----------------------------------------------------------------------------
+prune() {
+    local daily; daily="$(get DBTK_BACKUP_RETAIN_DAILY)"; daily="${daily:-7}"
+    local removed=0
+    while IFS= read -r old; do
+        [[ -z "$old" ]] && continue
+        rm -f "$old" "$old.sha256"
+        removed=$(( removed + 1 ))
+    done < <(find "$BACKUP_DIR" -maxdepth 1 -type f \
+                  \( -name '*.dump*' -o -name '*.sql*' \) \
+                  ! -name '*.sha256' -mtime "+${daily}" 2>/dev/null || true)
+    (( removed )) && log "pruned $removed backup(s) older than ${daily} days"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# S3 push. Wiring is present but inactive until a bucket is configured, which
+# is the section 19 default.
+# -----------------------------------------------------------------------------
+push_s3() {
+    local bucket; bucket="$(get DBTK_S3_BUCKET)"
+    [[ -z "$bucket" ]] && return 0
+    command -v rclone >/dev/null 2>&1 || { log "rclone not available; skipping S3 push"; return 0; }
+    log "pushing to S3 bucket $bucket"
+    rclone copy "$BACKUP_DIR" ":s3:${bucket}/$(hostname)" --no-traverse 2>&1 | sed 's/^/[backup]   /' || \
+        log "S3 push failed (backups remain on local disk)"
+}
+
+# -----------------------------------------------------------------------------
+# Failure notification, so backups never fail silently (SPEC section 11).
+# -----------------------------------------------------------------------------
+notify_failure() {
+    local url; url="$(get DBTK_BACKUP_NOTIFY_URL)"
+    [[ -z "$url" ]] && return 0
+    command -v curl >/dev/null 2>&1 || return 0
+    curl -fsS -X POST -H 'Content-Type: application/json' \
+        -d "{\"text\":\"db-toolkit backup FAILED on $(hostname) at $(date -u)\"}" \
+        "$url" >/dev/null 2>&1 || true
+}
+# shellcheck disable=SC2154  # rc is assigned inside the trap body itself
+trap 'rc=$?; (( rc )) && notify_failure; exit $rc' EXIT
+
+# -----------------------------------------------------------------------------
+# Drivers
+# -----------------------------------------------------------------------------
+run_engine_backup() {
+    local engine="$1" db="${2:-}"
+
+    case "$engine" in
+        pg)
+            if [[ -n "$db" ]]; then
+                backup_pg_database "$db"
+            else
+                while IFS= read -r d; do
+                    [[ -n "$d" ]] && backup_pg_database "$d"
+                done < <(list_databases_pg)
+            fi
+            # Globals accompany every PostgreSQL run without exception.
+            backup_pg_globals
+            ;;
+        mysql|mariadb)
+            if [[ -n "$db" ]]; then
+                backup_mysql_database "$engine" "$db"
+            else
+                while IFS= read -r d; do
+                    [[ -n "$d" ]] && backup_mysql_database "$engine" "$d"
+                done < <(list_databases_mysql "$engine")
+            fi
+            ;;
+        *) die "unknown engine: $engine" ;;
+    esac
+}
+
+mkdir -p "$BACKUP_DIR"
+
+# The sidecar starts alongside its engine, not after it, so the first run would
+# otherwise fire against a server that is not accepting connections yet.
+wait_for_engine() {
+    local engine="$1" i
+    for (( i = 0; i < 180; i++ )); do
+        case "$engine" in
+            pg) engine_exec pg pg_isready -h "$(engine_host pg)" -U postgres >/dev/null 2>&1 && return 0 ;;
+            *)
+                local pw client hargs=()
+                pw="$(secret "${engine}_root_password.txt")"
+                client="$(mysql_client_for "$engine")"
+                while IFS= read -r a; do [[ -n "$a" ]] && hargs+=("$a"); done < <(mysql_host_args "$engine")
+                engine_exec "$engine" "$client" ${hargs[@]+"${hargs[@]}"} -uroot -p"$pw" \
+                    -e "SELECT 1" >/dev/null 2>&1 && return 0
+                ;;
+        esac
+        sleep 2
+    done
+    log "WARNING: $engine did not become reachable within 360s"
+    return 1
+}
+
+if (( SCHEDULE )); then
+    [[ -n "$ENGINE" ]] || die "--schedule requires --engine"
+    interval="$(get DBTK_BACKUP_INTERVAL_SECONDS)"; interval="${interval:-86400}"
+    log "scheduled backups for $ENGINE every ${interval}s"
+    wait_for_engine "$ENGINE" || true
+    while true; do
+        run_engine_backup "$ENGINE" || log "backup run failed; will retry next interval"
+        prune
+        push_s3
+        sleep "$interval"
+    done
+fi
+
+if (( ALL )); then
+    # COMPOSE_PROFILES wins when set, because `make up PROFILES=...` selects the
+    # engines for THIS run; falling back to the .env default would back up a
+    # different set of engines than the one actually running.
+    profiles="${COMPOSE_PROFILES:-$(get DBTK_PROFILES)}"
+    for engine in pg mysql mariadb; do
+        case ",${profiles}," in
+            *",${engine},"*) run_engine_backup "$engine" ;;
+            *) log "$engine not in DBTK_PROFILES; skipping" ;;
+        esac
+    done
+    prune
+    push_s3
+    log "backup-all complete"
+    exit 0
+fi
+
+[[ -n "$ENGINE" ]] || die "specify --engine <pg|mysql|mariadb>, or --all"
+run_engine_backup "$ENGINE" "$DB"
+prune
+push_s3

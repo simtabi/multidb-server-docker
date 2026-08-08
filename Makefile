@@ -148,20 +148,20 @@ new-project: ## Provision DB + roles + extensions, print the Laravel .env block
 # -----------------------------------------------------------------------------
 
 .PHONY: backup
-backup: ## Dump one database
-	$(call unimplemented,4)
+backup: ## Dump one database (ENGINE= DB=)
+	@scripts/backup --engine "$(ENGINE)" $(if $(DB),--db "$(DB)",)
 
 .PHONY: backup-all
 backup-all: ## Dump every database on every enabled engine, plus PG globals
-	$(call unimplemented,4)
+	@scripts/backup --all
 
 .PHONY: restore
 restore: ## Guided, confirmed restore (ENGINE= DB= FILE=)
-	$(call unimplemented,4)
+	@scripts/restore --engine "$(ENGINE)" --db "$(DB)" --file "$(FILE)"
 
 .PHONY: verify-backups
 verify-backups: ## Restore the latest set into throwaway containers, assert row counts
-	$(call unimplemented,4)
+	@scripts/verify-backups
 
 .PHONY: import
 import: ## Move data in (files, existing native databases)

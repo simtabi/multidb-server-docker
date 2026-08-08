@@ -50,3 +50,21 @@ vinfo "sidecar and make target share scripts/backup"
 
 make verify-backups >/dev/null 2>&1 || vfail "make verify-backups failed"
 vinfo "verify-backups restored the latest set and asserted row counts"
+
+# A FAILED dump must leave nothing behind.
+#
+# This check exists because the helper once did the opposite: `set -e` does not
+# abort inside a function invoked from a `||` context, so a dump that died with
+# "connection refused" still fell through to writing a checksummed file. The
+# result looked exactly like a backup, which is worse than having none, because
+# it would be trusted right up until a restore was needed. The harness did not
+# catch it -- so it is a permanent check now.
+before="$(find backups -maxdepth 1 -type f | wc -l | tr -d ' ')"
+if scripts/backup --engine pg --db dbtk_no_such_database_exists >/dev/null 2>&1; then
+    vfail "backup reported success for a database that does not exist"
+fi
+after="$(find backups -maxdepth 1 -type f | wc -l | tr -d ' ')"
+
+[[ "$before" == "$after" ]] \
+    || vfail "a failed dump left $(( after - before )) file(s) behind; a broken backup must never look like a good one"
+vinfo "a failed dump leaves no artifact ($before files before and after)"
