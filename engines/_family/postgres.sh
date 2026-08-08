@@ -84,3 +84,13 @@ hook_row_count() {
     engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -d "$db" -tAc \
         "SELECT COALESCE(SUM(n_live_tup), 0) FROM pg_stat_user_tables" 2>/dev/null | tr -d ' \r'
 }
+
+# Auth enforcement probe: a connection with a WRONG password must be refused.
+# Returns 0 when auth is properly enforced.
+hook_auth_enforced() {
+    if engine_exec "$DBTK_ENGINE_NAME" env PGPASSWORD=definitely-not-the-password \
+        psql -h 127.0.0.1 -U postgres -tAc "SELECT 1" >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}

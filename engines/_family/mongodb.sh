@@ -87,3 +87,13 @@ hook_row_count() {
            .reduce((n, c) => n + db.getSiblingDB('$db')[c].countDocuments(), 0)" \
         2>/dev/null | tr -d ' \r'
 }
+
+# No credentials at all must be refused. MongoDB runs wide open unless a root
+# user is supplied, so this is the assertion that catches a regression there.
+hook_auth_enforced() {
+    if engine_exec "$DBTK_ENGINE_NAME" mongosh --quiet \
+        --eval 'db.adminCommand({listDatabases:1}).ok' >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}

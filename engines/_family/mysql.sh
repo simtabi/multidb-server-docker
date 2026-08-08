@@ -90,3 +90,13 @@ hook_row_count() {
         "SELECT COALESCE(SUM(table_rows), 0) FROM information_schema.tables
          WHERE table_schema = '$db'" 2>/dev/null | tr -d ' \r'
 }
+
+hook_auth_enforced() {
+    local hargs=()
+    while IFS= read -r a; do [ -n "$a" ] && hargs+=("$a"); done < <(_mysql_host_args)
+    if engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${hargs[@]+"${hargs[@]}"} \
+        -h 127.0.0.1 -uroot -pdefinitely-not-the-password -e "SELECT 1" >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}
