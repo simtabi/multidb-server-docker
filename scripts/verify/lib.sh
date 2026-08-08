@@ -110,11 +110,6 @@ build_image() {
     esac
 
     # Context is images/ so MySQL and MariaDB can share images/_shared.
-    if [[ "$engine" == "cli" ]]; then
-        docker build -f "$DBTK_ROOT/images/cli/Dockerfile" -t "$tag" "$DBTK_ROOT/images"
-        return
-    fi
-
     base="$(base_image "$engine" "$version")"
     docker build \
         -f "$DBTK_ROOT/images/$engine/Dockerfile" \

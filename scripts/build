@@ -54,12 +54,6 @@ for engine in "${engines[@]}"; do
 
     # The build context is images/, not images/<engine>/, so the MySQL and
     # MariaDB images can share one set of init scripts (images/_shared).
-    if [[ "$engine" == "cli" ]]; then
-        printf 'building %s\n' "$tag"
-        docker build -f "$ROOT/images/cli/Dockerfile" -t "$tag" "$ROOT/images"
-        continue
-    fi
-
     base="$(base_for "$engine" "$version")"
     [[ -n "$base" ]] || {
         printf 'no base pinned for %s %s in images/bases.tsv\n' "$engine" "$version" >&2
