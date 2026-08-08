@@ -90,9 +90,19 @@ check_menu() {
     local allowed=" $* "
     [[ "$allowed" == *" $value "* ]] || err "$key=$value is not on the supported menu: $*"
 }
-check_menu DBTK_PG_VERSION      15 16 17 18
-check_menu DBTK_MYSQL_VERSION   8.0 8.4 9.7
-check_menu DBTK_MARIADB_VERSION 10.11 11.4 11.8
+# The supported menu comes from each engine's descriptor, so adding an engine
+# or a version does not require editing this file (SPEC section 22.1).
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+
+for _engine in $(engine_list); do
+    engine_load "$_engine" || continue
+    _upper="$(printf '%s' "$DBTK_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
+    # Unquoted on purpose: VERSIONS is a space-separated menu and check_menu
+    # takes each version as its own argument.
+    # shellcheck disable=SC2086
+    check_menu "DBTK_${_upper}_VERSION" $DBTK_ENGINE_VERSIONS
+done
 
 # PostgreSQL 18 moved the expected mount point. Up to 17 the data directory is
 # /var/lib/postgresql/data; from 18 the image stores data in major-versioned

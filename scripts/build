@@ -19,13 +19,18 @@ PREFIX="${DBTK_IMAGE_PREFIX:-ghcr.io/simtabi}"
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+
+# The version for an engine is DBTK_<ENGINE>_VERSION from .env, defaulting to
+# whatever the descriptor declares. No engine names appear here.
 version_for() {
-    case "$1" in
-        pg)      v="$(get DBTK_PG_VERSION)";      printf '%s' "${v:-17}" ;;
-        mysql)   v="$(get DBTK_MYSQL_VERSION)";   printf '%s' "${v:-8.4}" ;;
-        mariadb) v="$(get DBTK_MARIADB_VERSION)"; printf '%s' "${v:-11.4}" ;;
-        cli)     printf 'dev' ;;
-    esac
+    local engine="$1" upper v
+    if [ "$engine" = "cli" ]; then printf 'dev'; return; fi
+    upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
+    v="$(get "DBTK_${upper}_VERSION")"
+    if [ -n "$v" ]; then printf '%s' "$v"; return; fi
+    ( engine_load "$engine" >/dev/null 2>&1 && printf '%s' "$DBTK_ENGINE_DEFAULT_VERSION" )
 }
 
 base_for() {
@@ -35,7 +40,7 @@ base_for() {
 engines=("$@")
 if [[ ${#engines[@]} -eq 0 ]]; then
     engines=()
-    for e in pg mysql mariadb cli; do
+    for e in $(engine_list) cli; do
         [[ -f "$ROOT/images/$e/Dockerfile" ]] && engines+=("$e")
     done
 fi

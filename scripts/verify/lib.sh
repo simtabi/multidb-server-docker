@@ -17,6 +17,10 @@ set -euo pipefail
 DBTK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export DBTK_ROOT
 
+# Engines are declared, not hardcoded (SPEC section 22.1).
+# shellcheck source=../engine-lib.sh
+. "$DBTK_ROOT/scripts/engine-lib.sh"
+
 readonly VERIFY_EXIT_SKIP=3
 
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -73,14 +77,20 @@ image_exists() { docker image inspect "$1" >/dev/null 2>&1; }
 image_name() {
     local engine="$1" prefix ver
     prefix="${DBTK_IMAGE_PREFIX:-ghcr.io/simtabi}"
-    case "$engine" in
-        pg)      ver="$(env_get DBTK_PG_VERSION 17)" ;;
-        mysql)   ver="$(env_get DBTK_MYSQL_VERSION 8.4)" ;;
-        mariadb) ver="$(env_get DBTK_MARIADB_VERSION 11.4)" ;;
-        cli)     ver="dev" ;;
-        *)       vfail "unknown engine: $engine" ;;
-    esac
+    ver="$(engine_version "$engine")"
+    [[ -n "$ver" ]] || vfail "unknown engine: $engine"
     printf '%s/db-toolkit-%s:%s\n' "$prefix" "$engine" "$ver"
+}
+
+# The configured version for an engine: DBTK_<ENGINE>_VERSION if set, otherwise
+# whatever its descriptor declares as the default. No engine names here.
+engine_version() {
+    local engine="$1" upper ver
+    [[ "$engine" == "cli" ]] && { printf 'dev'; return 0; }
+    upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
+    ver="$(env_get "DBTK_${upper}_VERSION" '')"
+    if [[ -n "$ver" ]]; then printf '%s' "$ver"; return 0; fi
+    ( engine_load "$engine" >/dev/null 2>&1 && printf '%s' "$DBTK_ENGINE_DEFAULT_VERSION" )
 }
 
 # Fail with a clear message when the image a check needs has not been built.
@@ -102,12 +112,7 @@ base_image() {
 # Build one of our images, passing the pinned base and the engine version.
 build_image() {
     local engine="$1" tag="$2" version base
-    case "$engine" in
-        pg)      version="$(env_get DBTK_PG_VERSION 17)" ;;
-        mysql)   version="$(env_get DBTK_MYSQL_VERSION 8.4)" ;;
-        mariadb) version="$(env_get DBTK_MARIADB_VERSION 11.4)" ;;
-        cli)     version="dev" ;;
-    esac
+    version="$(engine_version "$engine")"
 
     # Context is images/ so MySQL and MariaDB can share images/_shared.
     base="$(base_image "$engine" "$version")"
