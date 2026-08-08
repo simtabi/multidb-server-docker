@@ -77,9 +77,18 @@ bootstrap:
   # the cluster-wide settings from then on. Editing them here later changes
   # nothing; use \`patronictl edit-config\`.
   dcs:
-    ttl: 30
-    loop_wait: 10
-    retry_timeout: 10
+    # Patroni requires ttl >= loop_wait + 2 * retry_timeout. The defaults
+    # (30/10/10) mean the leader lock does not expire for 30 seconds, so no
+    # election can possibly complete faster than that -- a 30s failover budget
+    # is unreachable by construction, not by bad luck. These values keep the
+    # constraint satisfied (20 >= 5 + 10) and bring failover under ~25s.
+    #
+    # Lower is not automatically better: a short ttl makes a brief network
+    # stall look like a dead leader, and demoting a healthy primary costs more
+    # than a few extra seconds of failover would have.
+    ttl: 20
+    loop_wait: 5
+    retry_timeout: 5
     # How far behind a replica may be and still be promoted, in bytes. 0 would
     # forbid any data loss and also forbid failover whenever no replica is
     # exactly current -- availability traded for durability, which is a choice

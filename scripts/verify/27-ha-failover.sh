@@ -40,17 +40,45 @@ budget="$(env_get DBTK_HA_FAILOVER_BUDGET 30)"
 # both binds 5432 twice, which check-env now refuses outright. Nothing below
 # asserts anything about the standalone pg service, so it was never needed --
 # it was in the profile list from before the HA services existed.
+# Start from empty state. Patroni's cluster-wide settings (ttl, loop_wait) are
+# written into etcd by whoever bootstraps FIRST and are never re-read from the
+# config file afterwards, so a leftover etcd volume silently pins the timings
+# from an earlier run -- a failover budget can then fail for a value nobody can
+# find in the repository. Inheriting a half-broken cluster from a previous run
+# would also make this check's result depend on the one before it.
+make down >/dev/null 2>&1 || true
+docker volume rm -f \
+    "${COMPOSE_PROJECT_NAME:-dbtk}_etcd1_data" \
+    "${COMPOSE_PROJECT_NAME:-dbtk}_etcd2_data" \
+    "${COMPOSE_PROJECT_NAME:-dbtk}_etcd3_data" >/dev/null 2>&1 || true
+
 make up PROFILES=ha >/dev/null 2>&1 || vfail "make up PROFILES=ha failed"
 add_cleanup 'make down'
 
+# Parsed through `scripts/ha`'s machine-readable verbs, not by grepping the
+# human table. The table is for people and changes shape: `ha status` also
+# prints the election history, whose header contains the words "New Leader", so
+# counting lines matching "leader" never yields 1 however healthy the cluster
+# is. This check was written before the implementation existed and assumed an
+# output that never appeared.
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
-wait_for 180 "the Patroni cluster to converge on one leader" bash -c \
-    '[[ $(make ha-status 2>/dev/null | grep -ci leader) -eq 1 ]]'
+wait_for 240 "the Patroni cluster to converge on one leader" bash -c \
+    '[[ -n $(scripts/ha leader 2>/dev/null) ]]'
 
-leader="$(make ha-status 2>/dev/null | awk '/[Ll]eader/{print $1; exit}')"
+leader="$(scripts/ha leader 2>/dev/null)"
 [[ -n "$leader" ]] || vfail "could not identify the cluster leader"
 
-replicas="$(make ha-status 2>/dev/null | grep -ci replica || true)"
+# Streaming, not merely present: a replica that exists but is not replicating
+# is the exact failure this topology is supposed to make visible.
+streaming=0
+for (( i = 0; i < 180; i++ )); do
+    streaming="$(scripts/ha roles 2>/dev/null \
+        | awk -F'\t' '$2 == "Replica" && $3 == "running"' | wc -l | tr -d ' ')"
+    (( streaming >= 2 )) && break
+    sleep 1
+done
+
+replicas="$streaming"
 (( replicas >= 2 )) || vfail "expected 2 streaming replicas, found $replicas"
 vinfo "cluster converged: leader=$leader, replicas=$replicas"
 
@@ -69,7 +97,7 @@ vinfo "killed leader $leader"
 start=$(date +%s)
 elected=""
 for (( i = 0; i < budget; i++ )); do
-    elected="$(make ha-status 2>/dev/null | awk '/[Ll]eader/{print $1; exit}')"
+    elected="$(scripts/ha leader 2>/dev/null)"
     [[ -n "$elected" && "$elected" != "$leader" ]] && break
     sleep 1
 done
@@ -80,17 +108,31 @@ elapsed=$(( $(date +%s) - start ))
 vinfo "new leader $elected elected in ${elapsed}s (budget ${budget}s)"
 
 # The write port must actually follow the new leader, not just report it.
-# shellcheck disable=SC2016  # evaluated by the subshell, not here
-wait_for "$budget" "the write port to accept a write" bash -c \
-    'docker compose exec -T haproxy sh -c "true"'
-
-writable="$(psql_via_haproxy "${DBTK_HAPROXY_WRITE_PORT:-5432}" \
-    "SELECT NOT pg_is_in_recovery()")"
+#
+# `docker compose exec haproxy true` used to stand in for this. It only proved
+# the container was alive, which it always is -- HAProxy stays up whether or not
+# any backend is usable, so that probe could not fail for the reason it existed
+# to catch. HAProxy needs a few health-check intervals to notice the new
+# primary, so the real query is retried instead.
+# An explicit loop rather than wait_for: wait_for runs its command in a
+# subshell, which cannot see psql_via_haproxy defined above.
+writable=""
+for (( i = 0; i < budget; i++ )); do
+    writable="$(psql_via_haproxy "${DBTK_HAPROXY_WRITE_PORT:-5432}" \
+        "SELECT NOT pg_is_in_recovery()")"
+    [[ "$writable" == "t" ]] && break
+    sleep 2
+done
 [[ "$writable" == "t" ]] || vfail "the write port does not route to a writable primary after failover"
 vinfo "write port follows the new leader"
 
 # The read port must serve replicas only.
-in_recovery="$(psql_via_haproxy "${DBTK_HAPROXY_READ_PORT:-5433}" \
-    "SELECT pg_is_in_recovery()")"
+in_recovery=""
+for (( i = 0; i < budget; i++ )); do
+    in_recovery="$(psql_via_haproxy "${DBTK_HAPROXY_READ_PORT:-5433}" \
+        "SELECT pg_is_in_recovery()")"
+    [[ -n "$in_recovery" ]] && break
+    sleep 2
+done
 [[ "$in_recovery" == "t" ]] || vfail "the read port served a primary; it must serve replicas only"
 vinfo "read port serves replicas only"

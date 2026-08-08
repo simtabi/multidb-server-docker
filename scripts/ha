@@ -7,7 +7,9 @@
 # patronictl output. Splitting them would mean three copies of that.
 #
 # Usage:
-#   scripts/ha status                 topology and replication lag
+#   scripts/ha status                 topology and replication lag, for humans
+#   scripts/ha leader                 the leader's member name, for scripts
+#   scripts/ha roles                  member/role/state, tab separated
 #   scripts/ha failover [--node N]    controlled switchover, typed confirmation
 #   scripts/ha reinit --node N        rebuild one replica from the leader
 
@@ -96,7 +98,21 @@ case "$verb" in
         log "reinit requested; watch progress with: make ha-status"
         ;;
 
+    leader)
+        # Machine-readable, for scripts and checks. Scraping the pretty table is
+        # not viable: `status` also prints the history, whose header carries the
+        # words "New Leader", so a naive grep for "leader" always matches twice.
+        patronictl list -f tsv 2>/dev/null \
+            | awk -F'\t' '$4 == "Leader" { print $2; exit }'
+        ;;
+
+    roles)
+        # member<TAB>role<TAB>state, one per line, header stripped.
+        patronictl list -f tsv 2>/dev/null \
+            | awk -F'\t' 'NR > 1 && $2 != "" { printf "%s\t%s\t%s\n", $2, $4, $5 }'
+        ;;
+
     *)
-        die "unknown verb: $verb (want: status|failover|reinit)"
+        die "unknown verb: $verb (want: status|leader|roles|failover|reinit)"
         ;;
 esac
