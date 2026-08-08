@@ -46,7 +46,7 @@ fi
 vinfo "check-env refuses prod without UI basic auth"
 
 # Nothing but Caddy may be published.
-published="$(docker compose -f docker-compose.yml -f compose.prod.yml --profile prod config \
+published="$(docker compose -f docker-compose.yml -f compose.engines.yml -f compose.prod.yml --profile prod config \
     | awk '/^  [a-z-]+:/{svc=$1} /published:/{print svc, $2}' | grep -v '^caddy:' || true)"
 [[ -z "$published" ]] || {
     printf '      %s\n' "$published" >&2

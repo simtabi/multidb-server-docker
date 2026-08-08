@@ -10,6 +10,13 @@ cd "$DBTK_ROOT" || exit 1
 # DESIGN.md D-05 is why this check exists rather than being a convention:
 # nfrastack/db-backup:latest currently publishes ONLY linux/arm64, so an amd64
 # runner following a floating tag fails outright. Pinning prevents it.
+#
+# Both patterns are anchored to the start of the line, because a Dockerfile
+# FROM is an instruction and a compose `image:` is a YAML key -- neither occurs
+# mid-line. Allowing anything before them read the SQL in
+#     AUTH_QUERY: SELECT username, password FROM pgbouncer.get_auth($1)
+# as an unpinned image reference. Anchoring is stricter about WHERE a reference
+# may appear, not more permissive about what counts as pinned.
 
 candidates=()
 while IFS= read -r f; do
@@ -31,7 +38,7 @@ for f in "${candidates[@]}"; do
     while IFS= read -r line; do
         printf '      %s: %s\n' "${f#./}" "$line" >&2
         (( violations++ )) || true
-    done < <(grep -nE '^[^#]*(FROM|image:)[[:space:]]+[^[:space:]]+:latest' "$f" || true)
+    done < <(grep -nE '^[[:space:]]*(FROM|image:)[[:space:]]+[^[:space:]]+:latest' "$f" || true)
 
     # Any FROM/image without an @sha256 digest.
     while IFS= read -r line; do
@@ -45,7 +52,7 @@ for f in "${candidates[@]}"; do
         esac
         printf '      %s: not digest-pinned: %s\n' "${f#./}" "$line" >&2
         (( violations++ )) || true
-    done < <(grep -nE '^[^#]*(FROM|image:)[[:space:]]+[a-zA-Z0-9]' "$f" || true)
+    done < <(grep -nE '^[[:space:]]*(FROM|image:)[[:space:]]+[a-zA-Z0-9]' "$f" || true)
 done
 
 # A Dockerfile may write `FROM ${BASE_IMAGE}` because the base varies by engine

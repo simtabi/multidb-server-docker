@@ -116,7 +116,11 @@ test-profile: ## Boot the tmpfs speed profile and run its checks
 	@printf 'TEST PROFILE: data lives on tmpfs and is DISCARDED on stop.\n'
 	@scripts/render-config
 	@scripts/gen-compose >/dev/null
-	@$(COMPOSE) -f docker-compose.yml -f compose.test.yml up -d --wait
+	@# compose.engines.yml is listed explicitly. Passing any -f REPLACES the
+	@# COMPOSE_FILE that normally supplies it, so omitting it leaves every
+	@# engine service undefined and the overlay's `pg:` has neither an image
+	@# nor a build context.
+	@$(COMPOSE) -f docker-compose.yml -f compose.engines.yml -f compose.test.yml up -d --wait
 
 # -----------------------------------------------------------------------------
 # Clients and provisioning

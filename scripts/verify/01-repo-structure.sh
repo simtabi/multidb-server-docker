@@ -32,4 +32,41 @@ if [[ -f docs/README.md ]]; then
     vfail "docs/README.md exists; the docs index is README.md's Documentation section"
 fi
 
+# Engine services live in the GENERATED compose.engines.yml, which reaches a
+# bare `docker compose` through COMPOSE_FILE in .env. Passing any -f REPLACES
+# that variable rather than adding to it, so an invocation that lists overlays
+# and forgets the generated file has no engines at all.
+#
+# The failure is not obvious from the message compose prints -- it reports
+# `service "pg" has neither an image nor a build context`, which reads like a
+# broken overlay rather than a missing file. `make test-profile` shipped this
+# way and the harness saw only "make test-profile failed".
+#
+# Matched on an actual invocation -- `docker compose` or the Makefile's
+# $(COMPOSE) -- rather than on the filename alone, which also appears in
+# ordinary `[[ -f docker-compose.yml ]]` guards. This file is skipped because
+# it necessarily contains the pattern it searches for.
+offenders=""
+while IFS= read -r hit; do
+    [[ -z "$hit" ]] && continue
+    case "$hit" in
+        *"01-repo-structure.sh"*) continue ;;
+        *compose.engines.yml*) continue ;;
+    esac
+    # The literals are matched, not expanded -- COMPOSE is the Makefile's
+    # variable, not this script's.
+    # shellcheck disable=SC2016
+    case "$hit" in
+        *'docker compose'*|*'$(COMPOSE)'*|*'${COMPOSE}'*) ;;
+        *) continue ;;
+    esac
+    offenders+="        ${hit}"$'\n'
+done < <(grep -rn -- '-f docker-compose.yml' "$DBTK_ROOT/Makefile" "$DBTK_ROOT/scripts" 2>/dev/null || true)
+
+if [[ -n "$offenders" ]]; then
+    printf '%s' "$offenders" >&2
+    vfail "a compose invocation passes -f without compose.engines.yml; engine services would be undefined"
+fi
+vinfo "every explicit compose invocation includes the generated engines file"
+
 vinfo "layout matches SPEC section 15"
