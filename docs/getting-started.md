@@ -31,26 +31,32 @@ connection block:
 
 ```
 DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
+DB_HOST=pg
 DB_PORT=5432
 DB_DATABASE=myapp
-DB_USERNAME=myapp
-DB_PASSWORD=... (from secrets/pg_myapp_password.txt)
+DB_USERNAME=myapp_user
+DB_PASSWORD=$(cat secrets/pg_myapp_user_password.txt)
 ```
 
-The password is generated, written to `secrets/`, and never printed into a file
-the repository tracks.
+The real block prints the password itself. It is generated, written to
+`secrets/`, and never committed — the secret scan fails the build on a literal
+credential in any tracked file, including this page, which is why the line above
+is shown as a file read.
 
-For another engine:
+`DB_HOST` is the service name because your application container joins the
+toolkit network. From the host it is `127.0.0.1`.
+
+For another engine — all six work the same way:
 
 ```bash
 make new-project NAME=myapp ENGINE=mysql
+make new-project NAME=myapp ENGINE=mongodb
+make new-project NAME=myapp ENGINE=cassandra
 ```
 
-> `new-project` currently supports `pg`, `mysql` and `mariadb`. For MongoDB,
-> Cassandra and FerretDB, declare projects with the engine's `_DATABASES`
-> variable in `.env` — see [Configuration](configuration.md) — and they are
-> created on start.
+The owner role and the read-only role get **different** passwords, both written
+to `secrets/`. They are separate principals, and sharing one credential would
+mean a leak of the read-only role is a leak of the writable one.
 
 ## 3. Connect
 

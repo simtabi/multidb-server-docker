@@ -94,3 +94,61 @@ hook_auth_enforced() {
     fi
     return 0
 }
+
+# Provision a project: database, owner role, read-only companion, extensions.
+#
+# Idempotent throughout, because `make new-project` on an existing name must be
+# safe -- people re-run it to reprint the connection block.
+hook_provision_project() {
+    local db="$1" user="$2" pw="$3" extensions="${4:-}"
+    local esc_pw="${pw//\'/\'\'}"
+
+    engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -q -v ON_ERROR_STOP=1 <<SQL || return 1
+DO \$dbtk\$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${user}') THEN
+        ALTER ROLE ${user} WITH LOGIN PASSWORD '${esc_pw}';
+    ELSE
+        CREATE ROLE ${user} LOGIN PASSWORD '${esc_pw}';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${user}_readonly') THEN
+        CREATE ROLE ${user}_readonly NOLOGIN;
+    END IF;
+END \$dbtk\$;
+SQL
+
+    # CREATE DATABASE cannot run inside a transaction block, so it is separate
+    # from the DO block above rather than folded into it.
+    if ! engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname='${db}'" 2>/dev/null | grep -q 1; then
+        engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -q \
+            -c "CREATE DATABASE ${db} OWNER ${user};" || return 1
+    fi
+
+    # Isolation: revoke the implicit PUBLIC grant so another project's role
+    # cannot connect here (SPEC section 18, "cross-access denied").
+    engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -q -v ON_ERROR_STOP=1 <<SQL || return 1
+REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
+GRANT CONNECT, TEMPORARY ON DATABASE ${db} TO ${user};
+GRANT CONNECT ON DATABASE ${db} TO ${user}_readonly;
+SQL
+
+    local old_ifs ext
+    if [ -n "$extensions" ]; then
+        old_ifs="$IFS"; IFS=','
+        for ext in $extensions; do
+            ext="${ext// /}"
+            [ -z "$ext" ] && continue
+            engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -d "$db" -q \
+                -c "CREATE EXTENSION IF NOT EXISTS \"$ext\" CASCADE;" >/dev/null 2>&1 \
+                || printf '  WARNING: extension %s could not be created\n' "$ext" >&2
+        done
+        IFS="$old_ifs"
+    fi
+
+    engine_exec "$DBTK_ENGINE_NAME" psql -U postgres -d "$db" -q <<SQL >/dev/null 2>&1 || true
+GRANT ALL ON SCHEMA public TO ${user};
+GRANT USAGE ON SCHEMA public TO ${user}_readonly;
+ALTER DEFAULT PRIVILEGES FOR ROLE ${user} IN SCHEMA public
+    GRANT SELECT ON TABLES TO ${user}_readonly;
+SQL
+}

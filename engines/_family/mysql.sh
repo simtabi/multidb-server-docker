@@ -100,3 +100,23 @@ hook_auth_enforced() {
     fi
     return 0
 }
+
+# Provision a project: database, owner user, read-only companion.
+#
+# The readonly user gets its OWN password rather than sharing the owner's. They
+# are separate principals, and giving both the same credential means a leak of
+# the read-only one is a leak of the writable one.
+hook_provision_project() {
+    local db="$1" user="$2" pw="$3" ro_pw="${5:-$3}"
+    local esc_pw="${pw//\'/\'\'}" esc_ro="${ro_pw//\'/\'\'}"
+
+    _mysql_run <<SQL 2>/dev/null || return 1
+CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${user}'@'%' IDENTIFIED BY '${esc_pw}';
+ALTER USER '${user}'@'%' IDENTIFIED BY '${esc_pw}';
+GRANT ALL PRIVILEGES ON \`${db}\`.* TO '${user}'@'%';
+CREATE USER IF NOT EXISTS '${user}_readonly'@'%' IDENTIFIED BY '${esc_ro}';
+GRANT SELECT ON \`${db}\`.* TO '${user}_readonly'@'%';
+FLUSH PRIVILEGES;
+SQL
+}

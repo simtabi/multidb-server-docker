@@ -73,3 +73,24 @@ hook_auth_enforced() {
     fi
     return 0
 }
+
+# Provision a project: keyspace, owner role, read-only companion.
+#
+# SimpleStrategy with RF=1 is correct for the single-node development cluster
+# this toolkit runs and WRONG for a real one. A production keyspace wants
+# NetworkTopologyStrategy and RF>=3; that is a deployment decision, not
+# something to guess here, so it is documented rather than defaulted.
+hook_provision_project() {
+    local ks="$1" user="$2" pw="$3" ro_pw="${5:-$3}"
+    local esc_pw="${pw//\'/\'\'}" esc_ro="${ro_pw//\'/\'\'}"
+
+    _cqlsh -e "
+        CREATE KEYSPACE IF NOT EXISTS ${ks}
+          WITH replication = {'class':'SimpleStrategy','replication_factor':1};
+        CREATE ROLE IF NOT EXISTS ${user} WITH PASSWORD = '${esc_pw}' AND LOGIN = true;
+        ALTER ROLE ${user} WITH PASSWORD = '${esc_pw}';
+        CREATE ROLE IF NOT EXISTS ${user}_readonly WITH PASSWORD = '${esc_ro}' AND LOGIN = true;
+        GRANT ALL PERMISSIONS ON KEYSPACE ${ks} TO ${user};
+        GRANT SELECT ON KEYSPACE ${ks} TO ${user}_readonly;
+    " >/dev/null 2>&1 || return 1
+}

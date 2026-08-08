@@ -87,6 +87,9 @@ hook_restore_database()   # reads the dump on stdin
 hook_object_count()       # tables/collections — distinguishes empty from lost
 hook_row_count()          # rows/documents
 hook_auth_enforced()      # 0 when a bad or absent credential is REFUSED
+hook_provision_project()  # $1 db  $2 user  $3 password
+                          # $4 extensions (csv, may be empty)
+                          # $5 read-only password
 ```
 
 Two of these have non-obvious contracts, both learned the hard way:
@@ -101,6 +104,15 @@ with tables but no rows means the data was lost in transit — a real failure. A
 restored database with no tables at all means the source was empty, so the
 restore proves nothing but is not broken. Reporting the second as a failure
 teaches people to ignore the check.
+
+**`hook_provision_project` must be idempotent.** People re-run `make new-project`
+on an existing name to reprint the connection block, so creating must be
+`IF NOT EXISTS` and the password must be reset rather than skipped — otherwise
+the block printed does not match the credential in the database.
+
+It also receives two passwords. The read-only role is a separate principal and
+gets its own, so a leak of the read-only credential is not a leak of the
+writable one.
 
 Compression belongs to the **generic layer**. Do not compress inside a hook: an
 artefact named `.zst` that contains gzip decompresses into garbage, and the

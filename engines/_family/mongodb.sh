@@ -97,3 +97,30 @@ hook_auth_enforced() {
     fi
     return 0
 }
+
+# Provision a project: database, owner user, read-only companion.
+#
+# MongoDB creates a database lazily -- it does not exist until something is
+# written -- so an explicit marker collection is created. Without it the
+# database is absent from listDatabases, which makes `make backup-all` skip a
+# project that was just provisioned.
+#
+# Users are created IN the project database rather than in admin, so the
+# credential is scoped to it and authSource is the database itself.
+hook_provision_project() {
+    local db="$1" user="$2" pw="$3" ro_pw="${5:-$3}"
+
+    _mongosh --eval "
+        const db2 = db.getSiblingDB('${db}');
+        db2.createCollection('_dbtk_provisioned');
+        const mk = (u, p, r) => {
+            try { db2.createUser({user: u, pwd: p, roles: [{role: r, db: '${db}'}]}); }
+            catch (e) {
+                if (e.codeName !== 'Location51003' && !/already exists/.test(e.message)) throw e;
+                db2.updateUser(u, {pwd: p, roles: [{role: r, db: '${db}'}]});
+            }
+        };
+        mk('${user}', '${pw}', 'readWrite');
+        mk('${user}_readonly', '${ro_pw}', 'read');
+    " >/dev/null 2>&1 || return 1
+}

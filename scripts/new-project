@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Provision a project: database, least-privilege owner role, readonly role, the
-# configured extensions, and a paste-ready Laravel .env block (SPEC sections 8
+# configured extensions, and a paste-ready connection block (SPEC sections 8
 # and 14).
 #
 # This is the command SPEC section 1's promise rests on -- "a new project
@@ -9,12 +9,19 @@
 # what the caller needs next, rather than provisioning and leaving them to work
 # out the connection details.
 #
-# Usage: scripts/new-project --name myapp [--engine pg|mysql|mariadb]
+# It used to branch on the engine and supported three of the six. Everything
+# engine-specific now lives in the family hooks, so a new engine gets
+# new-project by existing rather than by someone remembering to add a case.
+#
+# Usage: scripts/new-project --name myapp [--engine pg|mysql|mariadb|mongodb|cassandra|ferretdb]
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
+
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
 
 ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
@@ -35,98 +42,104 @@ done
 
 [[ -n "$NAME" ]] || die "specify --name <project>"
 
-# Identifiers go into SQL, so they are constrained rather than escaped. A name
-# that needs quoting is a name that will cause trouble in a connection string
-# later anyway.
+# Identifiers go into SQL and CQL, so they are constrained rather than escaped.
+# A name that needs quoting is a name that will cause trouble in a connection
+# string later anyway.
 [[ "$NAME" =~ ^[a-z][a-z0-9_]{0,62}$ ]] \
     || die "invalid name '$NAME': use lowercase letters, digits and underscores, starting with a letter"
 
+# -----------------------------------------------------------------------------
+# Engine
+# -----------------------------------------------------------------------------
+# Descriptors are keyed by directory name; engines are addressed by their
+# DBTK_ENGINE_NAME. `pg` is the descriptor in engines/postgres/, so a lookup by
+# directory alone would reject the toolkit's own default.
+resolved=""
+for candidate in $(engine_list); do
+    engine_load "$candidate" || continue
+    if [[ "$DBTK_ENGINE_NAME" == "$ENGINE" || "$candidate" == "$ENGINE" ]]; then
+        resolved="$candidate"
+        break
+    fi
+done
+[[ -n "$resolved" ]] || die "unknown engine: $ENGINE (have: $(engine_list | tr '\n' ' '))"
+engine_load "$resolved" || die "could not load the descriptor for $resolved"
+ENGINE="$DBTK_ENGINE_NAME"
+
+engine_load_hooks || die "no hooks for engine family ${DBTK_ENGINE_FAMILY:-?}"
+command -v hook_provision_project >/dev/null 2>&1 \
+    || die "the ${DBTK_ENGINE_FAMILY} family defines no hook_provision_project"
+
 DB="$NAME"
 USER_NAME="${NAME}_user"
+
+# -----------------------------------------------------------------------------
+# The hook contract's environment
+# -----------------------------------------------------------------------------
+# Same shape as scripts/backup: hooks call engine_exec and secret rather than
+# knowing whether they are inside a container or on the host.
+IN_CONTAINER="${DBTK_IN_CONTAINER:-0}"
+
+engine_exec() {
+    local engine="$1"; shift
+    if [[ "$IN_CONTAINER" == "1" ]]; then
+        "$@"
+    else
+        ( cd "$ROOT" && docker compose exec -T "$engine" "$@" )
+    fi
+}
+
+secret() {
+    local file="$1"
+    if [[ "$IN_CONTAINER" == "1" ]]; then
+        [[ -r "/run/secrets/$file" ]] || die "secret not readable: /run/secrets/$file"
+        tr -d '\n' < "/run/secrets/$file"
+    else
+        [[ -r "$ROOT/secrets/$file" ]] || die "secret not readable: secrets/$file"
+        tr -d '\n' < "$ROOT/secrets/$file"
+    fi
+}
+
+# Only the dump path compresses; provisioning has no artefact. Defined because
+# the family files are shared and may reference it at source time.
+compress_ext() { printf ''; }
+
+# -----------------------------------------------------------------------------
+# Passwords
+# -----------------------------------------------------------------------------
+# The owner and the read-only role get DIFFERENT passwords. They are separate
+# principals, and a shared credential means leaking the read-only one leaks the
+# writable one too.
+gen_password() {
+    local file="$1"
+    if [[ -s "$file" ]]; then
+        log "reusing the existing password in $file"
+    else
+        mkdir -p secrets
+        openssl rand -base64 96 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-40 > "$file"
+        chmod 0600 "$file"
+        log "generated $file"
+    fi
+}
+
 SECRET_FILE="secrets/${ENGINE}_${USER_NAME}_password.txt"
-
-# -----------------------------------------------------------------------------
-# Password
-# -----------------------------------------------------------------------------
-if [[ -s "$SECRET_FILE" ]]; then
-    log "reusing the existing password in $SECRET_FILE"
-else
-    mkdir -p secrets
-    openssl rand -base64 96 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-40 > "$SECRET_FILE"
-    chmod 0600 "$SECRET_FILE"
-    log "generated $SECRET_FILE"
-fi
+RO_SECRET_FILE="secrets/${ENGINE}_${USER_NAME}_readonly_password.txt"
+gen_password "$SECRET_FILE"
+gen_password "$RO_SECRET_FILE"
 PASSWORD="$(cat "$SECRET_FILE")"
+RO_PASSWORD="$(cat "$RO_SECRET_FILE")"
 
-case "$ENGINE" in
-    pg)
-        docker compose exec -T pg psql -U postgres -q <<SQL || die "provisioning failed"
-DO \$\$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${USER_NAME}') THEN
-        CREATE ROLE ${USER_NAME} LOGIN PASSWORD '${PASSWORD}';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${USER_NAME}_readonly') THEN
-        CREATE ROLE ${USER_NAME}_readonly NOLOGIN;
-    END IF;
-END \$\$;
-SQL
-        # CREATE DATABASE cannot run inside a transaction block, so it is a
-        # separate statement rather than part of the DO block above.
-        if ! docker compose exec -T pg psql -U postgres -tAc \
-                "SELECT 1 FROM pg_database WHERE datname='${DB}'" | grep -q 1; then
-            docker compose exec -T pg psql -U postgres -q \
-                -c "CREATE DATABASE ${DB} OWNER ${USER_NAME};" || die "could not create database"
-        fi
+# -----------------------------------------------------------------------------
+# Provision
+# -----------------------------------------------------------------------------
+upper="$(printf '%s' "$ENGINE" | tr '[:lower:]-' '[:upper:]_')"
+EXTENSIONS="$(get "DBTK_${upper}_INIT_EXTENSIONS")"
 
-        # Isolation: revoke the implicit public grant so other projects' roles
-        # cannot connect here (SPEC section 18, "cross-access denied").
-        docker compose exec -T pg psql -U postgres -q <<SQL || die "grant setup failed"
-REVOKE ALL ON DATABASE ${DB} FROM PUBLIC;
-GRANT CONNECT, TEMPORARY ON DATABASE ${DB} TO ${USER_NAME};
-GRANT CONNECT ON DATABASE ${DB} TO ${USER_NAME}_readonly;
-SQL
+hook_provision_project "$DB" "$USER_NAME" "$PASSWORD" "$EXTENSIONS" "$RO_PASSWORD" \
+    || die "provisioning failed on $ENGINE; is it running? (make up PROFILES=$ENGINE)"
 
-        extensions="$(get DBTK_PG_INIT_EXTENSIONS)"
-        if [[ -n "$extensions" ]]; then
-            old_ifs="$IFS"; IFS=','
-            for ext in $extensions; do
-                ext="${ext// /}"
-                [[ -z "$ext" ]] && continue
-                docker compose exec -T pg psql -U postgres -d "$DB" -q \
-                    -c "CREATE EXTENSION IF NOT EXISTS \"$ext\" CASCADE;" >/dev/null 2>&1 \
-                    || log "WARNING: extension $ext could not be created"
-            done
-            IFS="$old_ifs"
-            log "extensions created: $extensions"
-        fi
-
-        docker compose exec -T pg psql -U postgres -d "$DB" -q <<SQL >/dev/null 2>&1 || true
-GRANT ALL ON SCHEMA public TO ${USER_NAME};
-GRANT USAGE ON SCHEMA public TO ${USER_NAME}_readonly;
-ALTER DEFAULT PRIVILEGES FOR ROLE ${USER_NAME} IN SCHEMA public
-    GRANT SELECT ON TABLES TO ${USER_NAME}_readonly;
-SQL
-        PORT=5432; DRIVER=pgsql
-        ;;
-
-    mysql|mariadb)
-        pw_root="$(cat "secrets/${ENGINE}_root_password.txt")"
-        client="$( [[ "$ENGINE" == "mysql" ]] && printf 'mysql' || printf 'mariadb' )"
-
-        docker compose exec -T "$ENGINE" "$client" -uroot -p"$pw_root" <<SQL 2>/dev/null || die "provisioning failed"
-CREATE DATABASE IF NOT EXISTS \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '${USER_NAME}'@'%' IDENTIFIED BY '${PASSWORD}';
-GRANT ALL PRIVILEGES ON \`${DB}\`.* TO '${USER_NAME}'@'%';
-CREATE USER IF NOT EXISTS '${USER_NAME}_readonly'@'%' IDENTIFIED BY '${PASSWORD}';
-GRANT SELECT ON \`${DB}\`.* TO '${USER_NAME}_readonly'@'%';
-FLUSH PRIVILEGES;
-SQL
-        PORT=3306; DRIVER=mysql
-        ;;
-    *) die "unknown engine: $ENGINE" ;;
-esac
-
-log "provisioned database '$DB' owned by '$USER_NAME'"
+log "provisioned '$DB' on $ENGINE, owned by '$USER_NAME'"
+[[ -n "$EXTENSIONS" ]] && log "extensions requested: $EXTENSIONS"
 
 # -----------------------------------------------------------------------------
 # The paste-ready block (SPEC section 14)
@@ -134,20 +147,20 @@ log "provisioned database '$DB' owned by '$USER_NAME'"
 cat <<BLOCK
 
 ────────────────────────────────────────────────────────────────────────
-Paste into your Laravel .env:
+Paste into your .env:
 
-DB_CONNECTION=${DRIVER}
+DB_CONNECTION=${DBTK_ENGINE_DRIVER}
 DB_HOST=${ENGINE}
-DB_PORT=${PORT}
+DB_PORT=${DBTK_ENGINE_PORT}
 DB_DATABASE=${DB}
 DB_USERNAME=${USER_NAME}
-DB_PASSWORD=$(cat "$SECRET_FILE")
+DB_PASSWORD=${PASSWORD}
 BLOCK
 
-if [[ "$ENGINE" == "pg" ]]; then
+if engine_tls_always; then
     cat <<'BLOCK'
 
-# TLS is always on for PostgreSQL. verify-full is the only mode that checks
+# TLS is always on for this engine. verify-full is the only mode that checks
 # the hostname, so it is the only one worth using; point it at the toolkit CA:
 DB_SSLMODE=verify-full
 DB_SSLROOTCERT=/path/to/db-toolkit/certs/ca.crt
@@ -155,8 +168,18 @@ BLOCK
 else
     cat <<'BLOCK'
 
-# In the prod profile the server refuses plaintext TCP, so set:
-MYSQL_ATTR_SSL_CA=/path/to/db-toolkit/certs/ca.crt
+# In the prod profile the server refuses plaintext TCP, so point your client
+# at the toolkit CA:
+DB_SSL_CA=/path/to/db-toolkit/certs/ca.crt
+BLOCK
+fi
+
+if engine_has_external_pooler; then
+    cat <<BLOCK
+
+# A pooler is available and is REQUIRED in production for this engine. With
+# \`make up PROFILES=${ENGINE},pooler\`, connect through it instead:
+#   DB_PORT=${DBTK_ENGINE_POOLER_PORT:-6432}
 BLOCK
 fi
 
@@ -169,6 +192,8 @@ Your app container must join the toolkit network:
       external: true
       name: ${COMPOSE_PROJECT_NAME:-dbtk}_net
 
-The password also lives in ${SECRET_FILE}.
+Passwords also live in:
+  ${SECRET_FILE}
+  ${RO_SECRET_FILE}   (read-only role '${USER_NAME}_readonly')
 ────────────────────────────────────────────────────────────────────────
 BLOCK
