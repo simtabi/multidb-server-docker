@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+#
+# Family hooks: MongoDB, and FerretDB (SPEC section 22.2).
+#
+# One implementation for both, because FerretDB speaks the MongoDB wire
+# protocol: the same mongosh, the same mongodump, the same everything below.
+# That is the descriptor abstraction paying for itself — a second document
+# engine cost a descriptor file and nothing here.
+
+_mongo_uri() {
+    local pw user host
+    pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
+    user="${DBTK_MONGODB_ROOT_USER:-root}"
+    if [ "${IN_CONTAINER:-0}" = "1" ]; then host="$DBTK_ENGINE_NAME"; else host="127.0.0.1"; fi
+    # authSource=admin because the root user is created in the admin database,
+    # not in whichever database is being addressed.
+    printf 'mongodb://%s:%s@%s:%s/?authSource=admin' \
+        "$user" "$pw" "$host" "$DBTK_ENGINE_PORT"
+}
+
+_mongosh() {
+    engine_exec "$DBTK_ENGINE_NAME" mongosh "$(_mongo_uri)" --quiet "$@"
+}
+
+hook_ping() {
+    _mongosh --eval 'db.adminCommand({ping:1}).ok' 2>/dev/null | grep -q 1
+}
+
+# Mongo's own bookkeeping databases are excluded, the same way the SQL families
+# exclude information_schema and friends.
+hook_list_databases() {
+    _mongosh --eval \
+        'db.adminCommand({listDatabases:1}).databases
+           .map(d => d.name)
+           .filter(n => !["admin","local","config"].includes(n))
+           .join("\n")' 2>/dev/null | tr -d '\r' | grep -v '^$'
+}
+
+# --archive gives a single file like every other engine's artefact, rather
+# than a directory tree that would need its own handling downstream.
+#
+# Compression is left to the generic layer rather than using mongodump --gzip.
+# Mixing the two produced a file NAMED .zst that CONTAINED gzip, so restore
+# unzstd'd it into garbage and mongorestore failed with "gzip: invalid header"
+# while still exiting 0. Whatever compresses the artefact must be the same
+# thing that decompresses it.
+hook_dump_database() {
+    local db="$1" out="$2"
+    if [ -n "$(compress_ext)" ]; then
+        engine_exec "$DBTK_ENGINE_NAME" mongodump --uri "$(_mongo_uri)" \
+            --db "$db" --archive \
+            | zstd -q -T0 -"${DBTK_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+    else
+        engine_exec "$DBTK_ENGINE_NAME" mongodump --uri "$(_mongo_uri)" \
+            --db "$db" --archive > "$out"
+    fi
+}
+
+# No equivalent of pg_dumpall --globals-only: users live in the admin database,
+# which is dumped as an ordinary database when included.
+hook_dump_globals() { return 0; }
+
+hook_recreate_database() {
+    local db="$1"
+    _mongosh --eval "db.getSiblingDB('$db').dropDatabase()" >/dev/null 2>&1
+}
+
+# --drop so a restore replaces rather than merges; merging into existing
+# collections would silently produce a database that is neither the backup nor
+# what was there before.
+hook_restore_database() {
+    local db="$1"
+    engine_exec "$DBTK_ENGINE_NAME" mongorestore --uri "$(_mongo_uri)" \
+        --archive --drop --nsInclude "${db}.*"
+}
+
+hook_object_count() {
+    local db="$1"
+    _mongosh --eval "db.getSiblingDB('$db').getCollectionNames().length" 2>/dev/null | tr -d ' \r'
+}
+
+hook_row_count() {
+    local db="$1"
+    _mongosh --eval \
+        "db.getSiblingDB('$db').getCollectionNames()
+           .reduce((n, c) => n + db.getSiblingDB('$db')[c].countDocuments(), 0)" \
+        2>/dev/null | tr -d ' \r'
+}
