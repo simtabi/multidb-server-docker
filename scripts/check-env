@@ -146,6 +146,35 @@ while IFS= read -r line; do
 done < <(grep -E '^DBTK_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null || true)
 
 # -----------------------------------------------------------------------------
+# 4b. HA and standalone cannot both own the PostgreSQL port
+# -----------------------------------------------------------------------------
+# The collision above only compares values WRITTEN in the env file, and
+# DBTK_PG_HOST_PORT is commented out by default -- the generated compose still
+# publishes 5432 for it. So `PROFILES=pg,ha` binds 5432 twice, once for the
+# standalone engine and once for HAProxy, and the only symptom is a Docker
+# "port is already allocated" at the end of an otherwise successful boot.
+#
+# Effective values, not written ones, is the point: a default that collides is
+# still a collision.
+ha_profiles="$(get DBTK_PROFILES)"
+if [[ ",${DBTK_CHECK_PROFILES:-$ha_profiles}," == *",ha,"* ]]; then
+    pg_port="$(get DBTK_PG_HOST_PORT)"; pg_port="${pg_port:-5432}"
+    hap_w="$(get DBTK_HAPROXY_WRITE_PORT)"; hap_w="${hap_w:-5432}"
+    hap_r="$(get DBTK_HAPROXY_READ_PORT)"; hap_r="${hap_r:-5433}"
+
+    if [[ ",${DBTK_CHECK_PROFILES:-$ha_profiles}," == *",pg,"* ]]; then
+        if [[ "$pg_port" == "$hap_w" || "$pg_port" == "$hap_r" ]]; then
+            err "profiles 'pg' and 'ha' both publish port $pg_port.
+       HA replaces the standalone engine rather than joining it -- run
+       PROFILES=ha, or set DBTK_PG_HOST_PORT to something else."
+        fi
+    fi
+
+    [[ "$hap_w" == "$hap_r" ]] \
+        && err "DBTK_HAPROXY_WRITE_PORT and DBTK_HAPROXY_READ_PORT are both $hap_w"
+fi
+
+# -----------------------------------------------------------------------------
 # 5. Prod-profile guards (SPEC sections 18 and 21.1)
 # -----------------------------------------------------------------------------
 profiles="$(get DBTK_PROFILES)"
