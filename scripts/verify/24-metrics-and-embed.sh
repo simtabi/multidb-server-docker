@@ -37,10 +37,14 @@ docker run -d --name "$on" \
     "$img" >/dev/null || vfail "container failed to start with the exporter embedded"
 wait_ready 60 "postgres to accept connections" docker exec "$on" pg_isready -U postgres
 
-wait_for 30 "the embedded exporter to serve metrics" \
-    docker exec "$on" sh -c 'wget -qO- http://127.0.0.1:9187/metrics | head -1'
+# curl, not wget: the PostgreSQL image is Debian-based and ships curl, while
+# wget is absent. Probing with a tool the image does not have reports a broken
+# exporter when the exporter is fine.
+# shellcheck disable=SC2016  # evaluated by the subshell, not here
+wait_for 60 "the embedded exporter to serve metrics" \
+    docker exec "$on" sh -c 'curl -sf http://127.0.0.1:9187/metrics >/dev/null'
 
-metrics="$(docker exec "$on" sh -c 'wget -qO- http://127.0.0.1:9187/metrics' 2>/dev/null || true)"
+metrics="$(docker exec "$on" curl -sf http://127.0.0.1:9187/metrics 2>/dev/null || true)"
 printf '%s' "$metrics" | grep -q '^pg_up' \
     || vfail "embedded exporter did not serve pg_up"
 vinfo "embedded exporter serves metrics on 9187"

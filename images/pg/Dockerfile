@@ -104,6 +104,7 @@ FROM ${BASE_IMAGE}
 
 ARG ENGINE_VERSION=17
 ARG S6_OVERLAY_VERSION=3.2.3.2
+ARG POSTGRES_EXPORTER_VERSION=0.20.1
 
 LABEL org.opencontainers.image.title="db-toolkit-pg" \
       org.opencontainers.image.description="PostgreSQL with the full db-toolkit extension suite, supervised by s6-overlay" \
@@ -163,6 +164,23 @@ RUN set -eux; \
     tar -C / -Jxpf /tmp/s6-arch.tar.xz; \
     rm -f /tmp/s6-noarch.tar.xz /tmp/s6-arch.tar.xz
 
+# The optional embedded exporter (SPEC section 6.1). Present in every image but
+# only started when DBTK_PG_EMBED_EXPORTER is true, so a bare `docker run` can
+# self-report while compose keeps running it as a separate service.
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+        amd64) pe_arch='amd64' ;; \
+        arm64) pe_arch='arm64' ;; \
+        *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/pgexp.tar.gz \
+        "https://github.com/prometheus-community/postgres_exporter/releases/download/v${POSTGRES_EXPORTER_VERSION}/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-${pe_arch}.tar.gz"; \
+    tar -C /tmp -xzf /tmp/pgexp.tar.gz; \
+    install -m 0755 "/tmp/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-${pe_arch}/postgres_exporter" \
+        /usr/local/bin/postgres_exporter; \
+    rm -rf /tmp/pgexp.tar.gz "/tmp/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-${pe_arch}"; \
+    postgres_exporter --version 2>&1 | head -1
+
 COPY pg/s6/ /etc/s6-overlay/s6-rc.d/
 # The user bundle goes in user-bundles.d, not s6-rc.d/user. The legacy location
 # is deprecated and, more importantly, makes s6 rewrite files under /etc during
@@ -173,6 +191,7 @@ COPY pg/scripts/ /usr/local/lib/dbtk/
 RUN set -eux; \
     chmod +x /usr/local/lib/dbtk/*.sh; \
     chmod +x /etc/s6-overlay/s6-rc.d/dbtk-postgres/run; \
+    chmod +x /etc/s6-overlay/s6-rc.d/dbtk-exporter/run; \
     mkdir -p /etc/dbtk /var/run/postgresql /etc/postgresql/conf.d; \
     chown -R postgres:postgres /var/run/postgresql
 

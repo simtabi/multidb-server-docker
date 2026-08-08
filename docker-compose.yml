@@ -251,6 +251,44 @@ services:
     networks: [dbtk]
     logging: *default-logging
 
+  # ---------------------------------------------------------------------------
+  # Metrics — exporters on the internal network, published to nothing.
+  #
+  # Prometheus and Grafana are out of scope (SPEC section 12); these expose the
+  # endpoints and it is up to your monitoring stack to scrape them over the
+  # dbtk network.
+  # ---------------------------------------------------------------------------
+  pg-exporter:
+    profiles: [metrics]
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    restart: unless-stopped
+    <<: *hardening
+    environment:
+      # The exporter reads the password from a file rather than taking it in
+      # the connection string, so no credential appears in `docker inspect`.
+      DATA_SOURCE_URI: "pg:5432/${DBTK_PG_DEFAULT_DB:-postgres}?sslmode=disable"
+      DATA_SOURCE_USER: postgres
+      DATA_SOURCE_PASS_FILE: /run/secrets/pg_superuser_password.txt
+    volumes:
+      - ./secrets:/run/secrets:ro
+    networks: [dbtk]
+    logging: *default-logging
+
+  mysqld-exporter:
+    profiles: [metrics]
+    image: prom/mysqld-exporter:v0.19.0@sha256:eacb4b18e2ec1e0abdf2d64851b68526c964f6d9cb3e9458fb5d5f5062ea94c1
+    restart: unless-stopped
+    <<: *hardening
+    command:
+      - "--mysqld.address=mysql:3306"
+      - "--mysqld.username=root"
+    environment:
+      MYSQLD_EXPORTER_PASSWORD_FILE: /run/secrets/mysql_root_password.txt
+    volumes:
+      - ./secrets:/run/secrets:ro
+    networks: [dbtk]
+    logging: *default-logging
+
 networks:
   dbtk:
     name: ${COMPOSE_PROJECT_NAME:-dbtk}_net
