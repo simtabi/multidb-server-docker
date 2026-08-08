@@ -418,24 +418,44 @@ the docs explain the difference rather than shipping a proxy nobody should use.
 The correct guidance for MongoDB and Cassandra is to reuse one client instance
 per process, which is a documentation problem, not an infrastructure one.
 
-### 22.5 Licensing, because this ships as open source
+### 22.5 Licensing decides what we publish, not just what we document
 
 The repository is MIT. Published images inherit the licence of what they are
-built FROM, which was already true for the SQL engines (PostgreSQL licence,
-GPLv2) and becomes more pointed now:
+built FROM, which was already true for the SQL engines and becomes pointed once
+a source-available engine is in scope.
 
-- **MongoDB Community is SSPL**, which the Open Source Initiative has
-  explicitly declined to recognise as an open source licence. Redistribution is
-  permitted, so a derived image is allowed, but it is source-available rather
-  than open source and **must be labelled as such** on the image and in the
-  docs. The SSPL's service clause binds anyone offering MongoDB *as a service*;
-  running it as a development dependency does not trigger it.
-- **Cassandra is Apache 2.0**, with no such complication.
+The rule: **every artefact this project publishes is OSI-licensed.** A
+downstream user should never have to reason about our supply chain to know what
+they are running. So each engine declares a publish policy:
 
-Every published image therefore carries an accurate `org.opencontainers.image.licenses`
-label for its own contents, and the docs state plainly which engines are open
-source and which are source-available. Users who cannot accept SSPL are pointed
-at the alternatives rather than left to discover the problem themselves.
+| Policy | Meaning | Applies to |
+|---|---|---|
+| `derive` | We build and publish `db-toolkit-<engine>` from the upstream base | Every OSI-licensed engine |
+| `reference` | We publish nothing; the upstream image is used directly and configured at runtime | Source-available engines |
+
+**MongoDB Community is SSPL**, which the Open Source Initiative has explicitly
+declined to recognise as open source. Publishing a derived image would mean
+distributing SSPL binaries under an MIT project's namespace. So MongoDB is
+`reference`: fully supported, configured by the toolkit, but pulled from
+MongoDB rather than from us. The licence obligation stays where it belongs.
+
+This generalises. Any engine that later changes licence — and several have —
+moves to `reference` by flipping one descriptor field, with no code change and
+no republished artefact to withdraw.
+
+**FerretDB** exists in the engine list for the same reason: Apache 2.0, speaks
+the MongoDB wire protocol so existing drivers connect unchanged, and stores
+data in PostgreSQL through Microsoft's open source DocumentDB extension. It is
+the document database with no licensing caveat at all.
+
+It is not a complete substitute and the docs must not imply otherwise. As of
+early 2026 the gaps against MongoDB include `$lookup` and `$facet`, full
+transactions, change streams, GridFS, and `$text` indexes. It is a drop-in for
+the majority of workloads, not all of them; applications needing those features
+should use the `mongodb` engine and accept the licence.
+
+`check-env` and check 31 enforce the rule: an engine whose licence is not
+OSI-approved and whose policy is `derive` fails the harness.
 
 ### 22.6 Acceptance additions
 

@@ -65,11 +65,30 @@ for e in $engines; do
     # Licensing is load-bearing for an OSS project that publishes images.
     # A non-OSI licence is allowed, but it must be labelled rather than
     # discovered by a user later.
+    # Licensing decides what we are allowed to PUBLISH, not merely what to
+    # document. Every artefact this repository publishes should be
+    # OSI-licensed, so that a downstream user never has to reason about our
+    # supply chain to know what they are running.
+    #
+    # A source-available engine is still fully supported — it is referenced
+    # from its upstream image rather than rebuilt under our namespace, which
+    # leaves the licence obligation where it belongs.
+    case "${DBTK_ENGINE_PUBLISH:-}" in
+        derive|reference) ;;
+        *) vfail "$rel: PUBLISH must be 'derive' or 'reference', got '${DBTK_ENGINE_PUBLISH:-unset}'" ;;
+    esac
+
     case "$DBTK_ENGINE_OSI_APPROVED" in
         true) ;;
         false)
             [[ -n "${DBTK_ENGINE_LICENSE_NOTE:-}" ]] \
-                || vfail "$rel: OSI_APPROVED=false requires a LICENSE_NOTE explaining the implications" ;;
+                || vfail "$rel: OSI_APPROVED=false requires a LICENSE_NOTE explaining the implications"
+            [[ "$DBTK_ENGINE_PUBLISH" == "reference" ]] \
+                || vfail "$rel: $DBTK_ENGINE_LICENSE is not OSI-approved, so PUBLISH must be 'reference'.
+       Publishing a derived image would distribute non-OSI binaries under an
+       MIT project's namespace. Reference the upstream image instead."
+            vinfo "$DBTK_ENGINE_NAME: $DBTK_ENGINE_LICENSE is not OSI-approved; referenced, not published"
+            ;;
         *) vfail "$rel: OSI_APPROVED must be true or false, got '$DBTK_ENGINE_OSI_APPROVED'" ;;
     esac
 

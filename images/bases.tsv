@@ -30,3 +30,5 @@ mongodb	8.3	mongo:8.3.7@sha256:2f02e2184c6d91c3208e5ab75a0707d1386a05377b20fdaf4
 
 cassandra	4.1	cassandra:4.1.11@sha256:dad4cd7ee4281df4e96944a1faebfebd2e50ee19a9f0a1d42ac0bb17c820dd74
 cassandra	5.0	cassandra:5.0.8@sha256:259578bbeac315a7326c2a99e60eab86f3415e9e895207bf2a032af4de8c16b5
+
+ferretdb	2	ghcr.io/ferretdb/ferretdb:2@sha256:5706414241eb84f0515512c37b46db0f1b1eac9e5ceb7e4c2523211c184b1985
