@@ -31,3 +31,6 @@ caddy/servers.json
 # Dumps are data, not source.
 backups/*
 !backups/.gitkeep
+
+# Generated from engines/*/engine.conf by scripts/gen-compose.
+compose.engines.yml

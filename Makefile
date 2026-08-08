@@ -84,11 +84,13 @@ rotate-secrets: ## Rotate every database password and secret file, applied live
 .PHONY: render
 render: ## Render every templated file (Caddyfile, pgAdmin servers.json)
 	@scripts/render-config
+	@scripts/gen-compose >/dev/null
 
 .PHONY: up
 up: ## Boot the stack (never touches data)
 	@scripts/check-env --quiet
 	@scripts/render-config
+	@scripts/gen-compose >/dev/null
 	@$(COMPOSE) up -d --wait
 
 .PHONY: down
@@ -113,6 +115,7 @@ destroy: ## Delete data volumes (typed confirmation required)
 test-profile: ## Boot the tmpfs speed profile and run its checks
 	@printf 'TEST PROFILE: data lives on tmpfs and is DISCARDED on stop.\n'
 	@scripts/render-config
+	@scripts/gen-compose >/dev/null
 	@$(COMPOSE) -f docker-compose.yml -f compose.test.yml up -d --wait
 
 # -----------------------------------------------------------------------------

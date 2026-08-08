@@ -1,0 +1,4 @@
+    ulimits:
+      nofile:
+        soft: ${DBTK_MYSQL_NOFILE:-10240}
+        hard: ${DBTK_MYSQL_NOFILE:-10240}

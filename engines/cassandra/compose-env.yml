@@ -1,0 +1,5 @@
+      # The image's own variables. Cassandra's JVM heap dwarfs the SQL engines,
+      # so it is set explicitly rather than left to auto-sizing.
+      MAX_HEAP_SIZE: ${DBTK_CASSANDRA_HEAP:-1G}
+      HEAP_NEWSIZE: ${DBTK_CASSANDRA_HEAP_NEW:-200M}
+      CASSANDRA_CLUSTER_NAME: ${DBTK_CASSANDRA_CLUSTER:-dbtk}
