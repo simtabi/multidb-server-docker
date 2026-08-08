@@ -103,7 +103,7 @@ log "starting $ENGINE $FROM against its existing volume (read only as far as you
 
 case "$ENGINE" in
     pg)
-        docker run -d --name "$old_c" -e POSTGRES_PASSWORD=dbtk-upgrade-temp \
+        docker run -d --name "$old_c" -e POSTGRES_PASSWORD=dbtk-throwaway-upgrade \
             -v "$vol_from:/var/lib/postgresql/data" "$PREFIX/db-toolkit-pg:$FROM" >/dev/null \
             || die "could not start $ENGINE $FROM"
         for _ in $(seq 1 120); do
@@ -150,7 +150,7 @@ log "starting $ENGINE $TO on a fresh volume"
 
 case "$ENGINE" in
     pg)
-        docker run -d --name "$new_c" -e POSTGRES_PASSWORD=dbtk-upgrade-temp \
+        docker run -d --name "$new_c" -e POSTGRES_PASSWORD=dbtk-throwaway-upgrade \
             -v "$vol_to:/var/lib/postgresql/data" "$PREFIX/db-toolkit-pg:$TO" >/dev/null \
             || die "could not start $ENGINE $TO"
         for _ in $(seq 1 120); do

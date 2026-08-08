@@ -23,6 +23,17 @@ cd "$DBTK_ROOT" || exit 1
 #     exemption: exempting scripts/verify/ wholesale would create somewhere a
 #     real credential could hide, whereas a real credential will never carry
 #     this prefix.
+#
+#  3. The value may name WHERE the secret lives rather than being one, which is
+#     the whole point of the _FILE convention. `DBTK_ENGINE_ROOT_SECRET` holds
+#     a secret's filename and `SECRET=/run/secrets/...` holds its path. Both are
+#     indirection, the same class as ${...} and $(...) below.
+#
+#     Kept narrow on purpose. An absolute path is unambiguous, and a bare
+#     filename is exempt only when it matches this repo's secret-file naming
+#     convention (`<thing>_password.txt`), so a literal credential that merely
+#     happens to end in .txt is still a finding. Passwords do contain slashes,
+#     so a *relative* path is not exempt.
 
 files=()
 if [[ -d .git ]]; then
@@ -62,6 +73,9 @@ for f in "${files[@]}"; do
         case "$value" in
             dbtk-throwaway-*) continue ;;              # harness fixtures, see above
             *\$\{*|*\$\(*|__FILE__*|secrets/*) continue ;;  # indirection, not a literal
+            # Names where the secret lives; see refinement 3 above.
+            /*) continue ;;
+            *_password.txt|*_secret.txt|*_passphrase.txt) continue ;;
             CHANGE_ME*) continue ;;                     # sentinel; check-env rejects it
             # The value charset above stops at '(' so that shell case patterns
             # are not mistaken for assignments. That truncates a command

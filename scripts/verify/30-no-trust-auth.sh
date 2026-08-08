@@ -57,7 +57,7 @@ vinfo "no cleartext password auth"
 
 # The behavioural assertion, not just the file contents: a loopback TCP
 # connection with a WRONG password must be refused.
-if docker exec -u postgres -e PGPASSWORD=definitely-not-the-password "$name" \
+if docker exec -u postgres -e PGPASSWORD=dbtk-throwaway-wrong-password "$name" \
     psql -h 127.0.0.1 -U postgres -tAc "SELECT 1" >/dev/null 2>&1; then
     vfail "a loopback TCP connection succeeded with the wrong password; auth is not being enforced"
 fi

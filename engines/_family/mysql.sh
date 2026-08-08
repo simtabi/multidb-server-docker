@@ -95,7 +95,7 @@ hook_auth_enforced() {
     local hargs=()
     while IFS= read -r a; do [ -n "$a" ] && hargs+=("$a"); done < <(_mysql_host_args)
     if engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${hargs[@]+"${hargs[@]}"} \
-        -h 127.0.0.1 -uroot -pdefinitely-not-the-password -e "SELECT 1" >/dev/null 2>&1; then
+        -h 127.0.0.1 -uroot -pdbtk-throwaway-wrong-password -e "SELECT 1" >/dev/null 2>&1; then
         return 1
     fi
     return 0

@@ -88,7 +88,7 @@ hook_row_count() {
 # Auth enforcement probe: a connection with a WRONG password must be refused.
 # Returns 0 when auth is properly enforced.
 hook_auth_enforced() {
-    if engine_exec "$DBTK_ENGINE_NAME" env PGPASSWORD=definitely-not-the-password \
+    if engine_exec "$DBTK_ENGINE_NAME" env PGPASSWORD=dbtk-throwaway-wrong-password \
         psql -h 127.0.0.1 -U postgres -tAc "SELECT 1" >/dev/null 2>&1; then
         return 1
     fi
