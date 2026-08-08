@@ -90,6 +90,27 @@ engine_load() {
     export DBTK_ENGINE_CONF DBTK_ENGINE_DIR
 }
 
+# Load the family hooks for the currently loaded engine.
+#
+# Hooks are per FAMILY, not per engine: MySQL and MariaDB share one
+# implementation because everything that differs between them -- client binary,
+# dump tool, root secret -- comes from the descriptor.
+#
+# The caller must already provide engine_exec, secret and compress_ext; the
+# hooks are written against that contract.
+engine_load_hooks() {
+    local family="${DBTK_ENGINE_FAMILY:-}"
+    [ -n "$family" ] || { printf 'engine-lib: no engine loaded\n' >&2; return 1; }
+
+    local hooks="$DBTK_ENGINES_DIR/_family/${family}.sh"
+    [ -f "$hooks" ] || {
+        printf 'engine-lib: no hooks for family "%s" (expected %s)\n' "$family" "$hooks" >&2
+        return 1
+    }
+    # shellcheck disable=SC1090  # path resolved at runtime from the family
+    . "$hooks"
+}
+
 # Does this engine declare a capability?
 engine_has_external_pooler() { [ "${DBTK_ENGINE_POOLING:-}" = "external" ]; }
 engine_is_heavy()            { [ "${DBTK_ENGINE_HEAVY:-false}" = "true" ]; }
