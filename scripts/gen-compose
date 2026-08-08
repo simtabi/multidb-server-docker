@@ -53,6 +53,7 @@ tmp="$(mktemp)"
 } > "$tmp"
 
 count=0
+poolers=0
 for engine in $(engine_list); do
     engine_load "$engine" || continue
 
@@ -129,6 +130,79 @@ for engine in $(engine_list); do
         printf '\n'
     } >> "$tmp"
 
+    # -------------------------------------------------------------------------
+    # Pooler, for engines that declare an external one (SPEC section 22.4).
+    #
+    # Gated on a compose-pooler.yml beside the descriptor rather than on
+    # POOLING=external alone. Declaring the image is not the same as having
+    # configured it, and generating a service from a half-answer would produce
+    # a pooler that starts and does not work -- worse than none, because it
+    # looks present.
+    #
+    # compose-pooler.yml holds environment ENTRIES ONLY, with no `environment:`
+    # header of its own: the header is emitted here so the secret and the
+    # upstream address cannot be overridden, and two `environment:` keys in one
+    # service is a YAML duplicate that silently keeps only the last.
+    # -------------------------------------------------------------------------
+    if [ "${DBTK_ENGINE_POOLING:-driver}" = "external" ] \
+       && [ -n "${DBTK_ENGINE_POOLER_IMAGE:-}" ] \
+       && [ -f "$DBTK_ENGINE_DIR/compose-pooler.yml" ]; then
+        {
+            printf '  # ---------------------------------------------------------------------------\n'
+            printf '  # %s pooler\n' "$DBTK_ENGINE_TITLE"
+            printf '  # ---------------------------------------------------------------------------\n'
+            printf '  %s-pooler:\n' "$DBTK_ENGINE_NAME"
+            printf '    profiles: [pooler]\n'
+            printf '    image: %s\n' "$DBTK_ENGINE_POOLER_IMAGE"
+            printf '    restart: unless-stopped\n'
+            printf '    depends_on: [%s]\n' "$DBTK_ENGINE_NAME"
+            printf '    security_opt:\n      - no-new-privileges:true\n'
+            printf '    cap_drop:\n      - ALL\n'
+            # The image has no _FILE convention, and its own entrypoint warns
+            # that `docker inspect` exposes environment variables. So the
+            # secret is read from the mounted file into the process
+            # environment of PID 1 at exec time: never in an image layer,
+            # never in the compose file, never in `docker inspect`.
+            printf '    entrypoint:\n'
+            printf '      - /bin/sh\n'
+            printf '      - -c\n'
+            printf '      - >\n'
+            printf '        DB_PASSWORD="$$(cat "$$DB_PASSWORD_FILE")";\n'
+            printf '        export DB_PASSWORD;\n'
+            printf '        exec /entrypoint.sh "$$@"\n'
+            printf '      - --\n'
+            # The image's CMD, restated: overriding entrypoint discards it.
+            printf '    command: [%s]\n' "$(printf '%s' "${DBTK_ENGINE_POOLER_CMD:-}" \
+                | awk '{for(i=1;i<=NF;i++){printf "%s\"%s\"", (i>1?", ":""), $i}}')"
+            printf '    environment:\n'
+            printf '      DB_PASSWORD_FILE: /run/secrets/%s\n' "${DBTK_ENGINE_POOLER_SECRET:-pgbouncer_password.txt}"
+            # Upstream host and port come from the descriptor, never from the
+            # pooler config file, so the pooler cannot end up aimed at a
+            # service name that no longer exists.
+            printf '      DB_HOST: %s\n' "$DBTK_ENGINE_NAME"
+            printf '      DB_PORT: "%s"\n' "$DBTK_ENGINE_PORT"
+            cat "$DBTK_ENGINE_DIR/compose-pooler.yml"
+            # The pooler writes a generated userlist under /etc; tmpfs keeps it
+            # off disk and out of any committed layer.
+            printf '    tmpfs:\n      - %s:exec,mode=0700,uid=%s,gid=%s\n' \
+                "${DBTK_ENGINE_POOLER_STATE_DIR:-/tmp/pooler}" \
+                "${DBTK_ENGINE_POOLER_UID:-0}" "${DBTK_ENGINE_POOLER_UID:-0}"
+            printf '    volumes:\n'
+            printf '      - ./secrets:/run/secrets:ro\n'
+            printf '      - ./certs:/certs:ro\n'
+            printf '    ports:\n'
+            printf '      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_%s_POOLER_HOST_PORT:-%s}:%s"\n' \
+                "$upper" "${DBTK_ENGINE_POOLER_HOST_PORT_DEFAULT:-6432}" "${DBTK_ENGINE_POOLER_PORT:-6432}"
+            printf '    networks: [dbtk]\n'
+            printf '    logging:\n      driver: json-file\n'
+            printf '      options:\n'
+            printf '        max-size: ${DBTK_LOG_MAX_SIZE:-10m}\n'
+            printf '        max-file: "${DBTK_LOG_MAX_FILE:-3}"\n'
+            printf '\n'
+        } >> "$tmp"
+        poolers=$(( poolers + 1 ))
+    fi
+
     count=$(( count + 1 ))
 done
 
@@ -146,4 +220,4 @@ done
 } >> "$tmp"
 
 mv "$tmp" "$OUT"
-printf 'generated %s (%d engines)\n' "${OUT#"$ROOT"/}" "$count"
+printf 'generated %s (%d engines, %d pooler(s))\n' "${OUT#"$ROOT"/}" "$count" "$poolers"

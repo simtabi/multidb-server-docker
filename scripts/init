@@ -59,9 +59,22 @@ gen_secret() {
 }
 
 printf 'generating secrets\n'
-gen_secret pg_superuser_password.txt
-gen_secret mysql_root_password.txt
-gen_secret mariadb_root_password.txt
+
+# Driven by the descriptors rather than a list maintained here. A hardcoded
+# list is how MongoDB, Cassandra and FerretDB shipped with no generated secret:
+# the engines were added, this list was not, and nothing said so.
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+for engine in $(engine_list); do
+    engine_load "$engine" || continue
+    gen_secret "$DBTK_ENGINE_ROOT_SECRET"
+done
+
+# Poolers hold a credential of their own. pgBouncer never stores an application
+# user's password -- it looks verifiers up with auth_query -- so this is the
+# only one it has. See docs/pooling.md.
+gen_secret pgbouncer_password.txt
+
 gen_secret pgadmin_password.txt
 
 # -----------------------------------------------------------------------------

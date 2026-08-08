@@ -1,0 +1,29 @@
+      DB_USER: pgbouncer
+      LISTEN_PORT: "6432"
+      # scram-sha-256 end to end. The pooler re-authenticates each client
+      # against the verifier it fetches, so a client cannot present a weaker
+      # method to the pooler than the server would have demanded.
+      AUTH_TYPE: scram-sha-256
+      AUTH_USER: pgbouncer
+      AUTH_DBNAME: postgres
+      # The narrow SECURITY DEFINER function created by the pg image's
+      # convergence stage. Application passwords are never stored here, so
+      # compromising the pooler does not yield them.
+      #
+      # $$1 is a compose escape for a literal $1 -- pgBouncer's own placeholder
+      # for the username. A single $ would be interpolated away and the query
+      # would silently match nothing.
+      AUTH_QUERY: SELECT username, password FROM pgbouncer.get_auth($$1)
+      POOL_MODE: ${DBTK_PGBOUNCER_POOL_MODE:-transaction}
+      DEFAULT_POOL_SIZE: ${DBTK_PGBOUNCER_DEFAULT_POOL_SIZE:-25}
+      MIN_POOL_SIZE: ${DBTK_PGBOUNCER_MIN_POOL_SIZE:-5}
+      RESERVE_POOL_SIZE: ${DBTK_PGBOUNCER_RESERVE_POOL_SIZE:-5}
+      MAX_CLIENT_CONN: ${DBTK_PGBOUNCER_MAX_CLIENT_CONN:-1000}
+      MAX_DB_CONNECTIONS: ${DBTK_PGBOUNCER_MAX_DB_CONNECTIONS:-50}
+      # Transaction pooling could not support prepared statements at all until
+      # pgBouncer 1.21 learned to track them per client.
+      MAX_PREPARED_STATEMENTS: ${DBTK_PGBOUNCER_MAX_PREPARED_STATEMENTS:-200}
+      ADMIN_USERS: pgbouncer
+      STATS_USERS: pgbouncer
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options,search_path
+      LOG_POOLER_ERRORS: "1"
