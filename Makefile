@@ -136,12 +136,16 @@ mariadb: ## MariaDB shell (socket-first)
 		-p"$$(cat secrets/mariadb_root_password.txt)"
 
 .PHONY: shell
-shell: ## Open the cli image
-	$(call unimplemented,5)
+shell: ## Open the cli image (tools with no server required)
+	@docker run --rm -it \
+		--network $(COMPOSE_PROJECT_NAME)_net \
+		-v "$(CURDIR)/certs:/certs:ro" \
+		-v "$(CURDIR)/backups:/work/backups" \
+		ghcr.io/simtabi/db-toolkit-cli:dev
 
 .PHONY: new-project
 new-project: ## Provision DB + roles + extensions, print the Laravel .env block
-	$(call unimplemented,5)
+	@scripts/new-project --name "$(NAME)" --engine "$(or $(ENGINE),pg)"
 
 # -----------------------------------------------------------------------------
 # Backup and restore

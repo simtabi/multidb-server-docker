@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+#
+# Provision a project: database, least-privilege owner role, readonly role, the
+# configured extensions, and a paste-ready Laravel .env block (SPEC sections 8
+# and 14).
+#
+# This is the command SPEC section 1's promise rests on -- "a new project
+# connects in under a minute" -- so it does the whole job and prints exactly
+# what the caller needs next, rather than provisioning and leaving them to work
+# out the connection details.
+#
+# Usage: scripts/new-project --name myapp [--engine pg|mysql|mariadb]
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+
+get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+log() { printf '[new-project] %s\n' "$*"; }
+die() { printf '[new-project] ERROR: %s\n' "$*" >&2; exit 1; }
+
+NAME=""
+ENGINE="pg"
+while (( $# )); do
+    case "$1" in
+        --name)   NAME="${2:-}"; shift 2 ;;
+        --engine) ENGINE="${2:-}"; shift 2 ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+[[ -n "$NAME" ]] || die "specify --name <project>"
+
+# Identifiers go into SQL, so they are constrained rather than escaped. A name
+# that needs quoting is a name that will cause trouble in a connection string
+# later anyway.
+[[ "$NAME" =~ ^[a-z][a-z0-9_]{0,62}$ ]] \
+    || die "invalid name '$NAME': use lowercase letters, digits and underscores, starting with a letter"
+
+DB="$NAME"
+USER_NAME="${NAME}_user"
+SECRET_FILE="secrets/${ENGINE}_${USER_NAME}_password.txt"
+
+# -----------------------------------------------------------------------------
+# Password
+# -----------------------------------------------------------------------------
+if [[ -s "$SECRET_FILE" ]]; then
+    log "reusing the existing password in $SECRET_FILE"
+else
+    mkdir -p secrets
+    openssl rand -base64 96 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-40 > "$SECRET_FILE"
+    chmod 0600 "$SECRET_FILE"
+    log "generated $SECRET_FILE"
+fi
+PASSWORD="$(cat "$SECRET_FILE")"
+
+case "$ENGINE" in
+    pg)
+        docker compose exec -T pg psql -U postgres -q <<SQL || die "provisioning failed"
+DO \$\$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${USER_NAME}') THEN
+        CREATE ROLE ${USER_NAME} LOGIN PASSWORD '${PASSWORD}';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${USER_NAME}_readonly') THEN
+        CREATE ROLE ${USER_NAME}_readonly NOLOGIN;
+    END IF;
+END \$\$;
+SQL
+        # CREATE DATABASE cannot run inside a transaction block, so it is a
+        # separate statement rather than part of the DO block above.
+        if ! docker compose exec -T pg psql -U postgres -tAc \
+                "SELECT 1 FROM pg_database WHERE datname='${DB}'" | grep -q 1; then
+            docker compose exec -T pg psql -U postgres -q \
+                -c "CREATE DATABASE ${DB} OWNER ${USER_NAME};" || die "could not create database"
+        fi
+
+        # Isolation: revoke the implicit public grant so other projects' roles
+        # cannot connect here (SPEC section 18, "cross-access denied").
+        docker compose exec -T pg psql -U postgres -q <<SQL || die "grant setup failed"
+REVOKE ALL ON DATABASE ${DB} FROM PUBLIC;
+GRANT CONNECT, TEMPORARY ON DATABASE ${DB} TO ${USER_NAME};
+GRANT CONNECT ON DATABASE ${DB} TO ${USER_NAME}_readonly;
+SQL
+
+        extensions="$(get DBTK_PG_INIT_EXTENSIONS)"
+        if [[ -n "$extensions" ]]; then
+            old_ifs="$IFS"; IFS=','
+            for ext in $extensions; do
+                ext="${ext// /}"
+                [[ -z "$ext" ]] && continue
+                docker compose exec -T pg psql -U postgres -d "$DB" -q \
+                    -c "CREATE EXTENSION IF NOT EXISTS \"$ext\" CASCADE;" >/dev/null 2>&1 \
+                    || log "WARNING: extension $ext could not be created"
+            done
+            IFS="$old_ifs"
+            log "extensions created: $extensions"
+        fi
+
+        docker compose exec -T pg psql -U postgres -d "$DB" -q <<SQL >/dev/null 2>&1 || true
+GRANT ALL ON SCHEMA public TO ${USER_NAME};
+GRANT USAGE ON SCHEMA public TO ${USER_NAME}_readonly;
+ALTER DEFAULT PRIVILEGES FOR ROLE ${USER_NAME} IN SCHEMA public
+    GRANT SELECT ON TABLES TO ${USER_NAME}_readonly;
+SQL
+        PORT=5432; DRIVER=pgsql
+        ;;
+
+    mysql|mariadb)
+        pw_root="$(cat "secrets/${ENGINE}_root_password.txt")"
+        client="$( [[ "$ENGINE" == "mysql" ]] && printf 'mysql' || printf 'mariadb' )"
+
+        docker compose exec -T "$ENGINE" "$client" -uroot -p"$pw_root" <<SQL 2>/dev/null || die "provisioning failed"
+CREATE DATABASE IF NOT EXISTS \`${DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${USER_NAME}'@'%' IDENTIFIED BY '${PASSWORD}';
+GRANT ALL PRIVILEGES ON \`${DB}\`.* TO '${USER_NAME}'@'%';
+CREATE USER IF NOT EXISTS '${USER_NAME}_readonly'@'%' IDENTIFIED BY '${PASSWORD}';
+GRANT SELECT ON \`${DB}\`.* TO '${USER_NAME}_readonly'@'%';
+FLUSH PRIVILEGES;
+SQL
+        PORT=3306; DRIVER=mysql
+        ;;
+    *) die "unknown engine: $ENGINE" ;;
+esac
+
+log "provisioned database '$DB' owned by '$USER_NAME'"
+
+# -----------------------------------------------------------------------------
+# The paste-ready block (SPEC section 14)
+# -----------------------------------------------------------------------------
+cat <<BLOCK
+
+────────────────────────────────────────────────────────────────────────
+Paste into your Laravel .env:
+
+DB_CONNECTION=${DRIVER}
+DB_HOST=${ENGINE}
+DB_PORT=${PORT}
+DB_DATABASE=${DB}
+DB_USERNAME=${USER_NAME}
+DB_PASSWORD=$(cat "$SECRET_FILE")
+BLOCK
+
+if [[ "$ENGINE" == "pg" ]]; then
+    cat <<'BLOCK'
+
+# TLS is always on for PostgreSQL. verify-full is the only mode that checks
+# the hostname, so it is the only one worth using; point it at the toolkit CA:
+DB_SSLMODE=verify-full
+DB_SSLROOTCERT=/path/to/db-toolkit/certs/ca.crt
+BLOCK
+else
+    cat <<'BLOCK'
+
+# In the prod profile the server refuses plaintext TCP, so set:
+MYSQL_ATTR_SSL_CA=/path/to/db-toolkit/certs/ca.crt
+BLOCK
+fi
+
+cat <<BLOCK
+
+Your app container must join the toolkit network:
+
+  networks:
+    default:
+      external: true
+      name: ${COMPOSE_PROJECT_NAME:-dbtk}_net
+
+The password also lives in ${SECRET_FILE}.
+────────────────────────────────────────────────────────────────────────
+BLOCK
