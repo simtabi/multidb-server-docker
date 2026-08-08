@@ -33,7 +33,14 @@ psql_via_haproxy() {
 
 budget="$(env_get DBTK_HA_FAILOVER_BUDGET 30)"
 
-make up PROFILES=pg,ha >/dev/null 2>&1 || vfail "make up PROFILES=pg,ha failed"
+# PROFILES=ha, not pg,ha.
+#
+# HA REPLACES the standalone engine rather than joining it: HAProxy owns the
+# PostgreSQL port and routes it to whichever Patroni node is leader. Asking for
+# both binds 5432 twice, which check-env now refuses outright. Nothing below
+# asserts anything about the standalone pg service, so it was never needed --
+# it was in the profile list from before the HA services existed.
+make up PROFILES=ha >/dev/null 2>&1 || vfail "make up PROFILES=ha failed"
 add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
