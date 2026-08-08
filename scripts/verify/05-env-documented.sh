@@ -31,7 +31,7 @@ done < <(
 # The rule this check enforces is "every variable a user can meaningfully set
 # is documented", so the list is kept explicit and short rather than allowing a
 # pattern that could hide a real omission.
-INTERNAL_VARS='DBTK_ROOT|DBTK_ENV_FILE|DBTK_IMAGE_PREFIX|DBTK_ENGINE|DBTK_STAGE|DBTK_CONF_DIR|DBTK_CERT_DIR|DBTK_INITDB_DIR|DBTK_DATA_DIR|DBTK_OVERRIDE_CONF_DIR|DBTK_DAEMON|DBTK_CLIENT|DBTK_ADMIN|DBTK_CONF_SECTION|DBTK_ROOT_PW_ENV'
+INTERNAL_VARS='DBTK_ROOT|DBTK_ENV_FILE|DBTK_IMAGE_PREFIX|DBTK_ENGINE|DBTK_STAGE|DBTK_CONF_DIR|DBTK_CERT_DIR|DBTK_INITDB_DIR|DBTK_DATA_DIR|DBTK_OVERRIDE_CONF_DIR|DBTK_DAEMON|DBTK_CLIENT|DBTK_ADMIN|DBTK_CONF_SECTION|DBTK_ROOT_PW_ENV|DBTK_PG_TEST_MODE|DBTK_MYSQL_TEST_MODE|DBTK_MARIADB_TEST_MODE'
 
 # Only files that actually consume variables at runtime. Scripts under
 # scripts/verify are excluded: they name variables in order to assert on them,

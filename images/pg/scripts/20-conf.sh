@@ -67,6 +67,20 @@ conf="$DBTK_CONF_DIR/10-dbtk-generated.conf"
     case "${DBTK_PG_SHARED_PRELOAD:-}" in
         *pg_cron*) printf "cron.database_name = '%s'\n" "${POSTGRES_DB:-postgres}" ;;
     esac
+
+    # Test profile: speed over durability, set by compose.test.yml. Data loss
+    # on stop is the point (SPEC section 7), so these are safe here and
+    # catastrophic anywhere else.
+    #
+    # fsync=off alone is not enough: synchronous_commit=off removes the WAL
+    # flush wait and full_page_writes=off removes torn-page protection, both
+    # of which only buy durability the test profile has already given up.
+    if is_true "${DBTK_PG_TEST_MODE:-false}"; then
+        printf '\n# TEST PROFILE: durability deliberately disabled.\n'
+        printf 'fsync = off\n'
+        printf 'synchronous_commit = off\n'
+        printf 'full_page_writes = off\n'
+    fi
 } > "$conf"
 
 stage "wrote $conf (shared_buffers=${shared_buffers}MB, work_mem=${work_mem}MB, max_connections=$max_connections)"

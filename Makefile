@@ -12,7 +12,12 @@ COMPOSE_PROJECT_NAME ?= dbtk
 export COMPOSE_PROJECT_NAME
 
 ENV_FILE ?= .env
+ENV_FILE_PROD ?= .env.prod
 COMPOSE  := docker compose
+
+# `make init-prod ENV_FILE=path` targets a specific file; the verify harness
+# uses it to render into a temporary directory rather than the repository.
+ENV_FILE_ARG := $(if $(filter-out .env,$(ENV_FILE)),$(ENV_FILE),)
 
 # Profile selection, in precedence order: PROFILES= on the command line for a
 # single run, then DBTK_PROFILES in .env permanently, then the documented
@@ -50,7 +55,7 @@ init: ## Create .env, generate secrets and certs, run check-env
 
 .PHONY: init-prod
 init-prod: ## Render .env.prod with prod-safe values
-	$(call unimplemented,4)
+	@ENV_FILE="$(or $(ENV_FILE_ARG),$(ENV_FILE_PROD))" scripts/init --prod
 
 .PHONY: check-env
 check-env: ## Validate env: sentinels, required vars, port collisions
@@ -106,7 +111,9 @@ destroy: ## Delete data volumes (typed confirmation required)
 
 .PHONY: test-profile
 test-profile: ## Boot the tmpfs speed profile and run its checks
-	$(call unimplemented,4)
+	@printf 'TEST PROFILE: data lives on tmpfs and is DISCARDED on stop.\n'
+	@scripts/render-config
+	@$(COMPOSE) -f docker-compose.yml -f compose.test.yml up -d --wait
 
 # -----------------------------------------------------------------------------
 # Clients and provisioning

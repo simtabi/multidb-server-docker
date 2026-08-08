@@ -63,6 +63,15 @@ conf="$DBTK_CONF_DIR/10-dbtk-generated.cnf"
     if [[ "$DBTK_ENGINE" == "mysql" ]] && is_true "$(engine_env NATIVE_PASSWORD_COMPAT false)"; then
         printf 'mysql_native_password = ON\n'
     fi
+
+    # Test profile: the MySQL-family equivalents of PostgreSQL's fsync=off.
+    # Set by compose.test.yml; data loss on stop is the point (SPEC section 7).
+    if is_true "$(engine_env TEST_MODE false)"; then
+        printf '\n# TEST PROFILE: durability deliberately disabled.\n'
+        printf 'innodb_flush_log_at_trx_commit = 0\n'
+        printf 'innodb_doublewrite = 0\n'
+        printf 'sync_binlog = 0\n'
+    fi
 } > "$conf"
 
 chmod 0644 "$conf"

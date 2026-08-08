@@ -78,17 +78,43 @@ DBTK_ENV_FILE="$TARGET" "$ROOT/scripts/certs"
 # -----------------------------------------------------------------------------
 if (( PROD )); then
     printf 'applying prod-safe values\n'
+
+    # The UI password is generated here rather than left as a TODO, because
+    # check-env refuses a prod boot without an auth hash and a placeholder
+    # would simply move the failure later. The plaintext goes to secrets/ for
+    # the operator; only the bcrypt hash reaches the env file.
+    gen_secret ui_password.txt
+    ui_password="$(cat "$ROOT/secrets/ui_password.txt")"
+
+    caddy_image="$(awk '/image: caddy:/ {print $2; exit}' "$ROOT/docker-compose.yml")"
+    ui_hash="$(docker run --rm "$caddy_image" caddy hash-password --plaintext "$ui_password" 2>/dev/null || true)"
+    if [[ -z "$ui_hash" ]]; then
+        printf '  could not compute the UI password hash (is docker running?)\n' >&2
+        printf '  set DBTK_UI_BASIC_AUTH_HASH manually: caddy hash-password\n' >&2
+        exit 1
+    fi
+
     # BSD and GNU sed disagree about -i, so edit through a temporary file.
     tmp="$(mktemp)"
     sed -e 's|^DBTK_TLS_ENFORCE=.*|DBTK_TLS_ENFORCE=true|' \
         -e 's|^DBTK_PROFILES=.*|DBTK_PROFILES=pg,prod,backup|' \
         -e 's|^DBTK_PG_SLOW_MS=.*|DBTK_PG_SLOW_MS=0|' \
+        -e 's|^DBTK_MYSQL_SLOW_SECONDS=.*|DBTK_MYSQL_SLOW_SECONDS=0|' \
+        -e 's|^DBTK_MARIADB_SLOW_SECONDS=.*|DBTK_MARIADB_SLOW_SECONDS=0|' \
         -e 's|^DBTK_BACKUP_ENCRYPT=.*|DBTK_BACKUP_ENCRYPT=true|' \
         -e 's|^#DBTK_PG_HOST_PORT=.*|#DBTK_PG_HOST_PORT=|' \
+        -e "s|^#*DBTK_UI_BASIC_AUTH_USER=.*|DBTK_UI_BASIC_AUTH_USER=admin|" \
+        -e "s|^#*DBTK_UI_BASIC_AUTH_HASH=.*|DBTK_UI_BASIC_AUTH_HASH=${ui_hash//|/\\|}|" \
         "$TARGET" > "$tmp"
     mv "$tmp" "$TARGET"
+
     printf '  TLS enforced, no engine ports published, backups encrypted\n'
-    printf '  set DBTK_UI_BASIC_AUTH_USER and _HASH before starting: caddy hash-password\n'
+    printf '  UI login: admin / (see secrets/ui_password.txt)\n'
+    printf '\n'
+    # shellcheck disable=SC2016  # backticks are prose here, not substitution
+    printf '  STILL REQUIRED before `make up`: set DBTK_CADDY_ACME_EMAIL in %s.\n' "${TARGET#"$ROOT"/}"
+    printf '  Without it the prod Caddy config refuses to render, rather than\n'
+    printf '  publishing a UI with no certificate.\n'
 fi
 
 # -----------------------------------------------------------------------------
