@@ -1,0 +1,42 @@
+# db-toolkit web front door — DEV.
+#
+# Rendered by scripts/env-render; edit this template, not the rendered file.
+# The prod configuration is a separate template (Caddyfile.prod.tmpl) rather
+# than a set of conditionals here, because dev and prod genuinely differ:
+# prod REQUIRES basic auth and a real certificate authority, and check-env
+# refuses a prod boot without them. Two clear files beat one clever one.
+#
+# *.localhost resolves to 127.0.0.1 with no hosts-file edit, and Caddy's
+# internal CA issues certificates automatically, so every UI is HTTPS from the
+# first boot with nothing to configure.
+#
+# These certificates are for the web UIs only. Database TLS is a separate
+# concern with its own CA (SPEC section 9.1); engines never share these certs.
+
+{
+	admin off
+}
+
+(dbtk_ui) {
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+}
+
+adminer.${DBTK_UI_DOMAIN:-db.localhost} {
+	import dbtk_ui
+	reverse_proxy adminer:8080
+}
+
+pma.${DBTK_UI_DOMAIN:-db.localhost} {
+	import dbtk_ui
+	reverse_proxy phpmyadmin:80
+}
+
+pgadmin.${DBTK_UI_DOMAIN:-db.localhost} {
+	import dbtk_ui
+	reverse_proxy pgadmin:80
+}

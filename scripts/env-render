@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+#
+# The single interpolation path for every templated file (SPEC section 13):
+# the Caddyfile, conf.d fragments, pg_hba, pgAdmin's servers.json.
+#
+# Three properties make it safe to use everywhere:
+#
+#   1. It supports ${VAR} and ${VAR:-default}.
+#   2. It HARD-FAILS with a list of every required-but-unset variable, rather
+#      than emitting a half-rendered file that fails much later and further
+#      away. A template that references ${FOO} with no default and no value is
+#      an error, not an empty string.
+#   3. It refuses to write a secret VALUE into a rendered file. Secrets stay
+#      _FILE references end to end, so a rendered Caddyfile or servers.json is
+#      safe to leave world-readable.
+#
+# Usage: scripts/env-render <template> [output]
+#        (writes to stdout when no output is given)
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+
+template="${1:-}"
+output="${2:-}"
+
+[[ -n "$template" ]] || { printf 'usage: env-render <template> [output]\n' >&2; exit 1; }
+[[ -f "$template" ]] || { printf 'env-render: no such template: %s\n' "$template" >&2; exit 1; }
+
+# Load the environment file so templates can reference DBTK_* directly.
+# `set -a` exports everything defined while it is active.
+set -a
+# shellcheck disable=SC1090  # path is chosen at runtime
+source "$ENV_FILE"
+set +a
+
+# -----------------------------------------------------------------------------
+# Refuse to interpolate a secret value.
+# -----------------------------------------------------------------------------
+# A template may reference ${DBTK_X_PASSWORD_FILE} (a path) but never
+# ${DBTK_X_PASSWORD} (a value). Catching it here means a rendered artefact can
+# never become the place a credential leaks.
+while IFS= read -r var; do
+    case "$var" in
+        *_FILE) continue ;;
+        *PASSWORD|*PASSWD|*SECRET|*PASSPHRASE|*ACCESS_KEY|*PRIVATE_KEY)
+            printf 'env-render: %s references %s, which is a secret VALUE.\n' "$template" "$var" >&2
+            printf '            Use %s_FILE and read the file at runtime instead.\n' "$var" >&2
+            exit 1
+            ;;
+    esac
+done < <(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' "$template" | sed 's/^\${//' | sort -u)
+
+# -----------------------------------------------------------------------------
+# Collect variables that are referenced without a default and are unset.
+# -----------------------------------------------------------------------------
+missing=()
+while IFS= read -r var; do
+    [[ -z "$var" ]] && continue
+    # A reference that carries its own handling is not "required":
+    #   ${VAR:-default} / ${VAR-default}  supply a fallback when unset
+    #   ${VAR:+alt}     / ${VAR+alt}      emit nothing when unset, which is how
+    #                                     optional blocks (ACME email, basic
+    #                                     auth) disappear cleanly in dev
+    if grep -qE "\\\$\{${var}:?[-+]" "$template"; then
+        continue
+    fi
+    if [[ -z "${!var:-}" ]]; then
+        missing+=("$var")
+    fi
+done < <(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' "$template" | sed 's/^\${//' | sort -u)
+
+if (( ${#missing[@]} )); then
+    printf 'env-render: %s requires variables that are not set:\n' "$template" >&2
+    for m in "${missing[@]}"; do printf '  %s\n' "$m" >&2; done
+    # shellcheck disable=SC2016  # ${VAR:-default} is literal syntax being shown to the user
+    printf 'Set them in %s or give the template a ${VAR:-default}.\n' "${ENV_FILE#"$ROOT"/}" >&2
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Render.
+# -----------------------------------------------------------------------------
+# envsubst does not understand ${VAR:-default}, so the substitution is done by
+# the shell. The template is read as a single quoted here-doc expansion, which
+# expands parameters but not command substitution or backticks -- so a template
+# cannot execute anything.
+# The whole file is rendered in one pass, not line by line: an optional block
+# written as ${VAR:+...} legitimately spans several lines, and a per-line eval
+# would split it and die on an unterminated quote.
+render() {
+    local content
+    content="$(cat "$template")"
+
+    # Escape everything that would otherwise be interpreted, leaving ${...}
+    # intact so parameter expansion is the ONLY thing a template can do.
+    content="${content//\\/\\\\}"
+    content="${content//\"/\\\"}"
+    content="${content//\`/\\\`}"
+    content="${content//\$(/\\\$(}"
+
+    eval "printf '%s\n' \"$content\""
+}
+
+if [[ -n "$output" ]]; then
+    tmp="$(mktemp)"
+    render > "$tmp"
+    mv "$tmp" "$output"
+    chmod 0644 "$output"
+    printf 'rendered %s -> %s\n' "${template#"$ROOT"/}" "${output#"$ROOT"/}"
+else
+    render
+fi

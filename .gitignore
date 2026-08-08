@@ -23,3 +23,7 @@ build/dist/
 # OS noise.
 .DS_Store
 Thumbs.db
+
+# Rendered from templates by scripts/env-render; the templates are the source.
+caddy/Caddyfile
+caddy/servers.json

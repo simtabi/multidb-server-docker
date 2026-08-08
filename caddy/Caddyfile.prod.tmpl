@@ -1,0 +1,47 @@
+# db-toolkit web front door — PROD.
+#
+# In production Caddy is the ONLY service with a published port: engines and
+# UIs are reachable only through here, on the internal network
+# (SPEC section 7).
+#
+# Every variable below is required, with no default. That is deliberate: a
+# missing ACME email or auth hash must fail at render time, not silently
+# produce a publicly exposed UI with no password. env-render lists whatever is
+# missing and exits nonzero.
+
+{
+	email ${DBTK_CADDY_ACME_EMAIL}
+	admin off
+}
+
+(dbtk_ui) {
+	# The value is a bcrypt hash from `caddy hash-password`, never a plaintext
+	# password, which is what makes this rendered file safe to leave
+	# world-readable.
+	basic_auth {
+		${DBTK_UI_BASIC_AUTH_USER} ${DBTK_UI_BASIC_AUTH_HASH}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+}
+
+adminer.${DBTK_UI_DOMAIN} {
+	import dbtk_ui
+	reverse_proxy adminer:8080
+}
+
+pma.${DBTK_UI_DOMAIN} {
+	import dbtk_ui
+	reverse_proxy phpmyadmin:80
+}
+
+pgadmin.${DBTK_UI_DOMAIN} {
+	import dbtk_ui
+	reverse_proxy pgadmin:80
+}

@@ -25,15 +25,33 @@ wait_for 90 "caddy to start" bash -c \
     'docker compose ps --format "{{.Service}}" | grep -q "^caddy$"'
 
 # Each UI must answer over HTTPS through Caddy. Caddy's internal CA is not in
-# any trust store, so -k is correct here; what we assert is that TLS is served
-# and the app responds, not that the local CA chains to a public root.
-for ui in adminer pgadmin pma; do
-    code="$(docker compose exec -T caddy \
+# any trust store, so --no-check-certificate is correct here; what is asserted
+# is that TLS is served and the app responds, not that the local CA chains to a
+# public root.
+#
+# "Container running" is NOT readiness: pgAdmin's container reports running
+# roughly 25 seconds before gunicorn starts listening, and Caddy answers 502 in
+# the meantime. So each route is polled until it answers, with a budget -- a UI
+# that never comes up still fails.
+ui_status() {
+    docker compose exec -T caddy \
         wget -qO /dev/null --no-check-certificate --server-response \
-        "https://${ui}.${domain}/" 2>&1 | awk '/HTTP\//{print $2}' | tail -1 || true)"
+        "https://${1}.${domain}/" 2>&1 \
+        | awk '$1 ~ /^HTTP\// {print $2}' | tail -1
+}
+
+for ui in adminer pgadmin pma; do
+    code=""
+    for _ in $(seq 1 60); do
+        code="$(ui_status "$ui" || true)"
+        case "$code" in
+            200|301|302) break ;;
+        esac
+        sleep 2
+    done
     case "$code" in
         200|301|302) vinfo "https://${ui}.${domain} -> $code" ;;
-        *) vfail "https://${ui}.${domain} returned '${code:-no response}'" ;;
+        *) vfail "https://${ui}.${domain} returned '${code:-no response}' after 120s" ;;
     esac
 done
 

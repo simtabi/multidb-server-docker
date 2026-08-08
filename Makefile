@@ -76,9 +76,14 @@ rotate-secrets: ## Rotate every database password and secret file, applied live
 # Lifecycle
 # -----------------------------------------------------------------------------
 
+.PHONY: render
+render: ## Render every templated file (Caddyfile, pgAdmin servers.json)
+	@scripts/render-config
+
 .PHONY: up
 up: ## Boot the stack (never touches data)
 	@scripts/check-env --quiet
+	@scripts/render-config
 	@$(COMPOSE) up -d --wait
 
 .PHONY: down

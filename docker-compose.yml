@@ -197,6 +197,60 @@ services:
     networks: [dbtk]
     logging: *default-logging
 
+  # ---------------------------------------------------------------------------
+  # pgAdmin — pre-provisioned with the toolkit's PostgreSQL
+  # ---------------------------------------------------------------------------
+  pgadmin:
+    profiles: [ui]
+    image: dpage/pgadmin4:9.9@sha256:5d9624a93634d1c5e595619cc57b1d330758120d1baf445fa97300c0c1fc3c0a
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${DBTK_PGADMIN_EMAIL:-admin@db.localhost}
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_password.txt
+      PGADMIN_LISTEN_PORT: "80"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      # pgAdmin validates the login address and rejects reserved special-use
+      # domains, so the natural admin@db.localhost default makes it crash-loop
+      # on first boot with "does not appear to be a valid email address".
+      # This is the supported allowlist for exactly that case.
+      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['${DBTK_UI_DOMAIN:-db.localhost}','localhost']"
+    volumes:
+      # Rendered by scripts/env-render so the UI opens with the server already
+      # listed rather than asking for a hostname (SPEC section 7).
+      - ./caddy/servers.json:/pgadmin4/servers.json:ro
+      - ./secrets:/run/secrets:ro
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_PGADMIN_HOST_PORT:-8082}:80"
+    networks: [dbtk]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Caddy — the web front door, and in prod the only published service
+  # ---------------------------------------------------------------------------
+  caddy:
+    profiles: [ui, prod]
+    image: caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    restart: unless-stopped
+    <<: *hardening
+    # Binding 80/443 needs this one capability back; everything else stays
+    # dropped.
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      # Rendered from caddy/Caddyfile.tmpl (dev) or Caddyfile.prod.tmpl (prod).
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persisted so the internal CA and any issued certificates survive a
+      # restart; without this every `make up` would mint a new local CA and
+      # browsers would warn again each time.
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_CADDY_HTTP_PORT:-80}:80"
+      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_CADDY_HTTPS_PORT:-443}:443"
+    networks: [dbtk]
+    logging: *default-logging
+
 networks:
   dbtk:
     name: ${COMPOSE_PROJECT_NAME:-dbtk}_net
@@ -215,3 +269,9 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME:-dbtk}_mysql${DBTK_MYSQL_VERSION:-8.4}_data
   mariadb_data:
     name: ${COMPOSE_PROJECT_NAME:-dbtk}_mariadb${DBTK_MARIADB_VERSION:-11.4}_data
+  pgadmin_data:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_pgadmin_data
+  caddy_data:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_caddy_data
+  caddy_config:
+    name: ${COMPOSE_PROJECT_NAME:-dbtk}_caddy_config
