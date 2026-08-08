@@ -6,13 +6,13 @@ quarters of a lie.
 
 ## The short version
 
-| Engine | What to use | Required? |
-|---|---|---|
-| PostgreSQL | pgBouncer | **Yes, in production** |
-| MySQL / MariaDB | ProxySQL | Optional |
-| MongoDB | The driver | Never use a proxy |
-| Cassandra | The driver | Never use a proxy |
-| FerretDB | The driver | Never use a proxy |
+| Engine | What to use | Required? | Shipped |
+|---|---|---|---|
+| PostgreSQL | pgBouncer | **Yes, in production** | Yes — `PROFILES=pg,pooler` |
+| MySQL / MariaDB | ProxySQL | Optional | Declared, not yet wired |
+| MongoDB | The driver | Never use a proxy | n/a |
+| Cassandra | The driver | Never use a proxy | n/a |
+| FerretDB | The driver | Never use a proxy | n/a |
 
 ## PostgreSQL: pooling is survival
 
@@ -33,11 +33,43 @@ So pgBouncer is **mandatory** under the prod profile, and `check-env` refuses to
 start a prod stack without it. Your application opens a thousand connections to
 pgBouncer; pgBouncer keeps twenty-five to PostgreSQL.
 
+```bash
+make up PROFILES=pg,pooler
+```
+
+Then connect to **6432** instead of 5432 — that is the only application change.
+
 ```
 DBTK_PGBOUNCER_POOL_MODE=transaction
 DBTK_PGBOUNCER_DEFAULT_POOL_SIZE=25
 DBTK_PGBOUNCER_MAX_CLIENT_CONN=1000
 ```
+
+### The pooler holds no application passwords
+
+A pooler has to authenticate clients, and the obvious way — give it a list of
+users and passwords — makes it a second place every credential lives. This one
+does not do that. It has a login role of its own, and resolves everyone else's
+verifier on demand:
+
+```sql
+SELECT username, password FROM pgbouncer.get_auth($1)
+```
+
+`pgbouncer.get_auth` is a `SECURITY DEFINER` function that returns exactly one
+row for the name it is given and **excludes superusers**, so compromising the
+pooler yields one credential rather than all of them. Its `search_path` is
+pinned to `pg_catalog`, because a `SECURITY DEFINER` function that resolves
+unqualified names through the caller's path is a privilege-escalation bug.
+
+The function is created by a convergence stage that runs on **every** start, not
+only at first init, so you can enable the pooler on a volume created months ago
+without destroying data to get it.
+
+Check 33 asserts all of this behaviourally: that a user authenticates through
+the pooler, that the pooler's userlist does not contain that user's password,
+that eight clients collapse onto a pool of two, and that a wrong password is
+still refused.
 
 **Transaction pooling has rules.** A server connection is returned to the pool
 at the end of every transaction, so anything that lives on a *session* breaks:
@@ -64,6 +96,20 @@ scaling aid rather than a rescue.
 ProxySQL is offered because it brings more than pooling — query routing,
 read/write splitting, query rules — and those are the reasons to adopt it. If
 all you want is fewer connections, raise `max_connections` first and measure.
+
+**It is declared in the descriptors but not yet wired**, and the reason is worth
+stating rather than hiding. ProxySQL has no equivalent of pgBouncer's
+`auth_query`: it needs each application user's password (or its hash) in its own
+configuration. Shipping that by default would take the property the PostgreSQL
+pooler goes to some trouble to preserve — that a compromised pooler yields one
+credential, not all of them — and quietly give it up on the engine where pooling
+is not even necessary. So it waits for a design that does not, and until then
+the descriptor names the image and the generator emits nothing.
+
+That is also why the generator gates on a `compose-pooler.yml` existing rather
+than on `POOLING=external`. Declaring an image is not the same as having
+configured it, and a pooler that starts but cannot authenticate is worse than no
+pooler, because it looks present.
 
 ## MongoDB, Cassandra, FerretDB: the driver already does it
 

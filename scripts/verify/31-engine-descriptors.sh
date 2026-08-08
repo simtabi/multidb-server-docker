@@ -98,6 +98,14 @@ for e in $engines; do
         vinfo "$DBTK_ENGINE_NAME: upstream ships auth OFF; the image must enable it"
     fi
 
+    # Every engine gets a mounted overrides directory, so every engine must have
+    # one in the repository. A bind mount whose host path does not exist is not
+    # an error -- Docker creates it, owned by root -- so the engine starts, the
+    # operator's config fragment silently cannot be written there, and nothing
+    # ever says why. Cassandra and FerretDB shipped without theirs.
+    [[ -d "$DBTK_ROOT/overrides/$DBTK_ENGINE_NAME" ]] \
+        || vfail "overrides/$DBTK_ENGINE_NAME/ is missing; the generated compose file mounts it"
+
     count=$(( count + 1 ))
     vinfo "$(printf '%-10s %-12s pooling=%-9s %s' \
         "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_PARADIGM" "$DBTK_ENGINE_POOLING" "$DBTK_ENGINE_LICENSE")"

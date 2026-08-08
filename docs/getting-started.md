@@ -1,0 +1,110 @@
+# Getting started
+
+From a fresh clone to an application talking to a database, in about a minute.
+
+Assumes [installation](installation.md) is done and `make verify-structure`
+passes.
+
+## 1. Start what you need
+
+```bash
+make up PROFILES=pg,ui
+```
+
+Profiles are opt-in, one per engine, so a laptop is never running six databases
+to serve one project. Available: `pg`, `mysql`, `mariadb`, `mongodb`,
+`cassandra`, `ferretdb`, plus `ui`, `pooler`, `backup`, `metrics` and `prod`.
+
+```bash
+make status
+```
+
+## 2. Provision a project
+
+```bash
+make new-project NAME=myapp
+```
+
+That one command creates the database, an owner role with least privilege, a
+read-only companion role, the configured extensions, and prints a paste-ready
+connection block:
+
+```
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=myapp
+DB_USERNAME=myapp
+DB_PASSWORD=... (from secrets/pg_myapp_password.txt)
+```
+
+The password is generated, written to `secrets/`, and never printed into a file
+the repository tracks.
+
+For another engine:
+
+```bash
+make new-project NAME=myapp ENGINE=mysql
+```
+
+> `new-project` currently supports `pg`, `mysql` and `mariadb`. For MongoDB,
+> Cassandra and FerretDB, declare projects with the engine's `_DATABASES`
+> variable in `.env` — see [Configuration](configuration.md) — and they are
+> created on start.
+
+## 3. Connect
+
+A shell, without needing a client installed on your machine:
+
+```bash
+make psql                    # as the superuser
+make psql USER_NAME=myapp    # as the project role
+make mysql
+make mariadb
+```
+
+These connect over the unix socket rather than TCP — faster, and it removes a
+network surface entirely.
+
+Or point any GUI at `127.0.0.1` on the engine's port. Ports bind to loopback
+only by default, which is deliberate: an engine that is reachable from the
+network the moment it starts is how development databases end up on the
+internet.
+
+The browser UIs are on <http://localhost:8080> under the `ui` profile — Adminer
+for the SQL engines, plus per-engine consoles.
+
+## 4. Isolation is real, and worth confirming
+
+Roles cannot reach each other's databases. That is not a convention here, it is
+enforced and tested — `myapp` connecting to `otherapp` is refused. If you have
+two projects, try it; the harness does.
+
+## 5. Back up before you need to
+
+```bash
+make backup ENGINE=pg DB=myapp     # one database
+make backup-all                    # every database on every running engine
+make verify-backups                # restore them into throwaway containers
+```
+
+`verify-backups` is the one that matters. It restores the latest dumps into
+disposable containers and asserts the row counts came back, because a backup
+nobody has restored is a hypothesis. Run it before you rely on the backups, not
+after you need them.
+
+## Where to go next
+
+| You want to | Read |
+|---|---|
+| Understand every setting | [Configuration](configuration.md) |
+| Put this on a VPS | [Operations](OPERATIONS.md) |
+| Handle a thousand connections | [Connection pooling](pooling.md) |
+| Restore under pressure | [Restore](RESTORE.md) |
+| Move an existing database in | [Onboarding](ONBOARDING.md) |
+| Change PostgreSQL major version | [Upgrade](UPGRADE.md) |
+| Add a database engine | [Adding an engine](adding-an-engine.md) |
+
+---
+
+[← Docs index](../README.md#documentation)

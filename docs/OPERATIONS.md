@@ -1,0 +1,207 @@
+# Operations
+
+Running this on a server rather than a laptop: exposure, tuning, monitoring,
+rotation and high availability.
+
+## The prod profile is the entry point
+
+```bash
+make init-prod
+make up PROFILES=pg,pooler,backup,metrics,prod
+```
+
+`prod` is not decoration. `check-env` refuses to start the stack if:
+
+- `DBTK_TLS_ENFORCE` is not `true`
+- an engine that requires a pooler does not have one
+- a UI route is exposed without basic auth
+
+These are refusals, not warnings, because every one of them is a mistake that
+looks fine until it is on the internet.
+
+## Exposure
+
+The default binds every engine to `127.0.0.1`. On a server, the question is not
+"which port do I open" but "should this port be reachable at all".
+
+**Preferred: do not expose the database.** Reach it over an SSH tunnel or a
+private network, and leave `DBTK_BIND_ADDR=127.0.0.1`.
+
+```bash
+ssh -L 5432:127.0.0.1:5432 you@server
+```
+
+**If you must expose it**, set `DBTK_BIND_ADDR` to a specific private address —
+never `0.0.0.0` — enforce TLS, and put a firewall in front. Docker publishes
+ports by writing DNAT rules that most firewall front-ends do not show you, so a
+`ufw` rule that looks like it blocks the port frequently does not.
+
+```
+DBTK_BIND_ADDR=10.0.1.5
+DBTK_TLS_ENFORCE=true
+DBTK_MTLS=true
+```
+
+`DBTK_MTLS=true` requires client certificates. On an exposed database it is
+worth the setup.
+
+The UIs go behind Caddy with basic auth on `DBTK_CADDY_BIND_ADDR`, and the prod
+profile will not start without the auth hash set.
+
+## Tuning
+
+```
+DBTK_MEM=16
+DBTK_CPUS=8
+```
+
+Engines derive their settings from these — shared buffers, work memory, the
+InnoDB buffer pool, WAL sizing. Set the budget, not thirty individual knobs.
+
+Give the *database's* share, not the machine's total. On a 32 GB server also
+running your application, `DBTK_MEM=16` is honest and `DBTK_MEM=32` will get
+something OOM-killed.
+
+Per-service hard ceilings:
+
+```
+DBTK_PG_CPU_LIMIT=4
+DBTK_PG_MEM_LIMIT=16g
+```
+
+Cassandra sets its heap explicitly, because the JVM does not take a hint:
+
+```
+DBTK_CASSANDRA_HEAP=8G
+DBTK_CASSANDRA_HEAP_NEW=800M
+```
+
+## Connection pooling
+
+On a server this stops being optional for PostgreSQL. See
+[Connection pooling](pooling.md) for why, and for what transaction pooling
+breaks. Short version:
+
+```bash
+make up PROFILES=pg,pooler
+```
+
+Point applications at **6432**.
+
+## Backups
+
+```
+DBTK_BACKUP_DIR=backups
+DBTK_BACKUP_SCHEDULE=0300
+DBTK_BACKUP_COMPRESSION=ZSTD
+DBTK_BACKUP_ENCRYPT=true
+DBTK_BACKUP_ENCRYPT_PASSPHRASE_FILE=secrets/backup_passphrase.txt
+DBTK_BACKUP_RETAIN_DAILY=7
+DBTK_BACKUP_RETAIN_WEEKLY=4
+DBTK_BACKUP_RETAIN_MONTHLY=6
+DBTK_BACKUP_NOTIFY_URL=https://...
+```
+
+Two things that are not optional on a server:
+
+**Get them off the machine.** A backup on the machine that failed is not a
+backup — and the toolkit does **not** do this for you. There is no destination
+setting: the backup sidecar writes to `DBTK_BACKUP_DIR` and stops there.
+Shipping that directory somewhere else is yours to arrange, with restic, rclone,
+`aws s3 sync`, or a snapshot of the volume. Set `DBTK_BACKUP_ENCRYPT=true`
+before it leaves the machine.
+
+This is a deliberate boundary rather than an omission — a dozen half-supported
+storage backends age badly — but it does mean an operator who configures nothing
+else has local-only backups.
+
+**Scheduled verification.** `make verify-backups` restores the latest set into
+throwaway containers and asserts the row counts. Put it on a schedule and alert
+on failure via `DBTK_BACKUP_NOTIFY_URL`. An unverified backup is a hypothesis,
+and the moment you need it is the worst possible time to test it.
+
+## Monitoring
+
+```bash
+make up PROFILES=pg,metrics
+```
+
+Prometheus exporters per engine, on the metrics network. Scrape them with your
+existing Prometheus; nothing here assumes it owns your monitoring stack.
+
+Worth alerting on, in rough order of how often each one is what actually went
+wrong:
+
+| Signal | Why |
+|---|---|
+| disk free on the data volume | the most common cause of a database that stops |
+| connection count vs `max_connections` | you are about to refuse connections |
+| replication lag | a replica that is silently far behind is not a replica |
+| backup job success **and** verification success | the second one is the one that matters |
+| oldest transaction age | long-running transactions block vacuum and grow the disk |
+
+## Rotating secrets and certificates
+
+```bash
+make rotate-secrets     # every database password, applied to running engines
+make certs-renew        # server certificates, reloaded without downtime
+```
+
+`rotate-secrets` changes the password in the engine and in `secrets/` together,
+then verifies the old one no longer works. That verification exists because it
+once did not: loopback connections were being trusted by `pg_hba.conf`, so
+rotation "succeeded" while the old password kept working. Check 30 now fails the
+build on any trust rule anywhere.
+
+Applications reading passwords from `secrets/` at startup need a restart after
+rotation.
+
+## High availability
+
+For PostgreSQL, `DBTK_HA_ENABLE=true` brings up Patroni with etcd and HAProxy.
+
+```
+DBTK_HA_ENABLE=true
+DBTK_HA_CLUSTER_NAME=dbtk-pg
+DBTK_HA_ETCD_HOSTS=etcd1:2379,etcd2:2379,etcd3:2379
+DBTK_HAPROXY_WRITE_PORT=5432
+DBTK_HAPROXY_READ_PORT=5433
+```
+
+**etcd needs at least three nodes.** A two-node etcd has *lower* availability
+than a single node, because it cannot form a majority after losing one. If you
+are not going to run three, do not enable HA — run one well-backed-up node and
+be honest about the recovery time.
+
+HAProxy routes by Patroni's REST health check: the write port follows the
+primary, the read port the replicas.
+
+```bash
+make ha-status        # topology and replication lag
+make ha-failover      # controlled switchover, typed confirmation
+make ha-reinit NODE=  # rebuild a replica from the pgBackRest repo
+```
+
+`DBTK_PG_SYNC_MODE=on` gives zero data loss on failover, at the cost of every
+commit waiting for a replica. That is a real latency cost, and the right answer
+depends on your data. Choose it deliberately.
+
+MongoDB and Cassandra have their own replication models and are not covered by
+this; a single-node Cassandra with RF=1 is a development setup, not a cluster.
+
+## Upgrades and updates
+
+```bash
+make self-update      # the toolkit itself; never touches project data
+```
+
+Database version upgrades are [their own runbook](UPGRADE.md).
+
+## When something breaks
+
+[Restore](RESTORE.md) is the runbook, and its first section is about not
+restoring until you know which problem you have.
+
+---
+
+[← Docs index](../README.md#documentation)
