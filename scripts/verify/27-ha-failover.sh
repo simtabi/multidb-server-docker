@@ -15,6 +15,22 @@ cd "$DBTK_ROOT" || exit 1
 
 need_file "$DBTK_ROOT/docker-compose.yml"
 
+# A psql that does not depend on which other services happen to be running.
+#
+# This used to run `docker compose exec -T pgbouncer psql ...`, from a time when
+# a hand-written service by that name was assumed. The pooler is generated from
+# the descriptors now and is called pg-pooler, and the pgBouncer image has no
+# psql in it anyway. Using the engine image with --entrypoint psql bypasses its
+# s6 entrypoint, which would otherwise wrap every result in supervision logging.
+psql_via_haproxy() {
+    local port="$1" sql="$2" net
+    net="$(docker network ls --format '{{.Name}}' | grep -E '_(dbtk|net)$|dbtk' | head -1)"
+    docker run --rm --network "${net:-dbtk_net}" \
+        --entrypoint psql "$(image_name pg)" \
+        "host=haproxy port=${port} user=postgres" \
+        -tAc "$sql" 2>/dev/null | tr -d ' \r' || true
+}
+
 budget="$(env_get DBTK_HA_FAILOVER_BUDGET 30)"
 
 make up PROFILES=pg,ha >/dev/null 2>&1 || vfail "make up PROFILES=pg,ha failed"
@@ -61,13 +77,13 @@ vinfo "new leader $elected elected in ${elapsed}s (budget ${budget}s)"
 wait_for "$budget" "the write port to accept a write" bash -c \
     'docker compose exec -T haproxy sh -c "true"'
 
-writable="$(docker compose exec -T pgbouncer psql "host=haproxy port=${DBTK_HAPROXY_WRITE_PORT:-5432} user=postgres" \
-    -tAc "SELECT NOT pg_is_in_recovery()" 2>/dev/null | tr -d ' \r' || true)"
+writable="$(psql_via_haproxy "${DBTK_HAPROXY_WRITE_PORT:-5432}" \
+    "SELECT NOT pg_is_in_recovery()")"
 [[ "$writable" == "t" ]] || vfail "the write port does not route to a writable primary after failover"
 vinfo "write port follows the new leader"
 
 # The read port must serve replicas only.
-in_recovery="$(docker compose exec -T pgbouncer psql "host=haproxy port=${DBTK_HAPROXY_READ_PORT:-5433} user=postgres" \
-    -tAc "SELECT pg_is_in_recovery()" 2>/dev/null | tr -d ' \r' || true)"
+in_recovery="$(psql_via_haproxy "${DBTK_HAPROXY_READ_PORT:-5433}" \
+    "SELECT pg_is_in_recovery()")"
 [[ "$in_recovery" == "t" ]] || vfail "the read port served a primary; it must serve replicas only"
 vinfo "read port serves replicas only"
