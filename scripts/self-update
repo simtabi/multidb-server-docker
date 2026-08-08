@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# Update the toolkit itself. Never touches project data (SPEC section 15).
+#
+# The whole point is that it is safe to run without thinking about it, so it
+# refuses to proceed if you have local changes that would be clobbered, and it
+# surfaces the CHANGELOG entries between where you were and where you are going
+# BEFORE pulling images -- migration notes are useless after the fact.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+log() { printf '[self-update] %s\n' "$*"; }
+die() { printf '[self-update] ERROR: %s\n' "$*" >&2; exit 1; }
+
+[[ -d .git ]] || die "not a git checkout; update by pulling a new copy of the repository"
+
+# Uncommitted work would be lost or would block the merge halfway through.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    printf '\n'
+    git status --short | sed 's/^/  /'
+    printf '\n'
+    die "you have uncommitted changes. Commit or stash them first."
+fi
+
+before="$(git rev-parse HEAD)"
+
+log "fetching"
+git fetch --quiet origin || die "could not fetch; check your network and remote"
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+upstream="origin/$branch"
+
+git rev-parse --verify --quiet "$upstream" >/dev/null \
+    || die "no upstream branch $upstream"
+
+if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "$upstream")" ]]; then
+    log "already up to date"
+else
+    # --ff-only: a merge commit here would mean local commits nobody asked for.
+    git merge --ff-only "$upstream" --quiet \
+        || die "cannot fast-forward; your branch has diverged from $upstream"
+    after="$(git rev-parse HEAD)"
+    log "updated $(git rev-parse --short "$before") -> $(git rev-parse --short "$after")"
+
+    # ---------------------------------------------------------------------
+    # Migration notes, surfaced before anything is pulled or rebuilt.
+    # ---------------------------------------------------------------------
+    if [[ -f CHANGELOG.md ]]; then
+        notes="$(git diff "$before..HEAD" -- CHANGELOG.md | grep -E '^\+' | grep -vE '^\+\+\+' | sed 's/^+//' || true)"
+        if [[ -n "$notes" ]]; then
+            printf '\n────────────────── CHANGELOG since your version ──────────────────\n'
+            printf '%s\n' "$notes"
+            printf '──────────────────────────────────────────────────────────────────\n\n'
+        fi
+    fi
+fi
+
+# -----------------------------------------------------------------------------
+# Images. Pulling and rebuilding touches no volume, so project data is safe.
+# -----------------------------------------------------------------------------
+log "pulling upstream images"
+docker compose --profile '*' pull --quiet 2>/dev/null || log "some images could not be pulled (they may be built locally)"
+
+log "rebuilding local images"
+scripts/build || die "image build failed"
+
+cat <<'DONE'
+
+────────────────────────────────────────────────────────────────────────
+Toolkit updated. No data volume was touched.
+
+  make check-env    confirm your .env still satisfies the current schema
+  make up           restart on the new images
+  make verify       run the acceptance harness against your setup
+────────────────────────────────────────────────────────────────────────
+DONE

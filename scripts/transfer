@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# Move data in and out of the toolkit (SPEC section 15.1: make import/export).
+#
+# One script, two directions, because they are the same operation with the
+# arrows reversed and splitting them would let the formats drift apart.
+#
+# Export is a thin wrapper over scripts/backup and import over scripts/restore,
+# deliberately: those two are where the dump flags live, and the whole point of
+# "one dump helper" is that nothing else grows its own copy of them.
+#
+# Usage:
+#   scripts/transfer export --engine pg --db mydb [--to /path/file]
+#   scripts/transfer import --engine pg --db mydb --from /path/file
+#   scripts/transfer import --engine pg --db mydb --from-host HOST --from-user U
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+log() { printf '[transfer] %s\n' "$*"; }
+die() { printf '[transfer] ERROR: %s\n' "$*" >&2; exit 1; }
+
+DIRECTION="${1:-}"; shift || true
+[[ "$DIRECTION" == "import" || "$DIRECTION" == "export" ]] \
+    || die "first argument must be 'import' or 'export'"
+
+ENGINE=""; DB=""; FILE=""; FROM_HOST=""; FROM_USER=""
+while (( $# )); do
+    case "$1" in
+        --engine)    ENGINE="${2:-}"; shift 2 ;;
+        --db)        DB="${2:-}"; shift 2 ;;
+        --to|--from) FILE="${2:-}"; shift 2 ;;
+        --from-host) FROM_HOST="${2:-}"; shift 2 ;;
+        --from-user) FROM_USER="${2:-}"; shift 2 ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+[[ -n "$ENGINE" ]] || die "specify --engine <pg|mysql|mariadb>"
+[[ -n "$DB" ]]     || die "specify --db <name>"
+
+if [[ "$DIRECTION" == "export" ]]; then
+    log "exporting $ENGINE database '$DB'"
+    scripts/backup --engine "$ENGINE" --db "$DB"
+
+    latest="$(find backups -maxdepth 1 -type f -name "${ENGINE}_${DB}_*" ! -name '*.sha256' | sort | tail -1)"
+    [[ -n "$latest" ]] || die "the export produced no file"
+
+    if [[ -n "$FILE" ]]; then
+        cp "$latest" "$FILE"
+        cp "$latest.sha256" "$FILE.sha256" 2>/dev/null || true
+        log "copied to $FILE"
+    else
+        log "exported to $latest"
+    fi
+    exit 0
+fi
+
+# -----------------------------------------------------------------------------
+# import
+# -----------------------------------------------------------------------------
+
+# Importing from a live external server is the ONBOARDING case: migrating an
+# existing native or Homebrew database into the toolkit (docs/ONBOARDING.md).
+if [[ -n "$FROM_HOST" ]]; then
+    [[ -n "$FROM_USER" ]] || die "--from-host also needs --from-user"
+    stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+    FILE="backups/imported_${ENGINE}_${DB}_${stamp}.sql"
+
+    log "dumping $DB from $FROM_HOST as $FROM_USER"
+    log "you will be prompted for that server's password"
+
+    case "$ENGINE" in
+        pg)
+            # Runs from the cli image so no client needs to be installed on the
+            # host doing the migration.
+            docker run --rm -i --network host \
+                -v "$ROOT/backups:/backups" \
+                ghcr.io/simtabi/db-toolkit-cli:dev \
+                pg_dump -h "$FROM_HOST" -U "$FROM_USER" -Fc "$DB" > "$FILE" \
+                || die "could not dump from $FROM_HOST"
+            ;;
+        mysql|mariadb)
+            docker run --rm -i --network host \
+                -v "$ROOT/backups:/backups" \
+                ghcr.io/simtabi/db-toolkit-cli:dev \
+                mariadb-dump -h "$FROM_HOST" -u "$FROM_USER" -p \
+                    --single-transaction --routines --triggers --events --quick "$DB" > "$FILE" \
+                || die "could not dump from $FROM_HOST"
+            ;;
+    esac
+    log "dumped to $FILE"
+fi
+
+[[ -n "$FILE" ]] || die "specify --from <file> or --from-host <host>"
+[[ -f "$FILE" ]] || die "no such file: $FILE"
+
+log "importing into $ENGINE database '$DB'"
+scripts/restore --engine "$ENGINE" --db "$DB" --file "$FILE"

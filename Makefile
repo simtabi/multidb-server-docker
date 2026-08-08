@@ -107,7 +107,7 @@ logs: ## Tail service logs
 
 .PHONY: destroy
 destroy: ## Delete data volumes (typed confirmation required)
-	$(call unimplemented,5)
+	@scripts/destroy $(if $(VOLUME),--volume "$(VOLUME)",--all)
 
 .PHONY: test-profile
 test-profile: ## Boot the tmpfs speed profile and run its checks
@@ -168,16 +168,18 @@ verify-backups: ## Restore the latest set into throwaway containers, assert row 
 	@scripts/verify-backups
 
 .PHONY: import
-import: ## Move data in (files, existing native databases)
-	$(call unimplemented,5)
+import: ## Move data in (ENGINE= DB= FROM= or FROM_HOST=)
+	@scripts/transfer import --engine "$(ENGINE)" --db "$(DB)" \
+		$(if $(FROM),--from "$(FROM)",) $(if $(FROM_HOST),--from-host "$(FROM_HOST)",) \
+		$(if $(FROM_USER),--from-user "$(FROM_USER)",)
 
 .PHONY: export
-export: ## Move data out
-	$(call unimplemented,5)
+export: ## Move data out (ENGINE= DB= [TO=])
+	@scripts/transfer export --engine "$(ENGINE)" --db "$(DB)" $(if $(TO),--to "$(TO)",)
 
 .PHONY: upgrade
 upgrade: ## Guided major-version migration (ENGINE= FROM= TO=)
-	$(call unimplemented,5)
+	@scripts/upgrade --engine "$(ENGINE)" --from "$(FROM)" --to "$(TO)"
 
 # -----------------------------------------------------------------------------
 # Scale and HA (SPEC section 21)
@@ -217,4 +219,4 @@ lint: ## shellcheck every script in the repository
 
 .PHONY: self-update
 self-update: ## Update the toolkit itself, never project data
-	$(call unimplemented,5)
+	@scripts/self-update

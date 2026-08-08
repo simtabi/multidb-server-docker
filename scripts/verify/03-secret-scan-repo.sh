@@ -63,6 +63,11 @@ for f in "${files[@]}"; do
             dbtk-throwaway-*) continue ;;              # harness fixtures, see above
             *\$\{*|*\$\(*|__FILE__*|secrets/*) continue ;;  # indirection, not a literal
             CHANGE_ME*) continue ;;                     # sentinel; check-env rejects it
+            # The value charset above stops at '(' so that shell case patterns
+            # are not mistaken for assignments. That truncates a command
+            # substitution such as $(cat file) down to a bare '$', which is an
+            # expansion, never a credential.
+            '$') continue ;;
         esac
 
         report "$f: $key=<redacted literal>"

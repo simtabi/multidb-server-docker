@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# Delete data volumes. This is the only command in the toolkit that destroys
+# data, and it is built to be hard to do by accident (SPEC section 15).
+#
+# The confirmation requires TYPING THE VOLUME NAME, not "y". A yes/no prompt
+# trains people to answer yes; typing the name of the thing you are about to
+# lose does not, and it makes a mistyped or misremembered target fail closed.
+#
+# Usage: scripts/destroy [--volume NAME | --all]
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+PROJECT="${COMPOSE_PROJECT_NAME:-dbtk}"
+
+log() { printf '[destroy] %s\n' "$*"; }
+die() { printf '[destroy] ERROR: %s\n' "$*" >&2; exit 1; }
+
+TARGET=""
+ALL=0
+while (( $# )); do
+    case "$1" in
+        --volume) TARGET="${2:-}"; shift 2 ;;
+        --all)    ALL=1; shift ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+list_volumes() {
+    docker volume ls --format '{{.Name}}' | grep -E "^${PROJECT}_" | sort || true
+}
+
+volumes="$(list_volumes)"
+[[ -n "$volumes" ]] || { log "no ${PROJECT}_ volumes exist; nothing to destroy"; exit 0; }
+
+# Destroying a volume out from under a running engine corrupts it rather than
+# removing it cleanly, so the stack has to be down first.
+running="$(docker compose ps --format '{{.Service}}' 2>/dev/null | grep -c . || true)"
+if [[ "${running:-0}" != "0" ]]; then
+    die "the stack is still running. Run 'make down' first, then destroy."
+fi
+
+printf '\n'
+printf 'Data volumes for project %s:\n\n' "$PROJECT"
+while IFS= read -r v; do
+    [[ -z "$v" ]] && continue
+    size="$(docker volume inspect "$v" --format '{{.Mountpoint}}' >/dev/null 2>&1 && echo "" || echo "")"
+    printf '  %s%s\n' "$v" "$size"
+done <<< "$volumes"
+printf '\n'
+
+if (( ALL )); then
+    count="$(printf '%s\n' "$volumes" | grep -c .)"
+    printf 'This will PERMANENTLY DELETE all %s volume(s) listed above.\n' "$count"
+    printf 'Every database in them is gone, and there is no undo.\n\n'
+    printf 'Type DESTROY ALL to continue: '
+    read -r answer
+    [[ "$answer" == "DESTROY ALL" ]] || die "confirmation did not match; nothing was deleted"
+
+    while IFS= read -r v; do
+        [[ -z "$v" ]] && continue
+        docker volume rm "$v" >/dev/null && log "deleted $v"
+    done <<< "$volumes"
+    log "all volumes deleted"
+    exit 0
+fi
+
+[[ -n "$TARGET" ]] || die "specify --volume <name> (from the list above), or --all"
+
+printf '%s\n' "$volumes" | grep -qx "$TARGET" \
+    || die "'$TARGET' is not a volume of project $PROJECT"
+
+printf 'This will PERMANENTLY DELETE the volume %s.\n' "$TARGET"
+printf 'Every database in it is gone, and there is no undo.\n\n'
+printf 'Type the volume name to continue: '
+read -r answer
+[[ "$answer" == "$TARGET" ]] || die "confirmation did not match; nothing was deleted"
+
+docker volume rm "$TARGET" >/dev/null
+log "deleted $TARGET"
