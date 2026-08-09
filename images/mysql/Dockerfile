@@ -50,6 +50,13 @@ RUN set -eux; \
     if rpm -q mysql-shell >/dev/null 2>&1; then \
         rpm -e mysql-shell; \
     fi; \
+    # rpm -e removes the files the package OWNS and leaves everything else, and
+    # /usr/lib/mysqlsh survives it -- the bundled Python writes .pyc files and
+    # dist-info that no package claims, so the tree that trivy read is exactly
+    # the part rpm does not delete. The assertion below caught that; the rm is
+    # what acts on it. Safe unconditionally: the package is already gone, so
+    # anything still here is orphaned by definition.
+    rm -rf /usr/lib/mysqlsh; \
     # Verify: the tree is gone AND the server it shared libraries with survives.
     [ ! -d /usr/lib/mysqlsh ]; \
     mysqld --version
