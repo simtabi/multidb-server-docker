@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# Expand the `pooler` profile into the per-engine pooler profiles.
+#
+# Compose profiles are OR, not AND: a service starts if ANY of its profiles is
+# active. So a single shared `pooler` profile starts every pooler, including the
+# ones whose engine was not selected -- and compose then refuses the whole
+# project with "service mariadb-pooler depends on undefined service mariadb".
+#
+# Each pooler therefore has its own profile, and `pooler` is expanded here into
+# the ones matching the engines actually selected. That keeps the ergonomic
+# `make up PROFILES=pg,pooler` working without compose needing AND.
+#
+# Usage: scripts/profiles pg,mysql,pooler   ->  pg,mysql,pg-pooler,mysql-pooler
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+input="${1:-}"
+[[ -n "$input" ]] || { printf '\n'; exit 0; }
+
+case ",${input}," in
+    *",pooler,"*) ;;
+    *) printf '%s\n' "$input"; exit 0 ;;
+esac
+
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+
+out=""
+for p in ${input//,/ }; do
+    [[ "$p" == "pooler" ]] && continue
+    out="${out:+$out,}$p"
+done
+
+for engine in $(engine_list); do
+    engine_load "$engine" || continue
+    # Only engines that actually have a generated pooler; declaring an image is
+    # not the same as having configured one (see scripts/gen-compose).
+    [[ "${DBTK_ENGINE_POOLING:-driver}" == "external" ]] || continue
+    [[ -f "$DBTK_ENGINE_DIR/compose-pooler.yml" ]] || continue
+
+    case ",${input}," in
+        *",${DBTK_ENGINE_NAME},"*) out="${out:+$out,}${DBTK_ENGINE_NAME}-pooler" ;;
+    esac
+done
+
+printf '%s\n' "$out"

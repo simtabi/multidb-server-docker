@@ -81,6 +81,12 @@ gen_secret patroni_rest_password.txt
 # only one it has. See docs/pooling.md.
 gen_secret pgbouncer_password.txt
 
+# ProxySQL's admin interface and its monitor account. Neither is an application
+# credential: the admin password guards the interface that can read every
+# verifier ProxySQL holds, which is why port 6032 is never published.
+gen_secret proxysql_admin_password.txt
+gen_secret proxysql_monitor_password.txt
+
 gen_secret pgadmin_password.txt
 
 # -----------------------------------------------------------------------------

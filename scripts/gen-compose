@@ -152,28 +152,25 @@ for engine in $(engine_list); do
             printf '  # %s pooler\n' "$DBTK_ENGINE_TITLE"
             printf '  # ---------------------------------------------------------------------------\n'
             printf '  %s-pooler:\n' "$DBTK_ENGINE_NAME"
-            printf '    profiles: [pooler]\n'
+            # Its OWN profile, not a shared `pooler` one. Compose profiles
+            # are OR: a shared profile starts every pooler, including those
+            # whose engine was not selected, and compose then rejects the whole
+            # project over the dangling depends_on. scripts/profiles expands
+            # `pooler` into the ones that match the selected engines.
+            printf '    profiles: [%s-pooler]\n' "$DBTK_ENGINE_NAME"
             printf '    image: %s\n' "$DBTK_ENGINE_POOLER_IMAGE"
             printf '    restart: unless-stopped\n'
             printf '    depends_on: [%s]\n' "$DBTK_ENGINE_NAME"
             printf '    security_opt:\n      - no-new-privileges:true\n'
             printf '    cap_drop:\n      - ALL\n'
-            # The image has no _FILE convention, and its own entrypoint warns
-            # that `docker inspect` exposes environment variables. So the
-            # secret is read from the mounted file into the process
-            # environment of PID 1 at exec time: never in an image layer,
-            # never in the compose file, never in `docker inspect`.
-            printf '    entrypoint:\n'
-            printf '      - /bin/sh\n'
-            printf '      - -c\n'
-            printf '      - >\n'
-            printf '        DB_PASSWORD="$$(cat "$$DB_PASSWORD_FILE")";\n'
-            printf '        export DB_PASSWORD;\n'
-            printf '        exec /entrypoint.sh "$$@"\n'
-            printf '      - --\n'
-            # The image's CMD, restated: overriding entrypoint discards it.
-            printf '    command: [%s]\n' "$(printf '%s' "${DBTK_ENGINE_POOLER_CMD:-}" \
-                | awk '{for(i=1;i<=NF;i++){printf "%s\"%s\"", (i>1?", ":""), $i}}')"
+            # Every pooler starts through a bootstrap script from the
+            # repository rather than an inline shell snippet in generated YAML.
+            # The two poolers need genuinely different startup work -- pgBouncer
+            # wants one credential in its environment, ProxySQL has to mirror
+            # password verifiers through its admin interface -- and encoding
+            # either of those as a `sh -c` string here would put engine
+            # knowledge back into the generator.
+            printf '    entrypoint: ["%s"]\n' "$DBTK_ENGINE_POOLER_CMD"
             printf '    environment:\n'
             printf '      DB_PASSWORD_FILE: /run/secrets/%s\n' "${DBTK_ENGINE_POOLER_SECRET:-pgbouncer_password.txt}"
             # Upstream host and port come from the descriptor, never from the
@@ -190,6 +187,8 @@ for engine in $(engine_list); do
             printf '    volumes:\n'
             printf '      - ./secrets:/run/secrets:ro\n'
             printf '      - ./certs:/certs:ro\n'
+            printf '      - ./%s:%s:ro\n' \
+                "$DBTK_ENGINE_POOLER_BOOTSTRAP" "$DBTK_ENGINE_POOLER_CMD"
             printf '    ports:\n'
             printf '      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_%s_POOLER_HOST_PORT:-%s}:%s"\n' \
                 "$upper" "${DBTK_ENGINE_POOLER_HOST_PORT_DEFAULT:-6432}" "${DBTK_ENGINE_POOLER_PORT:-6432}"

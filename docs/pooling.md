@@ -9,7 +9,7 @@ quarters of a lie.
 | Engine | What to use | Required? | Shipped |
 |---|---|---|---|
 | PostgreSQL | pgBouncer | **Yes, in production** | Yes — `PROFILES=pg,pooler` |
-| MySQL / MariaDB | ProxySQL | Optional | Declared, not yet wired |
+| MySQL / MariaDB | ProxySQL | Optional | Yes — `PROFILES=mysql,pooler` |
 | MongoDB | The driver | Never use a proxy | n/a |
 | Cassandra | The driver | Never use a proxy | n/a |
 | FerretDB | The driver | Never use a proxy | n/a |
@@ -97,19 +97,37 @@ ProxySQL is offered because it brings more than pooling — query routing,
 read/write splitting, query rules — and those are the reasons to adopt it. If
 all you want is fewer connections, raise `max_connections` first and measure.
 
-**It is declared in the descriptors but not yet wired**, and the reason is worth
-stating rather than hiding. ProxySQL has no equivalent of pgBouncer's
-`auth_query`: it needs each application user's password (or its hash) in its own
-configuration. Shipping that by default would take the property the PostgreSQL
-pooler goes to some trouble to preserve — that a compromised pooler yields one
-credential, not all of them — and quietly give it up on the engine where pooling
-is not even necessary. So it waits for a design that does not, and until then
-the descriptor names the image and the generator emits nothing.
+It is wired, and the interesting part is how it authenticates.
 
-That is also why the generator gates on a `compose-pooler.yml` existing rather
-than on `POOLING=external`. Declaring an image is not the same as having
-configured it, and a pooler that starts but cannot authenticate is worse than no
-pooler, because it looks present.
+ProxySQL has **no equivalent of `auth_query`**: it cannot look a credential up
+on demand, it has to hold one. That is why this pooler was left unwired at
+first — holding every application password would have given up the exact
+property the PostgreSQL side goes to some trouble to preserve.
+
+What it holds is a **verifier**, not a password. On start it copies each user's
+`caching_sha2_password` hash straight out of `mysql.user.authentication_string`,
+so ProxySQL knows no more than the server already does, and a compromised
+pooler yields what a read of that table would — not a set of usable passwords.
+
+```
+proxysql: mirrored 7 user verifier(s); no cleartext password was read
+```
+
+Two consequences worth knowing:
+
+**It mirrors on start.** A user created after the pooler booted is not known to
+it until it restarts. `make new-project` followed by
+`docker compose restart mysql-pooler` is the sequence.
+
+**ProxySQL gets its own narrow account**, not root — root stays restricted to
+the local socket. The account has exactly two privileges: `SELECT` on
+`mysql.user` to read verifiers, and `REPLICATION CLIENT` for the monitor. Its
+admin interface on 6032 is never published, because that interface can read
+every verifier it holds.
+
+Check 35 asserts all of it: a user connects through the pooler, what is stored
+begins with the `$A$` verifier prefix and does not contain the password, the
+pooler's account holds no `SUPER`, and a wrong password is still refused.
 
 ## MongoDB, Cassandra, FerretDB: the driver already does it
 

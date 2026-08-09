@@ -23,7 +23,7 @@ ENV_FILE_ARG := $(if $(filter-out .env,$(ENV_FILE)),$(ENV_FILE),)
 # single run, then DBTK_PROFILES in .env permanently, then the documented
 # default (SPEC section 7).
 env_profiles := $(shell grep -E '^DBTK_PROFILES=' $(ENV_FILE) 2>/dev/null | tail -1 | cut -d= -f2-)
-COMPOSE_PROFILES := $(or $(PROFILES),$(env_profiles),pg,ui)
+COMPOSE_PROFILES := $(shell scripts/profiles "$(or $(PROFILES),$(env_profiles),pg,ui)")
 export COMPOSE_PROFILES
 
 # down, status, and logs must see every service regardless of the selected
