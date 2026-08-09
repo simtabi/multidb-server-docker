@@ -16,7 +16,15 @@ need_file "$MDB_ROOT/docker-compose.yml"
 
 cd "$MDB_ROOT" || exit 1
 
-docker compose config >/dev/null 2>&1 || vfail "docker-compose.yml is not valid"
+# The error is printed, not swallowed. "docker-compose.yml is not valid" with
+# the reason discarded sent me looking at docker-compose.yml when the actual
+# message named compose.engines.yml, a GENERATED file that `make init` did not
+# write -- so a freshly initialised checkout failed here and said nothing about
+# which file or which step was missing.
+if ! compose_err="$(docker compose config 2>&1 >/dev/null)"; then
+    printf '%s\n' "$compose_err" | sed 's/^/      /' >&2
+    vfail "compose configuration is not valid (docker's own error is above)"
+fi
 vinfo "compose file is valid"
 
 make up >/dev/null 2>&1 || vfail "make up failed"

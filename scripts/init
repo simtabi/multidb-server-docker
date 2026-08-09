@@ -163,4 +163,19 @@ fi
 # -----------------------------------------------------------------------------
 MDB_ENV_FILE="$TARGET" MDB_CHECK_RENDERING="$PROD" "$ROOT/scripts/check-env"
 
+# -----------------------------------------------------------------------------
+# 6. Generate the compose overlay
+# -----------------------------------------------------------------------------
+# COMPOSE_FILE names compose.engines.yml, and nothing but `make up`, `make
+# render` and `make test-profile` used to write it -- so between `make init` and
+# the first `make up` the project was in a state where EVERY compose command
+# failed, including the plain `docker compose ps` and `docker compose logs` the
+# docs suggest. The error names the missing file rather than the missing step,
+# so it reads as a broken repository.
+#
+# `make up` still regenerates, so nothing here goes stale: editing
+# COMPOSE_PROFILES or MDB_PUBLISH in .env and running `make up` rewrites it.
+# This only ensures the file exists from the moment init finishes.
+"$ROOT/scripts/gen-compose" >/dev/null
+
 printf '\nNext: make up\n'
