@@ -47,7 +47,7 @@ DBTK_ENGINE_DUMP_GLOBALS='pg_dumpall --globals-only'
 DBTK_ENGINE_RESTORE='pg_restore --no-owner'
 
 DBTK_ENGINE_POOLING=external
-DBTK_ENGINE_POOLER_IMAGE=edoburu/pgbouncer:v1.25.2-p0
+DBTK_ENGINE_POOLER_IMAGE=ghcr.io/simtabi/db-toolkit-pgbouncer:dev
 DBTK_ENGINE_POOLING_REQUIRED_IN_PROD=true
 
 DBTK_ENGINE_LICENSE=PostgreSQL

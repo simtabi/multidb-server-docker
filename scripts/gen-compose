@@ -194,8 +194,12 @@ for engine in $(engine_list); do
             printf '    volumes:\n'
             printf '      - ./secrets:/run/secrets:ro\n'
             printf '      - ./certs:/certs:ro\n'
-            printf '      - ./%s:%s:ro\n' \
-                "$DBTK_ENGINE_POOLER_BOOTSTRAP" "$DBTK_ENGINE_POOLER_CMD"
+            # Bootstrap scripts are baked into the images now, not mounted
+            # from the repo -- an image that needs a file from the checkout to
+            # start is not the standalone image SPEC section 3 promises.
+            [ -n "${DBTK_ENGINE_POOLER_BOOTSTRAP:-}" ] && \
+                printf '      - ./%s:%s:ro\n' \
+                    "$DBTK_ENGINE_POOLER_BOOTSTRAP" "$DBTK_ENGINE_POOLER_CMD"
             printf '    ports:\n'
             printf '      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_%s_POOLER_HOST_PORT:-%s}:%s"\n' \
                 "$upper" "${DBTK_ENGINE_POOLER_HOST_PORT_DEFAULT:-6432}" "${DBTK_ENGINE_POOLER_PORT:-6432}"

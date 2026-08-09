@@ -85,6 +85,13 @@ done
 # auto-build happens inside whichever check first needs it, where a build
 # failure surfaces as that check timing out.
 derived=0
+if [[ -f "$ROOT/images/pgbouncer/Dockerfile" ]]; then
+    tag="$PREFIX/db-toolkit-pgbouncer:dev"
+    printf 'building %s\n  from debian:12-slim + PGDG\n' "$tag"
+    docker build -f "$ROOT/images/pgbouncer/Dockerfile" -t "$tag" "$ROOT/images"
+    derived=$(( derived + 1 ))
+fi
+
 if [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
     pg_version="$(version_for pg)"
     tag="$PREFIX/db-toolkit-patroni:$pg_version"
@@ -94,7 +101,7 @@ if [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
         --build-arg "ENGINE_VERSION=$pg_version" \
         --build-arg "IMAGE_PREFIX=$PREFIX" \
         -t "$tag" "$ROOT/images"
-    derived=1
+    derived=$(( derived + 1 ))
 fi
 
 printf '✓ built %d image(s)\n' "$(( ${#engines[@]} + derived ))"

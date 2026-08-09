@@ -19,4 +19,4 @@ set -eu
 DB_PASSWORD="$(tr -d '\n' < "$DB_PASSWORD_FILE")"
 export DB_PASSWORD
 
-exec /entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+exec /entrypoint.sh /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini

@@ -21,16 +21,29 @@ die() { printf '[destroy] ERROR: %s\n' "$*" >&2; exit 1; }
 
 TARGET=""
 ALL=0
+INCLUDE_RECOVERY=0
 while (( $# )); do
     case "$1" in
         --volume) TARGET="${2:-}"; shift 2 ;;
         --all)    ALL=1; shift ;;
+        --include-recovery) INCLUDE_RECOVERY=1; shift ;;
         *) die "unknown argument: $1" ;;
     esac
 done
 
 list_volumes() {
     docker volume ls --format '{{.Name}}' | grep -E "^${PROJECT}_" | sort || true
+}
+
+# Recovery repositories -- the pgBackRest repo and the binary logs.
+#
+# These are EXCLUDED from --all, because a command that destroys the data and
+# the means of recovering from it in one step is the worst possible default:
+# the moment you most want a backup is immediately after destroying something.
+# They live in separate volumes precisely so this distinction can exist, and
+# --include-recovery is the way to say you meant it.
+is_recovery_volume() {
+    case "$1" in *_pitr) return 0 ;; *) return 1 ;; esac
 }
 
 volumes="$(list_volumes)"
@@ -53,9 +66,26 @@ done <<< "$volumes"
 printf '\n'
 
 if (( ALL )); then
-    count="$(printf '%s\n' "$volumes" | grep -c .)"
-    printf 'This will PERMANENTLY DELETE all %s volume(s) listed above.\n' "$count"
+    targets=""; kept=""
+    while IFS= read -r v; do
+        [[ -z "$v" ]] && continue
+        if is_recovery_volume "$v" && (( ! INCLUDE_RECOVERY )); then
+            kept="${kept}${v}"$'\n'
+        else
+            targets="${targets}${v}"$'\n'
+        fi
+    done <<< "$volumes"
+
+    [[ -n "$targets" ]] || { log "only recovery volumes remain; nothing to delete without --include-recovery"; exit 0; }
+
+    count="$(printf '%s' "$targets" | grep -c .)"
+    printf 'This will PERMANENTLY DELETE %s volume(s).\n' "$count"
     printf 'Every database in them is gone, and there is no undo.\n\n'
+    if [[ -n "$kept" ]]; then
+        printf 'KEEPING your recovery repositories, so a restore is still possible:\n'
+        printf '%s' "$kept" | sed 's/^/  /'
+        printf '\nAdd --include-recovery to delete those too.\n\n'
+    fi
     printf 'Type DESTROY ALL to continue: '
     read -r answer
     [[ "$answer" == "DESTROY ALL" ]] || die "confirmation did not match; nothing was deleted"
@@ -63,8 +93,11 @@ if (( ALL )); then
     while IFS= read -r v; do
         [[ -z "$v" ]] && continue
         docker volume rm "$v" >/dev/null && log "deleted $v"
-    done <<< "$volumes"
-    log "all volumes deleted"
+    done <<< "$targets"
+    if [[ -n "$kept" ]]; then
+        log "recovery repositories kept; restore with: make pitr-info"
+    fi
+    log "done"
     exit 0
 fi
 

@@ -108,7 +108,7 @@ logs: ## Tail service logs
 	@$(COMPOSE) $(all_profiles) logs -f --tail=100
 
 .PHONY: destroy
-destroy: ## Delete data volumes (typed confirmation required)
+destroy: ## Delete data volumes, KEEPING recovery repos (typed confirmation)
 	@scripts/destroy $(if $(VOLUME),--volume "$(VOLUME)",--all)
 
 .PHONY: test-profile

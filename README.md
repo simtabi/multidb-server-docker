@@ -54,6 +54,7 @@ Full documentation is hosted at
 - [Adding an engine](docs/adding-an-engine.md) — the extensibility contract
 - [Connection pooling](docs/pooling.md) — why the answer differs per engine
 - [Licensing](docs/licensing.md) — what you are running, and under what terms
+- [Image provenance](IMAGE-PROVENANCE.md) — every image, its publisher, and why
 - [Operations](docs/OPERATIONS.md) — VPS, exposure, tuning, HA
 - [Release](docs/release.md) — how versions ship
 

@@ -76,7 +76,7 @@ services:
     profiles: [prod, ha]
     # The official pgbouncer image is amd64-only and stuck at 1.15.0; this one
     # is multi-arch and current (DESIGN.md D-10).
-    image: edoburu/pgbouncer:v1.25.2-p0@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340
+    image: ghcr.io/simtabi/db-toolkit-pgbouncer:dev
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

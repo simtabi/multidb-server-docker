@@ -79,12 +79,8 @@ docker run -d --name "$bouncer" --network "$net" \
     -e POOL_MODE=transaction -e DEFAULT_POOL_SIZE=2 -e MAX_CLIENT_CONN=100 \
     -e ADMIN_USERS=pgbouncer -e STATS_USERS=pgbouncer \
     -v "$secrets:/run/secrets:ro" \
-    --tmpfs /etc/pgbouncer:exec,mode=0700,uid=70,gid=70 \
-    --entrypoint /bin/sh \
-    "$pooler_img" \
-    -c 'DB_PASSWORD="$(cat "$DB_PASSWORD_FILE")"; export DB_PASSWORD;
-        exec /entrypoint.sh /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini' \
-    >/dev/null || vfail "the pooler failed to start"
+    --tmpfs /etc/pgbouncer:exec,mode=0700,uid=100,gid=100 \
+    "$pooler_img" >/dev/null || vfail "the pooler failed to start"
 
 # The pooler exiting 0 is the failure this check was written after: the shim
 # generates the config and, with no CMD to exec, succeeds at doing nothing.
