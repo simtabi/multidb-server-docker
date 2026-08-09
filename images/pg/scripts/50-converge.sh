@@ -25,10 +25,13 @@ source /usr/local/lib/dbtk/dbtk-lib.sh
 
 secret=/run/secrets/pgbouncer_password.txt
 
-if [[ ! -r "$secret" ]]; then
-    stage "no pgbouncer secret mounted; nothing to converge"
-    exit 0
-fi
+# This stage converges more than one thing, so nothing here may exit early on
+# behalf of the others. An absent pgbouncer secret used to `exit 0` for the
+# whole script, which silently skipped PITR setup entirely -- the stanza was
+# never created and archiving never started, on a container that reported
+# converging successfully.
+converge_pgbouncer=0
+[[ -r "$secret" ]] && converge_pgbouncer=1
 
 # Bounded wait. An unbounded one turns "PostgreSQL failed to start" into a
 # container that hangs with no explanation, which is strictly worse.
@@ -41,6 +44,7 @@ until gosu postgres pg_isready -q -h /var/run/postgresql 2>/dev/null; do
     sleep 1
 done
 
+if (( converge_pgbouncer )); then
 pw="$(tr -d '\n' < "$secret")"
 esc_pw="${pw//\'/\'\'}"
 
@@ -91,3 +95,40 @@ GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO pgbouncer;
 SQL
 
 stage "converged pooler auth objects"
+else
+    stage "no pgbouncer secret mounted; skipping the pooler objects"
+fi
+
+# -----------------------------------------------------------------------------
+# PITR: create the stanza and take the first backup
+# -----------------------------------------------------------------------------
+# stanza-create needs a RUNNING server, which is exactly why this is here and
+# the archive settings are in stage 2: archive_mode cannot be reloaded, and a
+# stanza cannot be created before there is something to query.
+#
+# Both are idempotent, so a restart re-checks rather than re-does.
+if is_true "${DBTK_PG_PITR:-false}"; then
+    stanza="${DBTK_PGBACKREST_STANZA:-dbtk}"
+
+    if gosu postgres pgbackrest --stanza="$stanza" stanza-create 2>&1 | grep -qi 'error'; then
+        stage "WARNING: stanza-create reported an error; PITR is NOT active"
+    else
+        stage "pgBackRest stanza '$stanza' ready"
+    fi
+
+    # A stanza with no full backup can archive WAL and restore nothing: recovery
+    # replays forward FROM a base backup, so without one the segments are
+    # inert. Taking it here means PITR is usable from first boot rather than
+    # from whenever someone remembers to run a backup.
+    if ! gosu postgres pgbackrest --stanza="$stanza" info 2>/dev/null | grep -q 'full backup'; then
+        stage "taking the initial full backup (PITR needs a base to replay from)"
+        gosu postgres pgbackrest --stanza="$stanza" --type=full backup >/dev/null 2>&1 \
+            || stage "WARNING: the initial full backup failed; PITR is NOT usable yet"
+    fi
+
+    if gosu postgres pgbackrest --stanza="$stanza" check >/dev/null 2>&1; then
+        stage "pgBackRest check passed: archiving and the repository both work"
+    else
+        stage "WARNING: pgBackRest check failed; archiving may not be working"
+    fi
+fi

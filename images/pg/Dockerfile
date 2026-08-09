@@ -126,6 +126,10 @@ RUN set -eux; \
         gnupg \
         locales \
         openssl \
+        # PITR. pgBackRest gives WAL archiving AND an S3-compatible repository
+        # from one dependency, which is why it is preferred here over a
+        # hand-rolled archive_command copying files somewhere.
+        pgbackrest \
         procps \
         rclone \
         xz-utils \

@@ -84,6 +84,10 @@ gen_secret pgbouncer_password.txt
 # ProxySQL's admin interface and its monitor account. Neither is an application
 # credential: the admin password guards the interface that can read every
 # verifier ProxySQL holds, which is why port 6032 is never published.
+# The PITR repository is encrypted before it leaves the machine, so the
+# passphrase is generated up front rather than when someone enables S3.
+gen_secret pgbackrest_cipher_passphrase.txt
+
 gen_secret proxysql_admin_password.txt
 gen_secret proxysql_monitor_password.txt
 

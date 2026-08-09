@@ -113,6 +113,13 @@ for engine in $(engine_list); do
         printf '      - ./certs:/certs:ro\n'
         printf '      - ./secrets:/run/secrets:ro\n'
         printf '      - ./overrides/%s:%s:ro\n' "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_OVERRIDES_DIR"
+        # The PITR repository. A named volume, not a bind mount, and separate
+        # from the data volume on purpose: a backup living inside the thing it
+        # backs up is not a backup, and `make destroy` takes the data with it.
+        if [ "${DBTK_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
+            printf '      - %s_pgbackrest:%s\n' \
+                "$DBTK_ENGINE_NAME" "${DBTK_ENGINE_PITR_REPO_PATH:-/var/lib/pgbackrest}"
+        fi
         printf '    ports:\n'
         printf '      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_%s_HOST_PORT:-%s}:%s"\n' \
             "$upper" "$DBTK_ENGINE_HOST_PORT_DEFAULT" "$DBTK_ENGINE_PORT"
@@ -215,6 +222,12 @@ done
         printf '  %s_data:\n' "$DBTK_ENGINE_NAME"
         printf '    name: ${COMPOSE_PROJECT_NAME:-dbtk}_%s${DBTK_%s_VERSION:-%s}_data\n' \
             "$DBTK_ENGINE_NAME" "$upper" "$DBTK_ENGINE_DEFAULT_VERSION"
+        # NOT per major. The repository spans version upgrades: a backup taken
+        # before an upgrade is exactly the one you want after a failed upgrade.
+        if [ "${DBTK_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
+            printf '  %s_pgbackrest:\n' "$DBTK_ENGINE_NAME"
+            printf '    name: ${COMPOSE_PROJECT_NAME:-dbtk}_%s_pgbackrest\n' "$DBTK_ENGINE_NAME"
+        fi
     done
 } >> "$tmp"
 

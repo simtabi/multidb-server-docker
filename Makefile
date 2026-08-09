@@ -170,6 +170,18 @@ backup-all: ## Dump every database on every enabled engine, plus PG globals
 restore: ## Guided, confirmed restore (ENGINE= DB= FILE=)
 	@scripts/restore --engine "$(ENGINE)" --db "$(DB)" --file "$(FILE)"
 
+.PHONY: pitr-info
+pitr-info: ## Show the pgBackRest repository and recoverable window
+	@scripts/pitr info
+
+.PHONY: pitr-backup
+pitr-backup: ## Take a PITR backup (TYPE=full|diff|incr)
+	@scripts/pitr backup $(if $(TYPE),--type "$(TYPE)",)
+
+.PHONY: pitr-restore
+pitr-restore: ## Recover to a point in time (TO='2026-08-09 12:00:00' or TO=latest)
+	@scripts/pitr restore --to "$(TO)"
+
 .PHONY: verify-backups
 verify-backups: ## Restore the latest set into throwaway containers, assert row counts
 	@scripts/verify-backups

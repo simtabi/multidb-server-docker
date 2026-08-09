@@ -197,6 +197,29 @@ if [[ ",${profiles}," == *",prod,"* ]]; then
     [[ -n "$(get DBTK_UI_BASIC_AUTH_HASH)" ]] \
         || err "the prod profile requires DBTK_UI_BASIC_AUTH_HASH on every UI route"
 
+    # SPEC section 18, criterion 7c: the fresh VPS path ends with PITR active.
+    # A nightly dump means losing up to a day; WAL archiving means losing up to
+    # a transaction, and that is the difference this guard exists to enforce.
+    [[ "$(get DBTK_PG_PITR)" == "true" ]] \
+        || err "the prod profile requires DBTK_PG_PITR=true (SPEC section 18, 7c).
+       Without WAL archiving, recovery granularity is the last dump."
+
+    # posix is a local directory. It dies with the machine, which is the exact
+    # scenario a backup exists for.
+    if [[ "$(get DBTK_PGBACKREST_REPO_TYPE)" != "s3" ]]; then
+        err "the prod profile requires DBTK_PGBACKREST_REPO_TYPE=s3 (SPEC section 18, 7b).
+       A posix repository lives on the machine it is backing up."
+    fi
+
+    # These are the operator's own cloud credentials, so init cannot generate
+    # them. Failing here beats failing inside archive_command, where the only
+    # symptom is pg_wal growing while everything reports healthy.
+    for f in pgbackrest_s3_key.txt pgbackrest_s3_secret.txt; do
+        [[ -s "$ROOT/secrets/$f" ]] \
+            || err "DBTK_PGBACKREST_REPO_TYPE=s3 needs secrets/$f
+       (your object-store credentials; they are never written to .env)"
+    done
+
 fi
 
 # The etcd quorum is validated whenever the `ha` PROFILE is selected, which is
