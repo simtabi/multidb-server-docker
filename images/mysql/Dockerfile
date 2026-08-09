@@ -26,6 +26,30 @@ RUN set -eux; \
     microdnf install -y procps-ng unzip findutils; \
     microdnf clean all
 
+# --- drop MySQL Shell ----------------------------------------------------------
+# Oracle bundles mysql-shell in the official image, and with it a private Python
+# 3.13 under /usr/lib/mysqlsh/lib carrying its own vendored site-packages. Those
+# packages -- not the database -- are the only HIGH findings trivy reports
+# against this image: cryptography 46.0.5 and pyOpenSSL 25.3.0, six of them,
+# all with fixes upstream that Oracle has not yet shipped.
+#
+# Nothing in this toolkit invokes mysqlsh. Provisioning, backup, restore and PITR
+# all go through the `mysql` client and mysqlbinlog. So this is a component that
+# is not used, cannot be patched here, and is the entire vulnerability surface --
+# removing it is the fix, and waiving the CVEs would have been the excuse.
+#
+# It is removed with --noautoremove: mysql-shell shares dependencies with the
+# server (openssl-libs among them), and letting rpm garbage-collect them takes
+# out mysqld with it.
+RUN set -eux; \
+    if rpm -q mysql-shell >/dev/null 2>&1; then \
+        microdnf remove -y --noautoremove mysql-shell; \
+        microdnf clean all; \
+    fi; \
+    # Verify: the tree is gone AND the server it shared libraries with survives.
+    [ ! -d /usr/lib/mysqlsh ]; \
+    mysqld --version
+
 # --- mysqlbinlog, for point-in-time recovery -----------------------------------
 # The official image is mysql-community-server-minimal on Oracle Linux 9 and
 # ships no mysqlbinlog, so a binary log could be written and never replayed --
