@@ -31,7 +31,7 @@ done < <(
 # The rule this check enforces is "every variable a user can meaningfully set
 # is documented", so the list is kept explicit and short rather than allowing a
 # pattern that could hide a real omission.
-INTERNAL_VARS='MDB_ROOT|MDB_ENV_FILE|MDB_IMAGE_PREFIX|MDB_ENGINE|MDB_STAGE|MDB_CONF_DIR|MDB_CERT_DIR|MDB_INITDB_DIR|MDB_DATA_DIR|MDB_OVERRIDE_CONF_DIR|MDB_DAEMON|MDB_CLIENT|MDB_ADMIN|MDB_CONF_SECTION|MDB_ROOT_PW_ENV|MDB_PG_TEST_MODE|MDB_MYSQL_TEST_MODE|MDB_MARIADB_TEST_MODE|MDB_IN_CONTAINER'
+INTERNAL_VARS='MDB_ROOT|MDB_ENV_FILE|MDB_IMAGE_PREFIX|MDB_ENGINE|MDB_STAGE|MDB_CONF_DIR|MDB_CERT_DIR|MDB_INITDB_DIR|MDB_DATA_DIR|MDB_OVERRIDE_CONF_DIR|MDB_DAEMON|MDB_CLIENT|MDB_ADMIN|MDB_CONF_SECTION|MDB_ROOT_PW_ENV|MDB_PG_TEST_MODE|MDB_MYSQL_TEST_MODE|MDB_MARIADB_TEST_MODE|MDB_IN_CONTAINER|MDB_ENGINES_DIR'
 
 # Only files that actually consume variables at runtime. Scripts under
 # scripts/verify are excluded: they name variables in order to assert on them,
