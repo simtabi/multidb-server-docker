@@ -16,7 +16,7 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | 4 | Version switch 16→17 uses a new volume, leaves the old intact; `make upgrade` migrates; same for MySQL 8.0→8.4 | `14-version-switch`, `29-upgrade-migrates-data` | Covered |
 | 5 | MySQL and MariaDB run concurrently, phpMyAdmin sees both | `16-mysql-family-boot`, `18-ui-front-door` | Covered |
 | 6a | Two projects per engine, isolated roles, cross-access denied | `13-triplet-isolation`, `28-new-project`, `34-new-project-every-engine` | Covered |
-| 6b | **PG RLS demo passes** | — | **Not proven** |
+| 6b | PG RLS demo passes | `36-rls-demo` | Covered |
 | 7a | Fresh VPS path ends TLS-only, unpublished or firewalled, no UI exposed | `20-tls-enforced-prod`, `26-prod-profile-guards` | Covered |
 | 7b | **Nightly S3 backups** | — | **Not implemented** |
 | 7c | **PITR active for PG** | — | **Not implemented** |
@@ -44,12 +44,6 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 
 Stated plainly, because a criterion quietly dropped from a report is worse than
 one that is openly outstanding.
-
-**PG RLS demo passes (6b).** The kit exists at [`rls/`](../rls/README.md) —
-policies, roles, and a template — and check 01 asserts the directory is there.
-Nothing runs it. Directory existence is not a passing demo, and this is the
-cheapest of the four gaps to close: a check that applies the template, sets
-`app.tenant_id`, and asserts one tenant cannot read another's rows.
 
 **Nightly S3 backups (7b).** The backup sidecar writes to `DBTK_BACKUP_DIR` and
 stops there. There is no destination setting and nothing ships backups off the
