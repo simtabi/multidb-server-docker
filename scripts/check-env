@@ -262,7 +262,17 @@ port_in_use() {
 taken=""
 resolved=""
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    resolved="$(cd "$ROOT" && MMDB_ENV_FILE="$ENV_FILE" docker compose config --format json 2>/dev/null \
+    # The SAME profiles that are about to start. Without them compose reports
+    # every service in every profile, so HAProxy's 5433 gets flagged when HA is
+    # off -- a false alarm that teaches people to ignore this check.
+    prof_args=()
+    for _p in ${active_profiles//,/ }; do
+        [[ -n "$_p" ]] && prof_args+=(--profile "$_p")
+    done
+
+    # ${a[@]+"${a[@]}"} because bash 3.2 with set -u errors on an empty array,
+    # and macOS ships bash 3.2 -- the same idiom the rest of this repo uses.
+    resolved="$(cd "$ROOT" && docker compose ${prof_args[@]+"${prof_args[@]}"} config --format json 2>/dev/null \
         | python3 -c '
 import json,sys
 try:
@@ -288,8 +298,20 @@ while IFS= read -r value; do
     case " $ours " in *" $value "*) continue ;; esac
     if port_in_use "$value"; then
         # Name the variable when one exists; the number alone is not actionable.
-        key="$(grep -E "^MMDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
-               | head -1 | cut -d= -f1)"
+        # `|| true` because most published ports are compose defaults with no
+        # line in the env file at all -- and a grep that finds nothing aborts
+        # the script under set -e, which showed up as check-env exiting 1 with
+        # no output whatsoever.
+        # Named only when exactly ONE variable carries this value. Several can
+        # -- 5432 is both the engine's port and HAProxy's write port -- and
+        # naming an arbitrary one sends people to edit a setting that is not
+        # the one being published.
+        matches="$(grep -cE "^MMDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null || true)"
+        key=""
+        if [[ "${matches:-0}" == "1" ]]; then
+            key="$(grep -E "^MMDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
+                   | head -1 | cut -d= -f1 || true)"
+        fi
         taken="${taken}       $value${key:+ ($key)}"$'\n'
     fi
 done <<< "$resolved"
