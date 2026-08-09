@@ -37,6 +37,9 @@ base_for() {
     awk -v e="$1" -v v="$2" '$1==e && $2==v {print $3; exit}' "$ROOT/images/bases.tsv"
 }
 
+# Captured BEFORE the list is filled in, because by then it is never empty.
+EXPLICIT_ENGINES=$#
+
 engines=("$@")
 if [[ ${#engines[@]} -eq 0 ]]; then
     engines=()
@@ -84,15 +87,28 @@ done
 # Built here rather than left to `docker compose up --build`, because a compose
 # auto-build happens inside whichever check first needs it, where a build
 # failure surfaces as that check timing out.
+# Derived images are built ONLY in a full build.
+#
+# They are FROM images this script produces -- patroni is FROM
+# multidb-server-pg -- so building them during `scripts/build cassandra`
+# makes Docker look for a base that exists nowhere but a full local build.
+# In CI, where each matrix job builds one engine, that surfaced as a 403 from
+# ghcr for an image we have never published.
 derived=0
-if [[ -f "$ROOT/images/pgbouncer/Dockerfile" ]]; then
+if (( EXPLICIT_ENGINES == 0 )); then
+    build_derived=1
+else
+    build_derived=0
+fi
+
+if (( build_derived )) && [[ -f "$ROOT/images/pgbouncer/Dockerfile" ]]; then
     tag="$PREFIX/multidb-server-pgbouncer:dev"
     printf 'building %s\n  from debian:12-slim + PGDG\n' "$tag"
     docker build -f "$ROOT/images/pgbouncer/Dockerfile" -t "$tag" "$ROOT/images"
     derived=$(( derived + 1 ))
 fi
 
-if [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
+if (( build_derived )) && [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
     pg_version="$(version_for pg)"
     tag="$PREFIX/multidb-server-patroni:$pg_version"
     printf 'building %s\n  from %s/multidb-server-pg:%s\n' "$tag" "$PREFIX" "$pg_version"
