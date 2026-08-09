@@ -92,6 +92,7 @@ up: ## Boot the stack (never touches data)
 	@scripts/render-config
 	@scripts/gen-compose >/dev/null
 	@$(COMPOSE) up -d --wait
+	@scripts/exposure-notice
 
 .PHONY: down
 down: ## Stop the stack (never touches data)

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# Say how to connect, once the stack is up.
+#
+# MDB_PUBLISH defaults to `none`, which binds no host port at all. That is the
+# right default -- it is the only setting that cannot collide with software
+# already on the machine -- but it is a CHANGE, and anyone with a GUI client
+# pointed at 5432 will find nothing listening and no explanation. Documentation
+# does not reach someone who already knows the old behaviour; the command they
+# just ran does.
+#
+# Printed after `make up`, briefly, and only when there is something to say.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 0
+
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
+[ -f "$ENV_FILE" ] || exit 0
+get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
+
+publish="$(get MDB_PUBLISH)"; publish="${publish:-none}"
+base="$(get MDB_PORT_BASE)"; base="${base:-54000}"
+project="$(get COMPOSE_PROJECT_NAME)"; project="${project:-mdb}"
+
+case "$publish" in
+    none)
+        printf '\n  No host ports are published (MDB_PUBLISH=none).\n'
+        printf '  Applications join the %s_net network and connect by service name:\n\n' "$project"
+        printf '      host=pg  port=5432        host=mysql  port=3306\n\n'
+        printf '  For a GUI client that cannot join a Docker network, set\n'
+        printf '  MDB_PUBLISH=direct (or proxy) in .env and re-run make up.\n'
+        printf '  Shells work either way: make psql, make mysql, make mongo.\n\n'
+        ;;
+    direct|proxy)
+        printf '\n  Published on 127.0.0.1, from MDB_PORT_BASE=%s:\n\n' "$base"
+        # shellcheck source=engine-lib.sh
+        . "$ROOT/scripts/engine-lib.sh"
+        for engine in $(engine_list); do
+            engine_load "$engine" || continue
+            printf '      %-10s %s\n' "$MDB_ENGINE_NAME" \
+                "$(( base + ${MDB_ENGINE_PORT_OFFSET:-0} ))"
+        done
+        printf '\n'
+        ;;
+esac
