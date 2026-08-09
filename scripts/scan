@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#
+# Scan built images for known vulnerabilities.
+#
+# The same scan CI runs, available before you push. It reads .trivyignore, so a
+# finding waived there with a reason is waived here too -- a local scan that
+# disagreed with CI would just train people to ignore one of them.
+#
+# Fails on HIGH and CRITICAL that have a FIX available. Unfixed findings are
+# reported and tolerated: there is nothing to do about them yet, and a scanner
+# that cannot be made green stops being read.
+#
+# Usage: scripts/scan [engine ...]     (default: every built image)
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+
+# shellcheck source=engine-lib.sh
+. "$ROOT/scripts/engine-lib.sh"
+
+TRIVY_VERSION="${TRIVY_VERSION:-0.73.0}"
+
+log() { printf '[scan] %s\n' "$*"; }
+die() { printf '[scan] ERROR: %s\n' "$*" >&2; exit 1; }
+
+command -v docker >/dev/null 2>&1 || die "docker is required"
+docker info >/dev/null 2>&1 || die "docker is not running"
+
+# Trivy runs as a container so nothing has to be installed on the host, and it
+# is pinned by version for the same reason every base image is pinned by digest
+# -- including because aquasecurity/trivy-action had 75 of its 76 tags
+# force-pushed in a 2026 supply-chain attack.
+trivy() {
+    docker run --rm \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v "$ROOT/.trivyignore:/.trivyignore:ro" \
+        -v "${HOME}/.cache/trivy:/root/.cache/trivy" \
+        "aquasec/trivy:${TRIVY_VERSION}" "$@"
+}
+
+targets=()
+if (( $# )); then
+    for e in "$@"; do targets+=("$e"); done
+else
+    for e in $(engine_list) cli; do
+        [[ -f "$ROOT/images/$e/Dockerfile" ]] && targets+=("$e")
+    done
+fi
+
+mkdir -p "${HOME}/.cache/trivy"
+
+failed=0
+scanned=0
+for engine in "${targets[@]}"; do
+    if [[ "$engine" == "cli" ]]; then
+        img="ghcr.io/simtabi/db-toolkit-cli:dev"
+    else
+        engine_load "$engine" >/dev/null 2>&1 || continue
+        upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
+        ver="$(grep -E "^DBTK_${upper}_VERSION=" .env 2>/dev/null | tail -1 | cut -d= -f2-)"
+        ver="${ver:-$DBTK_ENGINE_DEFAULT_VERSION}"
+        img="ghcr.io/simtabi/db-toolkit-${engine}:${ver}"
+    fi
+
+    if ! docker image inspect "$img" >/dev/null 2>&1; then
+        log "$engine: not built, skipping ($img)"
+        continue
+    fi
+
+    log "scanning $img"
+    scanned=$(( scanned + 1 ))
+    if ! trivy image --severity HIGH,CRITICAL --ignore-unfixed \
+            --ignorefile /.trivyignore --exit-code 1 --scanners vuln \
+            --format table "$img"; then
+        failed=$(( failed + 1 ))
+    fi
+done
+
+(( scanned > 0 )) || die "no images are built; run: make build"
+
+if (( failed )); then
+    printf '\n'
+    die "$failed image(s) have fixable HIGH/CRITICAL findings.
+       Repin the base digest in images/bases.tsv if a rebuild fixes it.
+       If it genuinely cannot be fixed, add it to .trivyignore WITH a reason
+       and a revisit condition -- check 38 rejects a bare CVE id."
+fi
+
+log "$scanned image(s) scanned, no fixable HIGH/CRITICAL findings"

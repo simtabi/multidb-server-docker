@@ -142,6 +142,20 @@ mariadb: ## MariaDB shell (socket-first)
 	@$(COMPOSE) exec mariadb mariadb --protocol=socket -uroot \
 		-p"$$(cat secrets/mariadb_root_password.txt)"
 
+.PHONY: mongo
+mongo: ## MongoDB shell (mongosh, authenticated)
+	@$(COMPOSE) exec mongodb mongosh \
+		"mongodb://$(or $(USER_NAME),root):$$(cat secrets/mongodb_root_password.txt)@127.0.0.1:27017/?authSource=admin"
+
+.PHONY: cassandra
+cassandra: ## Cassandra shell (cqlsh, authenticated)
+	@$(COMPOSE) exec cassandra cqlsh -u $(or $(USER_NAME),cassandra) \
+		-p "$$(cat secrets/cassandra_root_password.txt)"
+
+.PHONY: scan
+scan: ## Scan built images for vulnerabilities (honours .trivyignore)
+	@scripts/scan $(ENGINE)
+
 .PHONY: shell
 shell: ## Open the cli image (tools with no server required)
 	@docker run --rm -it \
@@ -179,7 +193,7 @@ pitr-backup: ## Take a PITR backup (ENGINE= TYPE=full|diff|incr)
 	@scripts/pitr backup --engine "$(or $(ENGINE),pg)" $(if $(TYPE),--type "$(TYPE)",)
 
 .PHONY: pitr-restore
-pitr-restore: ## Recover to a point in time (ENGINE= TO='2026-08-09 12:00:00')
+pitr-restore: ## Recover to a point in time (ENGINE= TO=<file>:<pos>, or a time for pg)
 	@scripts/pitr restore --engine "$(or $(ENGINE),pg)" --to "$(TO)"
 
 .PHONY: verify-backups
