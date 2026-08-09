@@ -88,6 +88,29 @@ members="$(docker compose exec -T etcd1 etcdctl member list 2>/dev/null | grep -
 (( members >= 3 )) || vfail "etcd has $members member(s); section 21.2 requires a quorum of 3 minimum"
 vinfo "etcd quorum: $members members"
 
+# Caught up, not merely "streaming".
+#
+# Patroni refuses to promote a replica lagging more than
+# maximum_lag_on_failover, and rightly so -- promoting a node that is 80MB
+# behind silently discards those writes. A replica reports state "running"
+# from the moment it starts streaming, long before it has caught up, so
+# killing the leader at that point produces a cluster where NO node is
+# eligible and no election ever happens. That is Patroni behaving correctly
+# and the test being unfair, which is the harder failure to read: the logs
+# say "i am not the healthiest node" on every node at once.
+max_lag=1048576
+caught_up=0
+for (( i = 0; i < 180; i++ )); do
+    worst="$(docker compose exec -T patroni1 sh -c 'curl -s http://127.0.0.1:8008/cluster' 2>/dev/null \
+        | tr ',' '\n' | grep -oE '"lag": *[0-9]+' | grep -oE '[0-9]+' \
+        | sort -n | tail -1)"
+    worst="${worst:-999999999}"
+    if (( worst < max_lag )); then caught_up=1; break; fi
+    sleep 1
+done
+(( caught_up )) || vfail "replicas never caught up to within ${max_lag} bytes; no node would be eligible for election"
+vinfo "replicas caught up (worst lag ${worst} bytes, limit ${max_lag})"
+
 # Write through the HAProxy write port, then kill the leader.
 docker compose exec -T haproxy sh -c 'true' >/dev/null 2>&1 || vfail "haproxy is not running"
 
