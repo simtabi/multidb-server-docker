@@ -200,6 +200,45 @@ Restoring rewrites the data directory, so `pitr-restore` requires a typed
 confirmation. If you are not certain of the target, restore into a copy first;
 [Restore](RESTORE.md) covers that.
 
+### The MySQL family
+
+MariaDB has point-in-time recovery through its binary log:
+
+```
+DBTK_MARIADB_PITR=true
+```
+
+The log is written to its own volume, never inside the data directory, in ROW
+format with full row images — `STATEMENT` format replays non-deterministic
+statements differently than they ran, so recovery would silently diverge from
+the database it is meant to reproduce.
+
+**Recovery targets a coordinate, not a time.**
+
+```bash
+make pitr-info ENGINE=mariadb                          # current coordinate
+make pitr-restore ENGINE=mariadb TO=binlog.000002:873  # after restoring a dump
+```
+
+That is not a stylistic preference. `mariadb-binlog` given several files and
+`--stop-datetime` exits after the **first** file and silently skips the rest
+([MDEV-35528](https://jira.mariadb.org/browse/MDEV-35528)), so a time-bounded
+replay recovers almost nothing while reporting success. A position is exact,
+has no timezone interpretation, and `--stop-position` applies to the last file
+named — earlier files replay in full, the final one stops at a byte offset.
+
+The procedure is: restore the base dump, then replay. Dumps record the
+coordinate they were taken at, so the replay knows where to start.
+
+**MySQL configures binary logging but does not claim PITR.** The log is written
+and can be shipped off-site; what is missing is a tool to read it back. The
+official `mysql:8.4` image is `mysql-community-server-minimal` on Oracle Linux
+9 with no `mysqlbinlog`, the only one in its repos conflicts with the server
+package, and MySQL Shell's binlog utilities arrived after the version it ships.
+A log nothing can replay is an audit trail rather than a recovery path, so
+`engines/mysql/engine.conf` says so rather than implying otherwise. Use MariaDB
+if you need PITR from that family.
+
 ## High availability
 
 ```bash
