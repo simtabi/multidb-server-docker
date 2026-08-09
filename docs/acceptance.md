@@ -18,13 +18,13 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | 6a | Two projects per engine, isolated roles, cross-access denied | `13-triplet-isolation`, `28-new-project`, `34-new-project-every-engine` | Covered |
 | 6b | PG RLS demo passes | `36-rls-demo` | Covered |
 | 7a | Fresh VPS path ends TLS-only, unpublished or firewalled, no UI exposed | `20-tls-enforced-prod`, `26-prod-profile-guards` | Covered |
-| 7b | **Nightly S3 backups** | — | **Not implemented** |
-| 7c | **PITR active for PG** | — | **Not implemented** |
+| 7b | Nightly S3 backups | `39-offsite-backup`, `check-env` prod guard | Covered |
+| 7c | PITR active for PG | `37-pitr-recovers` | Covered |
 | 8 | Restore drill with row-count verification; `backup-all` produces per-database dumps plus PG globals; `verify-backups` restores the latest set green | `21-backup-restore-roundtrip`, `22-backup-all-and-verify` | Covered |
 | 9 | `make psql` over the shared unix socket; a sidecar mounting the socket volume connects with no TCP | `19-unix-sockets` | Covered |
 | 10 | `sslmode=verify-full` against the toolkit CA succeeds; prod MySQL-family plaintext refused | `12-pg-tls`, `20-tls-enforced-prod` | Covered |
 | 11a | CI matrix green | `.github/workflows/ci.yml` | Written, never run — see below |
-| 11b | **trivy clean or waived with notes** | — | **Not implemented** |
+| 11b | trivy clean or waived with notes | `38-trivy-waivers`, CI scan step | Covered |
 | 11c | Repo and image-history grep finds no credential | `03-secret-scan-repo`, `23-image-history-secrets` | Covered |
 
 ## Sections 21 and 22
@@ -45,26 +45,17 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 Stated plainly, because a criterion quietly dropped from a report is worse than
 one that is openly outstanding.
 
-**Nightly S3 backups (7b).** The backup sidecar writes to `DBTK_BACKUP_DIR` and
-stops there. There is no destination setting and nothing ships backups off the
-machine; [Operations](OPERATIONS.md) states this as a boundary rather than
-implying otherwise. An operator who configures nothing else has local-only
-backups, which on a server is the failure mode that matters.
+**CI matrix green (11a).** The workflow is written — the matrix derived from
+the engine descriptors, images built per version per architecture, each scanned
+by trivy — but the repository has no remote, so GitHub Actions has never
+executed it. What is verified locally: the YAML parses, `scripts/ci-matrix`
+produces the twelve (engine, version) pairs, the exact build path succeeds for
+a non-default version, and the trivy invocation was run by hand against a built
+image (it found seventeen real findings, now waived with reasons). Calling that
+"green" would still be a claim about something that has not run.
 
-**PITR active for PG (7c).** Not implemented. There is no WAL archiving, no
-`archive_mode`, and no pgBackRest repository, so recovery granularity is the
-last dump rather than a point in time. `make ha-reinit` rebuilds a replica from
-the current leader, not from an archive.
-
-**trivy clean or waived (11b).** No vulnerability scanning runs anywhere. For a
-project publishing container images this is a real gap, not a formality.
-
-**CI matrix green (11a).** The workflow is written and the matrix is derived
-from the engine descriptors, but the repository has no remote, so GitHub
-Actions has never executed it. What is verified locally: the YAML parses,
-`scripts/ci-matrix` produces the twelve (engine, version) pairs, and the exact
-build path succeeds for a non-default version. Calling that "green" would be a
-claim about something that has not run.
+This is the one criterion that cannot be closed from here: it needs a push to
+GitHub, which is the user's to make.
 
 ## A note on running the harness
 

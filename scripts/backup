@@ -194,10 +194,42 @@ prune() {
 push_s3() {
     local bucket; bucket="$(get DBTK_S3_BUCKET)"
     [[ -z "$bucket" ]] && return 0
-    command -v rclone >/dev/null 2>&1 || { log "rclone not available; skipping S3 push"; return 0; }
+
+    command -v rclone >/dev/null 2>&1 \
+        || die "DBTK_S3_BUCKET is set but rclone is not installed; backups would stay on this machine"
+
+    # rclone is CONFIGURED here, which it previously was not: the settings
+    # existed in .env and nothing read them, so `rclone copy :s3:` ran with no
+    # credentials, failed, and the failure was swallowed by a log line. An
+    # off-site destination that silently does nothing is worse than none,
+    # because it looks like the backups are leaving the machine.
+    local key_file secret_file
+    key_file="$(get DBTK_S3_KEY_ID_FILE)";     key_file="${key_file:-secrets/s3_key_id.txt}"
+    secret_file="$(get DBTK_S3_KEY_SECRET_FILE)"; secret_file="${secret_file:-secrets/s3_key_secret.txt}"
+
+    [[ -s "$ROOT/$key_file" && -s "$ROOT/$secret_file" ]] \
+        || die "DBTK_S3_BUCKET is set but $key_file or $secret_file is missing or empty"
+
+    RCLONE_S3_PROVIDER="$(get DBTK_S3_PROVIDER)"
+    export RCLONE_S3_PROVIDER="${RCLONE_S3_PROVIDER:-Other}"
+    RCLONE_S3_ACCESS_KEY_ID="$(tr -d '\n' < "$ROOT/$key_file")"
+    RCLONE_S3_SECRET_ACCESS_KEY="$(tr -d '\n' < "$ROOT/$secret_file")"
+    export RCLONE_S3_ACCESS_KEY_ID RCLONE_S3_SECRET_ACCESS_KEY
+
+    local host region
+    host="$(get DBTK_S3_HOST)";   [[ -n "$host" ]]   && export RCLONE_S3_ENDPOINT="$host"
+    region="$(get DBTK_S3_REGION)"; [[ -n "$region" ]] && export RCLONE_S3_REGION="$region"
+
     log "pushing to S3 bucket $bucket"
-    rclone copy "$BACKUP_DIR" ":s3:${bucket}/$(hostname)" --no-traverse 2>&1 | sed 's/^/[backup]   /' || \
-        log "S3 push failed (backups remain on local disk)"
+
+    # NOT tolerated on failure. `backup-all` used to report success after the
+    # push failed, which is the precise shape of a backup strategy that is
+    # discovered to be missing at the worst moment.
+    if ! rclone copy "$BACKUP_DIR" ":s3:${bucket}/$(hostname)" --no-traverse 2>&1 \
+            | sed 's/^/[backup]   /'; then
+        die "the off-site push FAILED; backups exist only on this machine"
+    fi
+    log "off-site copy complete"
 }
 
 # -----------------------------------------------------------------------------

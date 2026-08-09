@@ -105,15 +105,26 @@ DBTK_BACKUP_NOTIFY_URL=https://...
 Two things that are not optional on a server:
 
 **Get them off the machine.** A backup on the machine that failed is not a
-backup — and the toolkit does **not** do this for you. There is no destination
-setting: the backup sidecar writes to `DBTK_BACKUP_DIR` and stops there.
-Shipping that directory somewhere else is yours to arrange, with restic, rclone,
-`aws s3 sync`, or a snapshot of the volume. Set `DBTK_BACKUP_ENCRYPT=true`
-before it leaves the machine.
+backup. Set an S3-compatible destination and every dump is copied there after
+it is taken:
 
-This is a deliberate boundary rather than an omission — a dozen half-supported
-storage backends age badly — but it does mean an operator who configures nothing
-else has local-only backups.
+```
+DBTK_S3_BUCKET=my-backups
+DBTK_S3_HOST=s3.us-east-1.amazonaws.com
+DBTK_S3_REGION=us-east-1
+DBTK_S3_PROVIDER=AWS
+DBTK_S3_KEY_ID_FILE=secrets/s3_key_id.txt
+DBTK_S3_KEY_SECRET_FILE=secrets/s3_key_secret.txt
+```
+
+Credentials go in `secrets/`, never in `.env`. A failed push **fails the
+backup** rather than being logged: a run that reports success having left
+everything on the machine is the exact shape of a backup strategy discovered to
+be missing at the worst moment.
+
+PostgreSQL additionally sends its WAL archive and base backups off-site through
+pgBackRest's own S3 repository — see below — which is what makes recovery to a
+point in time survive losing the host.
 
 **Scheduled verification.** `make verify-backups` restores the latest set into
 throwaway containers and asserts the row counts. Put it on a schedule and alert
@@ -155,6 +166,39 @@ build on any trust rule anywhere.
 
 Applications reading passwords from `secrets/` at startup need a restart after
 rotation.
+
+## Point-in-time recovery
+
+A dump gives you the moment it ran. WAL archiving lets you stop recovery at any
+instant the archive covers — including the second before a `DELETE` with no
+`WHERE` clause.
+
+```
+DBTK_PG_PITR=true
+DBTK_PGBACKREST_REPO_TYPE=s3
+DBTK_PGBACKREST_S3_BUCKET=my-pgbackrest
+DBTK_PGBACKREST_S3_ENDPOINT=s3.us-east-1.amazonaws.com
+```
+
+**Not a live toggle.** `archive_mode` cannot be reloaded, so enabling PITR takes
+effect at the next restart. It is off by default because archiving on a
+development machine fills a disk with segments nobody will replay; the prod
+profile requires it, and also requires the repository to be `s3` — a local
+repository dies with the machine it was protecting.
+
+```bash
+make pitr-info                                  # repository and recoverable window
+make pitr-backup TYPE=full                      # incr by default
+make pitr-restore TO='2026-08-09 12:00:00'      # or TO=latest
+```
+
+The repository is encrypted before it leaves the machine and lives in its own
+volume rather than inside the data volume — a backup stored inside the thing it
+backs up goes when that goes, and `make destroy` would take it.
+
+Restoring rewrites the data directory, so `pitr-restore` requires a typed
+confirmation. If you are not certain of the target, restore into a copy first;
+[Restore](RESTORE.md) covers that.
 
 ## High availability
 
