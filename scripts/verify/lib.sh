@@ -94,9 +94,25 @@ engine_version() {
 }
 
 # Fail with a clear message when the image a check needs has not been built.
+#
+# "Not built" and "was here and vanished" are different problems with different
+# fixes, and saying the wrong one costs real time: a full harness run takes tens
+# of minutes, Docker reclaims unused images under disk pressure, and the
+# resulting "run: make build" points at a build that already succeeded.
 need_image() {
     local img="$1"
-    image_exists "$img" || vfail "image not built yet: $img (run: make build)"
+    image_exists "$img" && return 0
+
+    if [[ -n "${DBTK_IMAGE_SNAPSHOT:-}" ]] && [[ -f "$DBTK_IMAGE_SNAPSHOT" ]] \
+       && grep -qxF "$img" "$DBTK_IMAGE_SNAPSHOT" 2>/dev/null; then
+        vfail "image RECLAIMED mid-run: $img
+       It existed when this run started and has since been removed, which
+       Docker does to unused images under disk pressure. This is an
+       environment failure, not a build failure -- rebuilding and re-running
+       the check alone will pass. Free disk space to run the full harness."
+    fi
+
+    vfail "image not built yet: $img (run: make build)"
 }
 
 # Resolve the digest-pinned upstream base for an engine + version from the

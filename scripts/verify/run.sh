@@ -80,6 +80,18 @@ pass=0; fail=0; skip=0
 failed_names=()
 skipped_names=()
 
+# An inventory of the images that exist right now, shared with every check.
+#
+# A full run takes tens of minutes, and Docker reclaims unused images under
+# disk pressure. When that happens mid-run, checks fail with "image not built
+# yet (run: make build)" -- which sends you diagnosing a build that worked
+# perfectly. Recording what was here at the start lets need_image tell the two
+# apart, and lets the summary say so once rather than eight times.
+DBTK_IMAGE_SNAPSHOT="$(mktemp)"
+export DBTK_IMAGE_SNAPSHOT
+trap 'rm -f "$DBTK_IMAGE_SNAPSHOT"' EXIT
+docker images --format '{{.Repository}}:{{.Tag}}' > "$DBTK_IMAGE_SNAPSHOT" 2>/dev/null || true
+
 printf '%s%s db-toolkit verify %s%s\n' "$BLD" "$BLU" "$(date '+%H:%M:%S')" "$OFF"
 [[ -n "${VERIFY_TAGS:-}" ]] && printf '%sfiltering by tag: %s%s\n' "$DIM" "$VERIFY_TAGS" "$OFF"
 printf '\n'
@@ -133,6 +145,23 @@ fi
 if (( fail )); then
     printf '\n%sfailed:%s\n' "$RED" "$OFF"
     for n in "${failed_names[@]}"; do printf '  ✗ %s\n' "$n"; done
+    # Say it once. Eight checks each reporting a missing image reads as eight
+    # problems; it is one, and it is not a problem with the code.
+    if [[ -s "$DBTK_IMAGE_SNAPSHOT" ]]; then
+        reclaimed=0
+        while IFS= read -r img; do
+            [[ -n "$img" ]] || continue
+            docker image inspect "$img" >/dev/null 2>&1 || reclaimed=$(( reclaimed + 1 ))
+        done < "$DBTK_IMAGE_SNAPSHOT"
+        if (( reclaimed > 0 )); then
+            printf '\n%s%d image(s) that existed when this run started are gone.%s\n' \
+                "$YLW" "$reclaimed" "$OFF"
+            printf '%sDocker reclaims unused images under disk pressure. Failures above that\n' "$DIM"
+            printf 'say "image not built yet" are that, not defects -- free disk space and\n'
+            printf 're-run.%s\n' "$OFF"
+        fi
+    fi
+
     printf '\n%sA failing check is the point: fix the root cause, never the check.%s\n' "$DIM" "$OFF"
     exit 1
 fi
