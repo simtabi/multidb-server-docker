@@ -145,10 +145,26 @@ services:
     <<: *hardening
     entrypoint: ["/mdb/scripts/backup", "--engine", "pg", "--schedule"]
     # The sidecar runs on the engine's image but is NOT the engine, so the
-    # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
-    # is not running here and reports the container unhealthy forever.
+    # inherited healthcheck (pg_isready / mysqladmin ping) would probe a server
+    # that is not running here and report the container unhealthy forever. It is
+    # REPLACED rather than disabled: `healthcheck: {disable: true}` makes
+    # `compose up --wait` fail outright with "has no healthcheck configured"
+    # (docker/compose#13522), which is why every profile carrying a backup
+    # sidecar failed to boot on CI while the databases themselves reported
+    # healthy. This machine's compose is new enough not to, so it only ever
+    # reproduced on a runner.
+    #
+    # What it checks is what this container is for: the scheduler is still PID 1,
+    # and the backup destination is writable -- a read-only or unmounted
+    # /backups is the failure that otherwise runs for weeks and is discovered
+    # when a restore is needed. Both use shell builtins and /proc, so no
+    # additional package is required in any engine image.
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "grep -q backup /proc/1/cmdline && test -w /backups"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       MDB_IN_CONTAINER: "1"
       MDB_BACKUP_DIR: /backups
@@ -156,6 +172,13 @@ services:
       PGUSER: postgres
     volumes:
       - ./scripts:/mdb/scripts:ro
+      # engines/ is not optional. scripts/backup sources engine-lib.sh, which
+      # resolves MDB_ENGINES_DIR as scripts/../engines and exits non-zero when
+      # that directory is absent -- so without this mount the sidecar died on
+      # startup, every time, and restart: unless-stopped turned that into a
+      # silent crash loop. It went unnoticed because the container's healthcheck
+      # was disabled: nothing ever asked whether it was running.
+      - ./engines:/mdb/engines:ro
       - ./secrets:/run/secrets:ro
       - ./backups:/backups
       - ./.env:/mdb/.env:ro
@@ -170,16 +193,39 @@ services:
     <<: *hardening
     entrypoint: ["/mdb/scripts/backup", "--engine", "mysql", "--schedule"]
     # The sidecar runs on the engine's image but is NOT the engine, so the
-    # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
-    # is not running here and reports the container unhealthy forever.
+    # inherited healthcheck (pg_isready / mysqladmin ping) would probe a server
+    # that is not running here and report the container unhealthy forever. It is
+    # REPLACED rather than disabled: `healthcheck: {disable: true}` makes
+    # `compose up --wait` fail outright with "has no healthcheck configured"
+    # (docker/compose#13522), which is why every profile carrying a backup
+    # sidecar failed to boot on CI while the databases themselves reported
+    # healthy. This machine's compose is new enough not to, so it only ever
+    # reproduced on a runner.
+    #
+    # What it checks is what this container is for: the scheduler is still PID 1,
+    # and the backup destination is writable -- a read-only or unmounted
+    # /backups is the failure that otherwise runs for weeks and is discovered
+    # when a restore is needed. Both use shell builtins and /proc, so no
+    # additional package is required in any engine image.
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "grep -q backup /proc/1/cmdline && test -w /backups"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       MDB_IN_CONTAINER: "1"
       MDB_BACKUP_DIR: /backups
       MYSQL_HOST: mysql
     volumes:
       - ./scripts:/mdb/scripts:ro
+      # engines/ is not optional. scripts/backup sources engine-lib.sh, which
+      # resolves MDB_ENGINES_DIR as scripts/../engines and exits non-zero when
+      # that directory is absent -- so without this mount the sidecar died on
+      # startup, every time, and restart: unless-stopped turned that into a
+      # silent crash loop. It went unnoticed because the container's healthcheck
+      # was disabled: nothing ever asked whether it was running.
+      - ./engines:/mdb/engines:ro
       - ./secrets:/run/secrets:ro
       - ./backups:/backups
       - ./.env:/mdb/.env:ro
@@ -194,16 +240,39 @@ services:
     <<: *hardening
     entrypoint: ["/mdb/scripts/backup", "--engine", "mariadb", "--schedule"]
     # The sidecar runs on the engine's image but is NOT the engine, so the
-    # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
-    # is not running here and reports the container unhealthy forever.
+    # inherited healthcheck (pg_isready / mysqladmin ping) would probe a server
+    # that is not running here and report the container unhealthy forever. It is
+    # REPLACED rather than disabled: `healthcheck: {disable: true}` makes
+    # `compose up --wait` fail outright with "has no healthcheck configured"
+    # (docker/compose#13522), which is why every profile carrying a backup
+    # sidecar failed to boot on CI while the databases themselves reported
+    # healthy. This machine's compose is new enough not to, so it only ever
+    # reproduced on a runner.
+    #
+    # What it checks is what this container is for: the scheduler is still PID 1,
+    # and the backup destination is writable -- a read-only or unmounted
+    # /backups is the failure that otherwise runs for weeks and is discovered
+    # when a restore is needed. Both use shell builtins and /proc, so no
+    # additional package is required in any engine image.
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "grep -q backup /proc/1/cmdline && test -w /backups"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       MDB_IN_CONTAINER: "1"
       MDB_BACKUP_DIR: /backups
       MYSQL_HOST: mariadb
     volumes:
       - ./scripts:/mdb/scripts:ro
+      # engines/ is not optional. scripts/backup sources engine-lib.sh, which
+      # resolves MDB_ENGINES_DIR as scripts/../engines and exits non-zero when
+      # that directory is absent -- so without this mount the sidecar died on
+      # startup, every time, and restart: unless-stopped turned that into a
+      # silent crash loop. It went unnoticed because the container's healthcheck
+      # was disabled: nothing ever asked whether it was running.
+      - ./engines:/mdb/engines:ro
       - ./secrets:/run/secrets:ro
       - ./backups:/backups
       - ./.env:/mdb/.env:ro
