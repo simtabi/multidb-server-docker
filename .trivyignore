@@ -1,0 +1,52 @@
+# Trivy waivers.
+#
+# Every line here is a vulnerability the build will NOT fail on. That is a
+# deliberate decision each time, not a way to quiet the scanner, so each entry
+# carries three things:
+#
+#   CVE-ID    # <date> — <why it cannot be fixed here> — <when to revisit>
+#
+# A waiver with no reason is indistinguishable from an oversight six months
+# later, and the whole value of scanning is lost the moment this file becomes a
+# place to dump IDs. Check 38 fails the build on an entry with no reason.
+#
+# Prefer fixing over waiving: most findings come from base images, so repinning
+# a digest in images/bases.tsv usually resolves them outright.
+
+# -----------------------------------------------------------------------------
+# gosu — Go standard library CVEs in a statically linked setuid helper
+# -----------------------------------------------------------------------------
+# gosu ships in the upstream postgres base image; we do not build it and cannot
+# repin it independently. Every finding below is in the Go standard library it
+# was compiled against, in packages gosu does not reach: it drops privileges at
+# container start and execs, parsing no untrusted input and opening no sockets.
+# net/mail, mime and net/http parsing are not on any path it executes.
+#
+# Revisit whenever images/bases.tsv is repinned — a rebuilt base picks up a
+# newer gosu and these should disappear rather than be re-waived.
+CVE-2025-61726  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2025-61729  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2025-68121  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-25679  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-27145  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-32280  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-32281  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-32283  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-33811  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-33814  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-39820  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-39836  # 2026-08-09 — gosu, Go stdlib, unreachable in a setuid exec helper — revisit on base repin
+CVE-2026-42499  # 2026-08-09 — gosu, Go stdlib net/mail, no mail parsing on any path — revisit on base repin
+CVE-2026-42504  # 2026-08-09 — gosu, Go stdlib mime, no MIME parsing on any path — revisit on base repin
+
+# -----------------------------------------------------------------------------
+# postgres_exporter — Go toolchain CVEs, already on the newest release
+# -----------------------------------------------------------------------------
+# 0.20.1 (2026-07-07) is the latest upstream release, so there is nothing to
+# repin to. Both findings are in the Go toolchain the release was built with,
+# not in the exporter's own code. The exporter is off by default and, when on,
+# is reachable only on the internal metrics network.
+#
+# Revisit at the next postgres_exporter release.
+CVE-2026-56852  # 2026-08-09 — postgres_exporter, golang.org/x/text, no newer release exists — revisit next release
+CVE-2026-39822  # 2026-08-09 — postgres_exporter + gosu, Go stdlib os.Root, no newer release exists — revisit next release

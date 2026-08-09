@@ -75,6 +75,61 @@ jobs:
           sed -i "s/^DBTK_${upper}_VERSION=.*/DBTK_${upper}_VERSION=${VERSION}/" .env
           scripts/build "$ENGINE"
 
+      # ---------------------------------------------------------------------
+      # Vulnerability scan, on the image that was just built.
+      #
+      # The trivy BINARY, pinned by version and verified against the release
+      # checksums -- not aquasecurity/trivy-action. In March 2026 an attacker
+      # force-pushed 75 of that action's 76 version tags to steal CI secrets,
+      # so referencing it by tag is exactly the supply-chain risk a security
+      # scanner is supposed to reduce. The same reasoning that pins every base
+      # image by digest applies to the thing doing the scanning.
+      # ---------------------------------------------------------------------
+      - name: Install trivy
+        env:
+          TRIVY_VERSION: 0.73.0
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64)  t_arch=64bit ;;
+            aarch64) t_arch=ARM64 ;;
+            *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+          esac
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSL -o trivy.tar.gz "${base}/trivy_${TRIVY_VERSION}_Linux-${t_arch}.tar.gz"
+          curl -fsSL -o checksums.txt "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " trivy_${TRIVY_VERSION}_Linux-${t_arch}.tar.gz\$" checksums.txt | sha256sum -c -
+          tar -xzf trivy.tar.gz trivy
+          sudo mv trivy /usr/local/bin/
+          trivy --version
+
+      - name: Scan ${{ matrix.entry.engine }} ${{ matrix.entry.version }}
+        env:
+          ENGINE: ${{ matrix.entry.engine }}
+          VERSION: ${{ matrix.entry.version }}
+        run: |
+          set -euo pipefail
+          # Fails the build on HIGH and CRITICAL with a known fix. Unfixed
+          # findings are reported but do not fail: there is nothing to do about
+          # them yet, and a scanner that cannot be made green stops being read.
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --ignorefile .trivyignore \
+            --exit-code 1 \
+            --format table \
+            "ghcr.io/simtabi/db-toolkit-${ENGINE}:${VERSION}"
+
+      - name: Report unfixed findings (never fails)
+        if: always()
+        env:
+          ENGINE: ${{ matrix.entry.engine }}
+          VERSION: ${{ matrix.entry.version }}
+        run: |
+          trivy image --severity HIGH,CRITICAL --exit-code 0 --format table \
+            "ghcr.io/simtabi/db-toolkit-${ENGINE}:${VERSION}" || true
+
   # ---------------------------------------------------------------------------
   # The acceptance harness, on default versions, on both architectures.
   # ---------------------------------------------------------------------------
