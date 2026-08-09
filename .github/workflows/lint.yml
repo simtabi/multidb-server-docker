@@ -15,8 +15,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # PINNED, not apt's.
+      #
+      # Ubuntu ships an older shellcheck than developers install locally, and
+      # the two disagree: the runner rejected SC2015 patterns that shellcheck
+      # 0.11 no longer reports, so `make lint` passed on a laptop and failed in
+      # CI. A gate that disagrees with the gate people run before pushing is
+      # worse than no gate -- it teaches them to push and see.
       - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o sc.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          tar -xJf sc.tar.xz
+          sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
 
       - name: Lint every shell script
         run: make lint

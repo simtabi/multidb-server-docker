@@ -149,8 +149,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Same pinned version as lint.yml; see the note there.
       - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          curl -fsSL -o sc.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.${arch}.tar.xz"
+          tar -xJf sc.tar.xz
+          sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
 
       # CLAUDE.md is explicit that docker is required and never mocked, so a
       # runner without it must fail here rather than silently skipping checks.

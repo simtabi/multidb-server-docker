@@ -89,7 +89,7 @@ fi
 running=""
 while IFS= read -r svc; do
     [[ -n "$svc" ]] && running+="$svc "
-done < <(cd "$MDB_ROOT" && docker compose ps --services --status running 2>/dev/null || true)
+done < <( { cd "$MDB_ROOT" || exit 0; docker compose ps --services --status running 2>/dev/null; } || true)
 
 provisioned=0
 skipped=""

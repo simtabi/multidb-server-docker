@@ -119,7 +119,7 @@ users="$(mysql_up "
 count=0
 if [ -n "$users" ]; then
     echo "$users" | while IFS="$(printf '\t')" read -r u hexpw; do
-        [ -n "$u" ] && [ -n "$hexpw" ] || continue
+        if [ -z "$u" ] || [ -z "$hexpw" ]; then continue; fi
         admin "INSERT OR REPLACE INTO mysql_users
                  (username, password, default_hostgroup, active, transaction_persistent)
                VALUES ('${u}', UNHEX('${hexpw}'), 0, 1, 1);"
