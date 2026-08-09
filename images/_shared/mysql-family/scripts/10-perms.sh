@@ -16,6 +16,17 @@ install -d -o mysql -g mysql -m 0700 "$DBTK_CERT_DIR"
 install -d -m 0755 "$DBTK_CONF_DIR"
 install -d -m 0755 "$DBTK_INITDB_DIR"
 
+# The binary log directory, when PITR is on.
+#
+# Deliberately NOT inside the data directory, which is where MySQL puts binlogs
+# by default. A recovery log stored inside the thing it recovers goes when that
+# goes -- `make destroy`, a corrupted volume, a botched upgrade -- which is
+# every scenario it exists for. 0700 because the binlog contains every row
+# written, so it is as sensitive as the data itself.
+if is_true "$(engine_env PITR false)"; then
+    install -d -o mysql -g mysql -m 0700 "$(dirname "${DBTK_BINLOG_BASENAME:-/var/lib/dbtk-binlog/binlog}")"
+fi
+
 if datadir_initialised; then
     stage "existing data directory detected at $DBTK_DATA_DIR"
 else

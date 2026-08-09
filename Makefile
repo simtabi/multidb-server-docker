@@ -171,16 +171,16 @@ restore: ## Guided, confirmed restore (ENGINE= DB= FILE=)
 	@scripts/restore --engine "$(ENGINE)" --db "$(DB)" --file "$(FILE)"
 
 .PHONY: pitr-info
-pitr-info: ## Show the pgBackRest repository and recoverable window
-	@scripts/pitr info
+pitr-info: ## Show the recoverable window (ENGINE=pg|mysql|mariadb)
+	@scripts/pitr info --engine "$(or $(ENGINE),pg)"
 
 .PHONY: pitr-backup
-pitr-backup: ## Take a PITR backup (TYPE=full|diff|incr)
-	@scripts/pitr backup $(if $(TYPE),--type "$(TYPE)",)
+pitr-backup: ## Take a PITR backup (ENGINE= TYPE=full|diff|incr)
+	@scripts/pitr backup --engine "$(or $(ENGINE),pg)" $(if $(TYPE),--type "$(TYPE)",)
 
 .PHONY: pitr-restore
-pitr-restore: ## Recover to a point in time (TO='2026-08-09 12:00:00' or TO=latest)
-	@scripts/pitr restore --to "$(TO)"
+pitr-restore: ## Recover to a point in time (ENGINE= TO='2026-08-09 12:00:00')
+	@scripts/pitr restore --engine "$(or $(ENGINE),pg)" --to "$(TO)"
 
 .PHONY: verify-backups
 verify-backups: ## Restore the latest set into throwaway containers, assert row counts

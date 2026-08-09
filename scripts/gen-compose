@@ -117,7 +117,7 @@ for engine in $(engine_list); do
         # from the data volume on purpose: a backup living inside the thing it
         # backs up is not a backup, and `make destroy` takes the data with it.
         if [ "${DBTK_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
-            printf '      - %s_pgbackrest:%s\n' \
+            printf '      - %s_pitr:%s\n' \
                 "$DBTK_ENGINE_NAME" "${DBTK_ENGINE_PITR_REPO_PATH:-/var/lib/pgbackrest}"
         fi
         printf '    ports:\n'
@@ -225,8 +225,11 @@ done
         # NOT per major. The repository spans version upgrades: a backup taken
         # before an upgrade is exactly the one you want after a failed upgrade.
         if [ "${DBTK_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
-            printf '  %s_pgbackrest:\n' "$DBTK_ENGINE_NAME"
-            printf '    name: ${COMPOSE_PROJECT_NAME:-dbtk}_%s_pgbackrest\n' "$DBTK_ENGINE_NAME"
+            # Neutral name: PostgreSQL's repository is pgBackRest's, the MySQL
+            # family's is a binary-log directory. The volume is "where this
+            # engine's point-in-time recovery data lives", not one tool's.
+            printf '  %s_pitr:\n' "$DBTK_ENGINE_NAME"
+            printf '    name: ${COMPOSE_PROJECT_NAME:-dbtk}_%s_pitr\n' "$DBTK_ENGINE_NAME"
         fi
     done
 } >> "$tmp"

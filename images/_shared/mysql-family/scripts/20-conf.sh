@@ -64,9 +64,37 @@ conf="$DBTK_CONF_DIR/10-dbtk-generated.cnf"
         printf 'mysql_native_password = ON\n'
     fi
 
+    # PITR. The MySQL family's equivalent of WAL archiving is the binary log.
+    #
+    # MySQL 8.0+ enables it by default; MariaDB does not, and neither
+    # guarantees the settings that make a log REPLAYABLE. ROW format is the one
+    # that matters: with STATEMENT, replaying a non-deterministic statement
+    # (NOW(), UUID(), an unordered UPDATE ... LIMIT) produces different data
+    # than it did the first time, so recovery silently diverges from the
+    # database it is supposed to reproduce.
+    if is_true "$(engine_env PITR false)"; then
+        printf '\n# PITR: binary logging, replayable.\n'
+        printf 'log_bin = %s\n' "${DBTK_BINLOG_BASENAME:-/var/lib/dbtk-binlog/binlog}"
+        printf 'binlog_format = ROW\n'
+        printf 'binlog_row_image = FULL\n'
+        # Required for binary logging at all, and it must be stable: a server
+        # that changes id between restarts breaks any replica or archiver
+        # following it.
+        printf 'server_id = %s\n' "$(engine_env SERVER_ID 1)"
+        printf 'binlog_expire_logs_seconds = %s\n' "$(engine_env BINLOG_RETENTION_SECONDS 604800)"
+        # Durability of the log itself. Without this a crash can lose the last
+        # transactions from the binlog while they are committed in the data --
+        # recovery would then silently stop short of them.
+        printf 'sync_binlog = 1\n'
+        printf 'innodb_flush_log_at_trx_commit = 1\n'
+    fi
+
     # Test profile: the MySQL-family equivalents of PostgreSQL's fsync=off.
     # Set by compose.test.yml; data loss on stop is the point (SPEC section 7).
     if is_true "$(engine_env TEST_MODE false)"; then
+        # Deliberately AFTER the PITR block, so sync_binlog=0 wins when both
+        # are on: the test profile has already given up durability, and a
+        # binlog it never replays is not worth an fsync per transaction.
         printf '\n# TEST PROFILE: durability deliberately disabled.\n'
         printf 'innodb_flush_log_at_trx_commit = 0\n'
         printf 'innodb_doublewrite = 0\n'

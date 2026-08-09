@@ -26,7 +26,7 @@ ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
 stanza="$(get DBTK_PGBACKREST_STANZA)"; stanza="${stanza:-dbtk}"
-svc=pg
+ENGINE=pg
 
 verb="${1:-info}"
 shift || true
@@ -35,21 +35,126 @@ TARGET=""
 TYPE=incr
 while (( $# )); do
     case "$1" in
-        --to)   TARGET="${2:-}"; shift 2 ;;
-        --type) TYPE="${2:-}"; shift 2 ;;
+        --to)     TARGET="${2:-}"; shift 2 ;;
+        --type)   TYPE="${2:-}"; shift 2 ;;
+        --engine) ENGINE="${2:-}"; shift 2 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
 
+upper="$(printf '%s' "$ENGINE" | tr '[:lower:]-' '[:upper:]_')"
+svc="$ENGINE"
+
 pitr_enabled() {
-    local v; v="$(get DBTK_PG_PITR)"
+    local v; v="$(get "DBTK_${upper}_PITR")"
     case "$v" in true|TRUE|1|yes|on) return 0 ;; *) return 1 ;; esac
 }
 
-pitr_enabled || die "PITR is off. Set DBTK_PG_PITR=true and restart: archive_mode
-       cannot be enabled without a server restart, so this is not a live toggle."
+# The MySQL family's binary log is the same idea as WAL archiving with entirely
+# different tooling, so the verbs are shared and the implementations are not.
+is_mysql_family() {
+    case "$ENGINE" in mysql|mariadb) return 0 ;; *) return 1 ;; esac
+}
+
+mysql_client() { [ "$ENGINE" = mariadb ] && printf 'mariadb' || printf 'mysql'; }
+# MariaDB ships mariadb-binlog; MySQL's minimal image ships no replay tool at
+# all, which is why engines/mysql/engine.conf declares PITR_CAPABLE=false.
+binlog_tool() { [ "$ENGINE" = mariadb ] && printf 'mariadb-binlog' || printf 'mysqlbinlog'; }
+binlog_dir() {
+    local d; d="$(get DBTK_BINLOG_DIR)"
+    printf '%s' "${d:-/var/lib/dbtk-binlog}"
+}
+root_pw() { tr -d '\n' < "$ROOT/secrets/${ENGINE}_root_password.txt"; }
+
+pitr_enabled || die "PITR is off for $ENGINE. Set DBTK_${upper}_PITR=true and restart:
+       neither archive_mode nor log_bin can be enabled without one, so this is
+       not a live toggle."
 
 pgbr() { docker compose exec -T -u postgres "$svc" pgbackrest --stanza="$stanza" "$@"; }
+
+# -----------------------------------------------------------------------------
+# MySQL family: the binary log
+# -----------------------------------------------------------------------------
+if is_mysql_family; then
+    client="$(mysql_client)"
+    dir="$(binlog_dir)"
+
+    my() {
+        docker compose exec -T "$svc" "$client" --protocol=socket -uroot \
+            -p"$(root_pw)" -N -B -e "$1" 2>/dev/null
+    }
+
+    case "$verb" in
+        info)
+            log "binary logs in $dir (on their own volume, not inside the data directory)"
+            docker compose exec -T "$svc" sh -c "ls -lh '$dir' 2>/dev/null" || true
+            printf '\n'
+            log "server-side view:"
+            my "SHOW BINARY LOGS" || die "could not query the server; is $svc running?"
+            printf '\n'
+            log "recovery replays a dump, then binlog events up to your target time"
+            ;;
+
+        backup)
+            # A binlog is only replayable ONTO something. The base is an
+            # ordinary dump, which already records its binlog coordinates when
+            # PITR is on, so this deliberately reuses that path rather than
+            # inventing a second kind of backup that could drift from it.
+            log "flushing binary logs so the current one is closed and complete"
+            my "FLUSH BINARY LOGS" >/dev/null || die "FLUSH BINARY LOGS failed"
+            log "taking the base dump (its binlog position is recorded inside it)"
+            "$ROOT/scripts/backup" --engine "$ENGINE" --all
+            log "done; verify with: make pitr-info ENGINE=$ENGINE"
+            ;;
+
+        restore)
+            [[ -n "$TARGET" ]] || die "specify a target: --to '2026-08-09 12:34:56'"
+
+            printf 'Point-in-time recovery for %s replays the binary log onto a restored\n' "$ENGINE"
+            printf 'dump, up to:\n\n    %s\n\n' "$TARGET"
+            printf 'Everything written after that point is discarded. Restore the base dump\n'
+            printf 'FIRST (make restore ENGINE=%s DB=...), then run this.\n\n' "$ENGINE"
+            printf 'Type %s to continue: ' "$ENGINE"
+            read -r answer
+            [[ "$answer" == "$ENGINE" ]] || die "confirmation did not match; nothing was changed"
+
+            # --stop-datetime is EXCLUSIVE of events at the target, and it
+            # compares against each event's timestamp, which the SERVER wrote.
+            # Passing a time from the host's clock would silently land on the
+            # wrong side of a write whenever the two disagree.
+            log "replaying binary logs up to $TARGET"
+
+            # ONLY the logs. MariaDB writes a .idx sidecar beside each one, and
+            # a binlog.[0-9]* glob catches those too -- the replay tool then
+            # rejects the whole batch as not a binary log file, which reads as
+            # a corrupt log rather than a glob that caught the wrong files.
+            # binlog.index is excluded for the same reason.
+            #
+            # The tool name is expanded HERE, on the host: binlog_tool is a
+            # function of this script and does not exist inside the container.
+            tool="$(binlog_tool)"
+            docker compose exec -T "$svc" bash -c '
+                set -e
+                set -o pipefail
+                dir="$1"; tool="$2"; stop="$3"; client="$4"; pw="$5"
+                logs=$(ls -1 "$dir" 2>/dev/null | grep -E "^binlog\.[0-9]+$" \
+                       | sort | sed "s|^|$dir/|")
+                [ -n "$logs" ] || { echo "no binary logs found in $dir" >&2; exit 1; }
+                # shellcheck disable=SC2086
+                $tool --stop-datetime="$stop" $logs \
+                  | "$client" --protocol=socket -uroot -p"$pw"
+            ' _ "$dir" "$tool" "$TARGET" "$client" "$(root_pw)" \
+                || die "binlog replay failed"
+
+            log "replay complete; the database is at $TARGET"
+            ;;
+
+        *)
+            die "unknown verb: $verb (want: info|backup|restore)"
+            ;;
+    esac
+    exit 0
+fi
 
 case "$verb" in
     info)

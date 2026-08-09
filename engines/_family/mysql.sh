@@ -45,17 +45,32 @@ hook_list_databases() {
 # --routines and --events are the two the defaults silently omit, so a
 # "complete" dump without them is quietly incomplete until you need a procedure.
 hook_dump_database() {
-    local db="$1" out="$2" dumper args=()
+    local db="$1" out="$2" dumper args=() pitr_args=()
     dumper="$(printf '%s' "$DBTK_ENGINE_DUMP" | awk '{print $1}')"
     while IFS= read -r a; do [ -n "$a" ] && args+=("$a"); done < <(_mysql_args)
 
+    # Record the binary-log coordinates the dump was taken at.
+    #
+    # Without them, point-in-time recovery has no safe place to start replaying
+    # from: replaying the whole archive would re-apply transactions the dump
+    # already contains, and guessing a later position would skip some. The flag
+    # writes them as a COMMENT, so the dump still restores normally.
+    #
+    # --source-data replaced --master-data in MySQL 8.0.26 and MariaDB 10.5;
+    # the descriptor says which to use rather than this branching on version.
+    if [ "${DBTK_MYSQL_PITR:-${DBTK_MARIADB_PITR:-false}}" = "true" ]; then
+        pitr_args=("--${DBTK_ENGINE_DUMP_POSITION_FLAG:-source-data}=2")
+    fi
+
     if [ -n "$(compress_ext)" ]; then
         engine_exec "$DBTK_ENGINE_NAME" "$dumper" ${args[@]+"${args[@]}"} \
-            --single-transaction --routines --triggers --events --quick "$db" \
+            --single-transaction --routines --triggers --events --quick \
+            ${pitr_args[@]+"${pitr_args[@]}"} "$db" \
             | zstd -q -T0 -"${DBTK_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
     else
         engine_exec "$DBTK_ENGINE_NAME" "$dumper" ${args[@]+"${args[@]}"} \
-            --single-transaction --routines --triggers --events --quick "$db" > "$out"
+            --single-transaction --routines --triggers --events --quick \
+            ${pitr_args[@]+"${pitr_args[@]}"} "$db" > "$out"
     fi
 }
 
