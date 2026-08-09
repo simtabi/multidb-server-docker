@@ -23,11 +23,23 @@ need_file "$DBTK_ROOT/docker-compose.yml"
 # psql in it anyway. Using the engine image with --entrypoint psql bypasses its
 # s6 entrypoint, which would otherwise wrap every result in supervision logging.
 psql_via_haproxy() {
-    local port="$1" sql="$2" net
-    net="$(docker network ls --format '{{.Name}}' | grep -E '_(dbtk|net)$|dbtk' | head -1)"
-    docker run --rm --network "${net:-dbtk_net}" \
+    local port="$1" sql="$2" net pw
+    # The exact compose network, not a substring search. Matching anything
+    # containing "dbtk" picked up a leftover throwaway network from another
+    # check (dbtk-verify-pool-net-NNNN), where no service resolves -- so every
+    # probe failed with "could not translate host name", and the check reported
+    # that the write port was not routing when it had never been reached.
+    net="${COMPOSE_PROJECT_NAME:-dbtk}_net"
+    # The superuser password, not an anonymous connection. pg_hba is
+    # scram-sha-256 for every host rule -- check 30 fails the build if it ever
+    # is not -- so a passwordless attempt is refused, and the check then reads
+    # as "the write port does not route to a primary" when the routing was
+    # fine all along.
+    pw="$(tr -d '\n' < "$DBTK_ROOT/secrets/pg_superuser_password.txt" 2>/dev/null)"
+    docker run --rm --network "$net" \
+        -e PGPASSWORD="$pw" \
         --entrypoint psql "$(image_name pg)" \
-        "host=haproxy port=${port} user=postgres" \
+        "host=haproxy port=${port} user=postgres dbname=postgres sslmode=require" \
         -tAc "$sql" 2>/dev/null | tr -d ' \r' || true
 }
 
@@ -47,10 +59,22 @@ budget="$(env_get DBTK_HA_FAILOVER_BUDGET 30)"
 # find in the repository. Inheriting a half-broken cluster from a previous run
 # would also make this check's result depend on the one before it.
 make down >/dev/null 2>&1 || true
+#
+# The NODE data volumes go too, not just etcd's. Clearing one and not the other
+# is worse than clearing neither: etcd loses all history while the nodes keep a
+# data directory from a previous timeline, so the replicas try to follow a
+# leader whose past they no longer share. They then fall back to archive
+# recovery, sit at "waiting for WAL to become available", and report tens of
+# megabytes of lag that never closes -- which reads as a replication bug rather
+# than as leftovers from the previous run.
+_pgv="$(env_get DBTK_PG_VERSION 17)"
 docker volume rm -f \
     "${COMPOSE_PROJECT_NAME:-dbtk}_etcd1_data" \
     "${COMPOSE_PROJECT_NAME:-dbtk}_etcd2_data" \
-    "${COMPOSE_PROJECT_NAME:-dbtk}_etcd3_data" >/dev/null 2>&1 || true
+    "${COMPOSE_PROJECT_NAME:-dbtk}_etcd3_data" \
+    "${COMPOSE_PROJECT_NAME:-dbtk}_patroni1_pg${_pgv}_data" \
+    "${COMPOSE_PROJECT_NAME:-dbtk}_patroni2_pg${_pgv}_data" \
+    "${COMPOSE_PROJECT_NAME:-dbtk}_patroni3_pg${_pgv}_data" >/dev/null 2>&1 || true
 
 make up PROFILES=ha >/dev/null 2>&1 || vfail "make up PROFILES=ha failed"
 add_cleanup 'make down'
@@ -72,8 +96,13 @@ leader="$(scripts/ha leader 2>/dev/null)"
 # is the exact failure this topology is supposed to make visible.
 streaming=0
 for (( i = 0; i < 180; i++ )); do
+    # State is "streaming", not "running". A replica reports "running" while it
+    # is still catching up or has fallen back to archive recovery; "streaming"
+    # is the one that means it is connected to the primary and following it.
+    # Accepting "running" would pass on exactly the degraded cluster this is
+    # meant to catch.
     streaming="$(scripts/ha roles 2>/dev/null \
-        | awk -F'\t' '$2 == "Replica" && $3 == "running"' | wc -l | tr -d ' ')"
+        | awk -F'\t' '$2 == "Replica" && $3 == "streaming"' | wc -l | tr -d ' ')"
     (( streaming >= 2 )) && break
     sleep 1
 done
@@ -150,11 +179,18 @@ done
 vinfo "write port follows the new leader"
 
 # The read port must serve replicas only.
+# Retried until it is CORRECT, not until it merely answers.
+#
+# Breaking on any non-empty reply accepted "f" -- the read port still routing
+# to the node that had just been promoted, because HAProxy had not yet re-run
+# its /replica check (inter 3s, rise 2). That is a transient state on the way
+# to the right one, and treating it as the final answer failed a working
+# cluster.
 in_recovery=""
 for (( i = 0; i < budget; i++ )); do
     in_recovery="$(psql_via_haproxy "${DBTK_HAPROXY_READ_PORT:-5433}" \
         "SELECT pg_is_in_recovery()")"
-    [[ -n "$in_recovery" ]] && break
+    [[ "$in_recovery" == "t" ]] && break
     sleep 2
 done
 [[ "$in_recovery" == "t" ]] || vfail "the read port served a primary; it must serve replicas only"
