@@ -17,6 +17,7 @@ cd "$MDB_ROOT" || exit 1
 engines="$(engine_list)"
 [[ -n "$engines" ]] || vfail "no engine descriptors found in engines/"
 
+seen_offsets=""
 count=0
 for e in $engines; do
     engine_load "$e" || vfail "could not load the descriptor for '$e'"
@@ -97,6 +98,30 @@ for e in $engines; do
     if [[ "${MDB_ENGINE_AUTH_OFF_BY_DEFAULT_UPSTREAM:-false}" == "true" ]]; then
         vinfo "$MDB_ENGINE_NAME: upstream ships auth OFF; the image must enable it"
     fi
+
+    # Port offsets must be unique, numeric, and land inside the port range.
+    #
+    # Two engines sharing an offset resolve to the same host port, and compose
+    # reports that as "port is already allocated" against whichever service
+    # loses the race -- naming neither descriptor. The offset is explicit
+    # precisely so this is checkable.
+    off="${MDB_ENGINE_PORT_OFFSET:-}"
+    [[ -n "$off" ]] \
+        || vfail "$rel: no MDB_ENGINE_PORT_OFFSET; publishing would have no port to derive"
+    [[ "$off" =~ ^[0-9]+$ ]] \
+        || vfail "$rel: MDB_ENGINE_PORT_OFFSET='$off' is not a number"
+    # 54000 is the documented default base and 100 is the pooler's own step, so
+    # anything past ~11000 can push a pooler port over 65535.
+    (( off < 11000 )) \
+        || vfail "$rel: MDB_ENGINE_PORT_OFFSET=$off is too large; base + offset must stay under 65535"
+
+    case " $seen_offsets " in
+        *" ${off}:"*)
+            prior="${seen_offsets##*" ${off}:"}"; prior="${prior%% *}"
+            vfail "$rel: MDB_ENGINE_PORT_OFFSET=$off is already used by '$prior'.
+       Both would publish the same host port and one would fail to bind." ;;
+        *) seen_offsets="$seen_offsets ${off}:${MDB_ENGINE_NAME}" ;;
+    esac
 
     # Every engine gets a mounted overrides directory, so every engine must have
     # one in the repository. A bind mount whose host path does not exist is not
