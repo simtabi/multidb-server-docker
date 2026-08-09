@@ -103,6 +103,18 @@ need_image() {
     local img="$1"
     image_exists "$img" && return 0
 
+    # A check run on its own has no snapshot from the runner, so take one at
+    # first use. It cannot see images reclaimed before the check started, but
+    # it catches the common case -- a long check whose image vanishes partway
+    # through -- and without it a standalone run gets the misleading
+    # "run: make build" that this whole mechanism exists to avoid.
+    if [[ -z "${DBTK_IMAGE_SNAPSHOT:-}" ]]; then
+        DBTK_IMAGE_SNAPSHOT="$(mktemp)"
+        export DBTK_IMAGE_SNAPSHOT
+        add_cleanup "rm -f '$DBTK_IMAGE_SNAPSHOT'"
+        docker images --format '{{.Repository}}:{{.Tag}}' > "$DBTK_IMAGE_SNAPSHOT" 2>/dev/null || true
+    fi
+
     if [[ -n "${DBTK_IMAGE_SNAPSHOT:-}" ]] && [[ -f "$DBTK_IMAGE_SNAPSHOT" ]] \
        && grep -qxF "$img" "$DBTK_IMAGE_SNAPSHOT" 2>/dev/null; then
         vfail "image RECLAIMED mid-run: $img
