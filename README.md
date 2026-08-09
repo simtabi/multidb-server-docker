@@ -60,6 +60,7 @@ Full documentation is hosted at
 ### Reference
 
 - [Specification](docs/SPEC.md) — the build contract
+- [Acceptance](docs/acceptance.md) — every criterion mapped to the check that proves it
 - [Design](DESIGN.md) — pinned versions, capacity table, decision log
 - [Row-level security kit](rls/README.md) — database-enforced multi-tenancy
 
