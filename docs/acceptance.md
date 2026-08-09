@@ -20,7 +20,7 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | 7a | Fresh VPS path ends TLS-only, unpublished or firewalled, no UI exposed | `20-tls-enforced-prod`, `26-prod-profile-guards` | Covered |
 | 7b | Nightly S3 backups | `39-offsite-backup`, `check-env` prod guard | Covered |
 | 7c | PITR active for PG | `37-pitr-recovers` | Covered |
-| 7c+ | PITR for MariaDB (beyond spec) | `40-mariadb-pitr` | Covered — MySQL declares it unsupported, see D-46 |
+| 7c+ | PITR for MySQL and MariaDB (beyond spec) | `40-mysql-family-pitr` | Covered |
 | 8 | Restore drill with row-count verification; `backup-all` produces per-database dumps plus PG globals; `verify-backups` restores the latest set green | `21-backup-restore-roundtrip`, `22-backup-all-and-verify` | Covered |
 | 9 | `make psql` over the shared unix socket; a sidecar mounting the socket volume connects with no TCP | `19-unix-sockets` | Covered |
 | 10 | `sslmode=verify-full` against the toolkit CA succeeds; prod MySQL-family plaintext refused | `12-pg-tls`, `20-tls-enforced-prod` | Covered |

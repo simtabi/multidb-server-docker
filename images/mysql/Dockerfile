@@ -26,6 +26,34 @@ RUN set -eux; \
     microdnf install -y procps-ng unzip findutils; \
     microdnf clean all
 
+# --- mysqlbinlog, for point-in-time recovery -----------------------------------
+# The official image is mysql-community-server-minimal on Oracle Linux 9 and
+# ships no mysqlbinlog, so a binary log could be written and never replayed --
+# an audit trail rather than a recovery path.
+#
+# Installing mysql-community-client does not work: it owns /usr/bin/mysql,
+# mysqladmin and mysqldump too, and rpm refuses the file conflicts with
+# server-minimal. So ONE FILE is extracted from that RPM instead. No package is
+# installed, nothing conflicts, and nothing else from the client package ends
+# up in the image.
+#
+# The version is read from the INSTALLED server rather than pinned here, because
+# mysqlbinlog must be able to read what this exact server writes. A pinned
+# version would silently drift the first time the base image bumped.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    ver="$(rpm -q --qf '%{VERSION}-%{RELEASE}' mysql-community-server-minimal)"; \
+    microdnf install -y cpio; \
+    curl -fsSL -o /tmp/mysql-client.rpm \
+        "https://repo.mysql.com/yum/mysql-8.4-community/el/9/${arch}/mysql-community-client-${ver}.${arch}.rpm"; \
+    cd /tmp; \
+    rpm2cpio /tmp/mysql-client.rpm | cpio -idm ./usr/bin/mysqlbinlog; \
+    install -m 0755 /tmp/usr/bin/mysqlbinlog /usr/local/bin/mysqlbinlog; \
+    rm -rf /tmp/mysql-client.rpm /tmp/usr; \
+    microdnf remove -y cpio; \
+    microdnf clean all; \
+    mysqlbinlog --version
+
 # rclone is not packaged for Oracle Linux, so it comes from upstream. It is the
 # S3 push tool SPEC section 6.1 requires baked into every engine image.
 RUN set -eux; \

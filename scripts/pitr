@@ -88,7 +88,17 @@ if is_mysql_family; then
     # SHOW BINLOG STATUS; MySQL 8.4 uses SHOW BINARY LOG STATUS. Both keep the
     # old SHOW MASTER STATUS as a deprecated alias, so that is what is used
     # here rather than branching on a version.
-    coordinate_now() { my "SHOW MASTER STATUS" | awk '{print $1":"$2}'; }
+    # Renamed in both directions: MySQL 8.4 REMOVED SHOW MASTER STATUS for
+    # SHOW BINARY LOG STATUS, MariaDB added SHOW BINLOG STATUS and kept the old
+    # name as an alias. Trying in order avoids branching on a version string.
+    coordinate_now() {
+        local out stmt
+        for stmt in "SHOW BINARY LOG STATUS" "SHOW BINLOG STATUS" "SHOW MASTER STATUS"; do
+            out="$(my "$stmt" 2>/dev/null || true)"
+            if [ -n "$out" ]; then printf '%s' "$out" | awk '{print $1":"$2}'; return 0; fi
+        done
+        printf 'unknown'
+    }
 
     # Files up to AND INCLUDING the one holding the target, in order.
     #
