@@ -52,11 +52,11 @@ fi
 structural_errors=0
 for c in "${CHECKS[@]}"; do
     rel="${c#"$ROOT"/}"
-    [[ -x "$c" ]] || { printf '%sstructure%s %s is not executable\n' "$RED" "$OFF" "$rel"; ((structural_errors++)); }
-    [[ -n "$(meta verify "$c")" ]] || { printf '%sstructure%s %s has no "# verify:" header\n' "$RED" "$OFF" "$rel"; ((structural_errors++)); }
-    [[ -n "$(meta phase  "$c")" ]] || { printf '%sstructure%s %s has no "# phase:" header\n'  "$RED" "$OFF" "$rel"; ((structural_errors++)); }
-    [[ -n "$(meta tags   "$c")" ]] || { printf '%sstructure%s %s has no "# tags:" header\n'   "$RED" "$OFF" "$rel"; ((structural_errors++)); }
-    bash -n "$c" 2>/dev/null || { printf '%sstructure%s %s is not valid bash\n' "$RED" "$OFF" "$rel"; ((structural_errors++)); }
+    [[ -x "$c" ]] || { printf '%sstructure%s %s is not executable\n' "$RED" "$OFF" "$rel"; structural_errors=$(( structural_errors + 1 )); }
+    [[ -n "$(meta verify "$c")" ]] || { printf '%sstructure%s %s has no "# verify:" header\n' "$RED" "$OFF" "$rel"; structural_errors=$(( structural_errors + 1 )); }
+    [[ -n "$(meta phase  "$c")" ]] || { printf '%sstructure%s %s has no "# phase:" header\n'  "$RED" "$OFF" "$rel"; structural_errors=$(( structural_errors + 1 )); }
+    [[ -n "$(meta tags   "$c")" ]] || { printf '%sstructure%s %s has no "# tags:" header\n'   "$RED" "$OFF" "$rel"; structural_errors=$(( structural_errors + 1 )); }
+    bash -n "$c" 2>/dev/null || { printf '%sstructure%s %s is not valid bash\n' "$RED" "$OFF" "$rel"; structural_errors=$(( structural_errors + 1 )); }
 done
 
 if (( STRUCTURE_ONLY )); then
@@ -76,6 +76,13 @@ fi
 # -----------------------------------------------------------------------------
 # Execution
 # -----------------------------------------------------------------------------
+# Counters use $(( x + 1 )), never (( x++ )).
+#
+# `(( x++ ))` returns the OLD value as its exit status, so the first increment
+# from zero exits 1 -- and under `set -e` that aborts the runner. It survives on
+# bash 3.2 and does not on the bash 5 CI runs on, which is why the harness ran
+# all 42 checks locally and died after the first passing check in CI, printing
+# the check's name and nothing else.
 pass=0; fail=0; skip=0
 failed_names=()
 skipped_names=()
@@ -113,17 +120,17 @@ for c in "${CHECKS[@]}"; do
 
     case "$rc" in
         0)
-            ((pass++))
+            pass=$(( pass + 1 ))
             printf '  %s✓ pass%s\n' "$GRN" "$OFF"
             [[ -n "$output" ]] && printf '%s\n' "$output"
             ;;
         "$EXIT_SKIP")
-            ((skip++)); skipped_names+=("$name")
+            skip=$(( skip + 1 )); skipped_names+=("$name")
             printf '  %s· skip%s\n' "$YLW" "$OFF"
             [[ -n "$output" ]] && printf '%s\n' "$output"
             ;;
         *)
-            ((fail++)); failed_names+=("$name (phase $phase)")
+            fail=$(( fail + 1 )); failed_names+=("$name (phase $phase)")
             printf '  %s✗ fail%s %s(expected until phase %s)%s\n' "$RED" "$OFF" "$DIM" "$phase" "$OFF"
             [[ -n "$output" ]] && printf '%s\n' "$output"
             ;;

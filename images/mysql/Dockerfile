@@ -40,12 +40,17 @@ RUN set -eux; \
 # The version is read from the INSTALLED server rather than pinned here, because
 # mysqlbinlog must be able to read what this exact server writes. A pinned
 # version would silently drift the first time the base image bumped.
+#
+# The repo SERIES is derived from it too. Hardcoding mysql-8.4-community built
+# fine for 8.4 and 404'd for 8.0 and 9.7 -- every other version on the menu --
+# which only showed up once CI built the whole matrix rather than one default.
 RUN set -eux; \
     arch="$(uname -m)"; \
     ver="$(rpm -q --qf '%{VERSION}-%{RELEASE}' mysql-community-server-minimal)"; \
     microdnf install -y cpio; \
+    series="$(printf '%s' "$ver" | cut -d. -f1,2)"; \
     curl -fsSL -o /tmp/mysql-client.rpm \
-        "https://repo.mysql.com/yum/mysql-8.4-community/el/9/${arch}/mysql-community-client-${ver}.${arch}.rpm"; \
+        "https://repo.mysql.com/yum/mysql-${series}-community/el/9/${arch}/mysql-community-client-${ver}.${arch}.rpm"; \
     cd /tmp; \
     rpm2cpio /tmp/mysql-client.rpm | cpio -idm ./usr/bin/mysqlbinlog; \
     install -m 0755 /tmp/usr/bin/mysqlbinlog /usr/local/bin/mysqlbinlog; \

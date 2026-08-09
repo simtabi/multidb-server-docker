@@ -97,10 +97,15 @@ jobs:
             *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
           esac
           base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
-          curl -fsSL -o trivy.tar.gz "${base}/trivy_${TRIVY_VERSION}_Linux-${t_arch}.tar.gz"
+          tarball="trivy_${TRIVY_VERSION}_Linux-${t_arch}.tar.gz"
+          # Saved under its REAL name: `sha256sum -c` looks the file up by the
+          # name written in the checksum line, so downloading to trivy.tar.gz
+          # made it fail with "No such file or directory" -- which reads as a
+          # failed download rather than a naming mismatch.
+          curl -fsSL -o "$tarball" "${base}/${tarball}"
           curl -fsSL -o checksums.txt "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
-          grep " trivy_${TRIVY_VERSION}_Linux-${t_arch}.tar.gz\$" checksums.txt | sha256sum -c -
-          tar -xzf trivy.tar.gz trivy
+          grep " ${tarball}\$" checksums.txt | sha256sum -c -
+          tar -xzf "$tarball" trivy
           sudo mv trivy /usr/local/bin/
           trivy --version
 

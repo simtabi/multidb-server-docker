@@ -13,7 +13,7 @@ Runs on macOS, Windows and Linux across amd64 and arm64; dev-first, prod-capable
 
 ```bash
 git clone https://github.com/simtabi/multidb-server-docker.git
-cd multidb-server
+cd multidb-server-docker
 make init
 make up
 ```
