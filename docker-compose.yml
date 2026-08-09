@@ -94,7 +94,13 @@ services:
   # ---------------------------------------------------------------------------
   caddy:
     profiles: [ui, prod]
-    image: caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    # Built here: stock Caddy proxies HTTP, and the database engines speak raw
+    # TCP. images/caddy/Dockerfile adds caddy-l4 so ONE front door can own the
+    # host ports for every engine. See IMAGE-PROVENANCE.md.
+    build:
+      context: ./images
+      dockerfile: caddy/Dockerfile
+    image: ghcr.io/simtabi/multidb-server-caddy:dev
     restart: unless-stopped
     <<: *hardening
     # Binding 80/443 needs this one capability back; everything else stays
@@ -102,6 +108,9 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     volumes:
+      # Generated from the engine descriptors by scripts/gen-compose; empty
+      # unless MDB_PUBLISH=proxy.
+      - ./caddy/layer4.caddy:/etc/caddy/layer4.caddy:ro
       # Rendered from caddy/Caddyfile.tmpl (dev) or Caddyfile.prod.tmpl (prod).
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Persisted so the internal CA and any issued certificates survive a
