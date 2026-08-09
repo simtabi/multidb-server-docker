@@ -38,13 +38,17 @@ RUN set -eux; \
 # is not used, cannot be patched here, and is the entire vulnerability surface --
 # removing it is the fix, and waiving the CVEs would have been the excuse.
 #
-# It is removed with --noautoremove: mysql-shell shares dependencies with the
-# server (openssl-libs among them), and letting rpm garbage-collect them takes
-# out mysqld with it.
+# It goes out through `rpm -e`, not `microdnf remove`. mysql-shell shares
+# dependencies with the server -- openssl-libs among them -- and microdnf
+# garbage-collects those, taking mysqld with it. dnf spells the opt-out
+# --noautoremove; microdnf, which is what this Oracle Linux 9 base ships, does
+# not have that option at all and fails with "Unknown option". `rpm -e` removes
+# exactly the package named and nothing else, and still refuses if anything
+# depends on it -- so a future base where something does would fail here loudly
+# rather than lose it silently.
 RUN set -eux; \
     if rpm -q mysql-shell >/dev/null 2>&1; then \
-        microdnf remove -y --noautoremove mysql-shell; \
-        microdnf clean all; \
+        rpm -e mysql-shell; \
     fi; \
     # Verify: the tree is gone AND the server it shared libraries with survives.
     [ ! -d /usr/lib/mysqlsh ]; \
