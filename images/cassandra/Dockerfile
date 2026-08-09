@@ -17,7 +17,7 @@ LABEL org.opencontainers.image.title="multidb-server-cassandra" \
       org.opencontainers.image.description="Apache Cassandra with authentication and authorization enabled, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server-docker"
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive

@@ -1,8 +1,8 @@
-# simtabi/multidb-server
+# simtabi/multidb-server-docker
 
-[![Images](https://img.shields.io/badge/ghcr.io-db--toolkit-blue)](https://github.com/simtabi/multidb-server/pkgs/container/multidb-server-pg)
-[![Tests](https://github.com/simtabi/multidb-server/actions/workflows/ci.yml/badge.svg)](https://github.com/simtabi/multidb-server/actions/workflows/ci.yml)
-[![Static analysis](https://github.com/simtabi/multidb-server/actions/workflows/lint.yml/badge.svg)](https://github.com/simtabi/multidb-server/actions/workflows/lint.yml)
+[![Images](https://img.shields.io/badge/ghcr.io-multidb--server-blue)](https://github.com/simtabi/multidb-server-docker/pkgs/container/multidb-server-pg)
+[![Tests](https://github.com/simtabi/multidb-server-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/simtabi/multidb-server-docker/actions/workflows/ci.yml)
+[![Static analysis](https://github.com/simtabi/multidb-server-docker/actions/workflows/lint.yml/badge.svg)](https://github.com/simtabi/multidb-server-docker/actions/workflows/lint.yml)
 [![License MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > One local database toolkit for SQL and NoSQL: PostgreSQL, MySQL, MariaDB, MongoDB, Cassandra and FerretDB, each version-switchable, secure by default, with browser UIs — installed once and shared by many projects.
@@ -12,7 +12,7 @@ Runs on macOS, Windows and Linux across amd64 and arm64; dev-first, prod-capable
 ## Install
 
 ```bash
-git clone https://github.com/simtabi/multidb-server.git
+git clone https://github.com/simtabi/multidb-server-docker.git
 cd multidb-server
 make init
 make up
@@ -79,7 +79,7 @@ Full documentation is hosted at
 
 ## Community
 
-Issues and discussions: <https://github.com/simtabi/multidb-server/issues>.
+Issues and discussions: <https://github.com/simtabi/multidb-server-docker/issues>.
 
 ## Contributing & security
 

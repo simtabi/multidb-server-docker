@@ -35,7 +35,7 @@ both. Two things are not identical across architectures:
 ## Install
 
 ```bash
-git clone https://github.com/simtabi/multidb-server.git
+git clone https://github.com/simtabi/multidb-server-docker.git
 cd multidb-server
 make init
 ```

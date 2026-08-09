@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.title="multidb-server-mariadb" \
       org.opencontainers.image.description="MariaDB with multidb-server configuration and tooling, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server-docker"
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive

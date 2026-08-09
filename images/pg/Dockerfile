@@ -110,7 +110,7 @@ LABEL org.opencontainers.image.title="multidb-server-pg" \
       org.opencontainers.image.description="PostgreSQL with the full multidb-server extension suite, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server-docker"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PG_MAJOR=${ENGINE_VERSION}

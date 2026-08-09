@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.title="multidb-server-cli" \
       org.opencontainers.image.description="PostgreSQL, MySQL and MariaDB clients, dump/restore tools, and the multidb-server scripts" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server-docker"
 
 ENV DEBIAN_FRONTEND=noninteractive
 

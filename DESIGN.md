@@ -8,7 +8,7 @@ Everything below was verified during this session against live registries, the G
 
 | Field | Value |
 |---|---|
-| Repository | `github.com/simtabi/multidb-server` |
+| Repository | `github.com/simtabi/multidb-server-docker` |
 | Images | `ghcr.io/simtabi/multidb-server-{pg,mysql,mariadb,cli}` |
 | Docs | `https://opensource.simtabi.com/documentation/simtabi/multidb-server/` |
 | Product page | `https://opensource.simtabi.com/products/simtabi/multidb-server` |
