@@ -62,9 +62,16 @@ GitHub, which is the user's to make.
 Every check has been observed green — individually or in a clean run. A single
 uninterrupted full `make verify` has not completed on the development machine
 used here, because Docker reclaims images partway through a ~40 minute run: one
-run logged eight images present at build time and one at the end, and the
-resulting failures all read "image not built yet". That is an environment
-limit, not a property of the harness, and CI's runners do not share it.
+run logged eight images present at build time and one at the end.
+
+The harness now says so itself rather than leaving it to be worked out. It
+snapshots the image list at start, and a check whose image has since vanished
+reports a reclaim — "environment failure, not a build failure" — instead of the
+misleading "run: make build" that sent this project diagnosing builds which had
+already succeeded. The summary counts it once.
+
+If a full run matters to you, free disk space first. CI's runners do not share
+this limit.
 
 ---
 
