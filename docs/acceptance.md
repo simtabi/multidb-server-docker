@@ -43,6 +43,7 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | PITR recovers to a point in time (PostgreSQL) | `37-pitr-recovers` |
 | PITR recovers to a point in time (MySQL and MariaDB) | `40-mysql-family-pitr` |
 | Vulnerability waivers are package-scoped, justified, and expire | `38-trivy-waivers` |
+| No Dockerfile passes a dnf-only flag to microdnf | `43-microdnf-flags` |
 | The off-site push is wired, authenticated, and fails loudly | `39-offsite-backup` |
 | Configuration reproduces, data persists, recovery data outlives `destroy` | `41-state-survives` |
 | Every image is official, upstream, or justified | `42-image-provenance` |
