@@ -115,7 +115,12 @@ if (( PROD )); then
     gen_secret ui_password.txt
     ui_password="$(cat "$ROOT/secrets/ui_password.txt")"
 
-    caddy_image="$(awk '/image: caddy:/ {print $2; exit}' "$ROOT/docker-compose.yml")"
+    # Found by SERVICE, not by a substring of the image name. The pattern used
+    # to be /image: caddy:/, which stopped matching the moment the image became
+    # one we build -- and the only symptom was "could not compute the UI
+    # password hash (is docker running?)", which blames Docker.
+    caddy_image="$(awk '/^  caddy:/{f=1} f && /^[[:space:]]+image:/{print $2; exit}' \
+        "$ROOT/docker-compose.yml")"
     ui_hash="$(docker run --rm "$caddy_image" caddy hash-password --plaintext "$ui_password" 2>/dev/null || true)"
     if [[ -z "$ui_hash" ]]; then
         printf '  could not compute the UI password hash (is docker running?)\n' >&2

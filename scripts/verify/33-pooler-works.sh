@@ -27,6 +27,11 @@ pooler_img="$(grep -oE "^MDB_ENGINE_POOLER_IMAGE='[^']+'" engines/postgres/engin
               | sed "s/^MDB_ENGINE_POOLER_IMAGE='//; s/'$//")"
 [[ -n "$pooler_img" ]] || vfail "engines/postgres/engine.conf declares no pooler image"
 
+# The pooler is an image we BUILD now, so it can be absent or reclaimed like
+# any other. Without this the failure surfaced as "the pooler failed to start",
+# which reads as a defect in the pooler rather than a missing image.
+need_image "$pooler_img"
+
 net="mdb-verify-pool-net-$$"
 pg="mdb-verify-pool-pg-$$"
 bouncer="mdb-verify-pool-bouncer-$$"
