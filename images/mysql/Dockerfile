@@ -20,6 +20,28 @@ LABEL org.opencontainers.image.title="multidb-server-mysql" \
 
 USER root
 
+# --- patch the OS layer --------------------------------------------------------
+# The 8.0 image line is no longer rebuilt on the cadence 8.4 and 9.7 are --
+# 8.0.46 dates from 2026-05-05 where the others were refreshed 2026-07-28 -- so
+# it ships Oracle Linux 9.7 packages whose fixes landed in 9.8. That was 47 HIGH
+# findings before the repin to 8.0.46 and 20 after, all in glib2, gnutls,
+# krb5-libs, libacl and libcap. They are fixable, so they get fixed; waiving
+# what a package manager can patch is what turns an ignore file into a dumping
+# ground.
+#
+# --exclude='mysql*' is the load-bearing part. Without it an update is free to
+# pull a newer mysql-community-server-minimal from the Oracle repo, and the
+# image stops being the digest it is pinned to -- a 8.0.46 pin quietly serving
+# some later 8.0. The assertion below is the proof: the server version must be
+# byte-identical across the update.
+RUN set -eux; \
+    before="$(mysqld --version)"; \
+    microdnf update -y --exclude='mysql*'; \
+    microdnf clean all; \
+    after="$(mysqld --version)"; \
+    [ "$before" = "$after" ] || { \
+        echo "OS update moved the server: '$before' -> '$after'" >&2; exit 1; }
+
 # Oracle Linux 9, so microdnf. The base already carries tar, xz, zstd, curl,
 # gosu and openssl; procps-ng and unzip are what it lacks (DESIGN.md D-17).
 RUN set -eux; \
