@@ -70,42 +70,54 @@ vinfo "binary logs are on their own volume ($basename_val)"
 run_sql "CREATE DATABASE pitrdemo; CREATE TABLE pitrdemo.t (id INT PRIMARY KEY, label VARCHAR(20));" >/dev/null
 run_sql "INSERT INTO pitrdemo.t VALUES (1,'before');" >/dev/null
 
-# The target comes from the SERVER's clock: --stop-datetime compares against
-# event timestamps the server wrote, so a host/container skew of one second
-# puts the target on the wrong side of a write.
-target="$(run_sql "SELECT NOW()" | tr -d '\r')"
-[[ -n "$target" ]] || vfail "could not read the server clock"
+# The recovery target is a binary-log COORDINATE, not a timestamp.
+#
+# mariadb-binlog with --stop-datetime across multiple files exits after the
+# FIRST file and silently skips the rest (MDEV-35528), so a time-bounded replay
+# recovers almost nothing while reporting success. Positions have no such bug,
+# no second-granularity ambiguity, and no timezone interpretation --
+# --stop-position applies to the last file named, which is exactly the
+# semantics point-in-time recovery needs.
+coord="$(run_sql "SHOW MASTER STATUS")"
+target_file="$(printf '%s' "$coord" | awk '{print $1}')"
+target_pos="$(printf '%s' "$coord" | awk '{print $2}')"
+[[ -n "$target_file" && -n "$target_pos" ]] || vfail "could not read the binary-log coordinate"
+vinfo "recovery target: ${target_file}:${target_pos}"
 
-sleep 2
 run_sql "INSERT INTO pitrdemo.t VALUES (2,'after');" >/dev/null
 
 total="$(run_sql "SELECT COUNT(*) FROM pitrdemo.t" | tr -d ' \r')"
 [[ "$total" == "2" ]] || vfail "expected 2 rows before recovery, found $total"
-vinfo "wrote 'before', recorded the target, wrote 'after'"
+vinfo "wrote 'before', took the coordinate, wrote 'after'"
 
-# Close the current log so every event is on disk and readable.
+# Close the current log so every event is on disk.
 run_sql "FLUSH BINARY LOGS" >/dev/null
 sleep 2
 
-# Recovery: drop to the pre-write state, then replay up to the target. Dropping
-# the database stands in for restoring a base dump taken before both writes,
-# which is what the documented procedure does.
+# Simulate the loss. Dropping the database stands in for restoring a base dump
+# taken before both writes, which is what the documented procedure does.
 run_sql "DROP DATABASE pitrdemo" >/dev/null
 gone="$(run_sql "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='pitrdemo'" | tr -d ' \r')"
 [[ "$gone" == "0" ]] || vfail "could not drop the database to simulate data loss"
 
-docker exec "$name" bash -c "
+# Files up to AND INCLUDING the target's file; --stop-position bounds the last.
+docker exec "$name" bash -c '
     set -e
     set -o pipefail
-    # ONLY the logs. MariaDB writes a .idx sidecar next to each one, and
-    # binlog.[0-9]* matches those too -- the replay tool then refuses the whole
-    # batch with "File is not a binary log file", which reads as a corrupt log
-    # rather than a glob that caught the wrong files. binlog.index is excluded
-    # for the same reason.
-    logs=\$(ls -1 /var/lib/dbtk-binlog 2>/dev/null | grep -E '^binlog\.[0-9]+\$' | sort | sed 's|^|/var/lib/dbtk-binlog/|')
-    [ -n \"\$logs\" ] || { echo 'no binary logs found' >&2; exit 1; }
-    $binlog_tool --stop-datetime='$target' \$logs | $client --protocol=socket -uroot -p'$pw'
-" > /tmp/dbtk-replay-$$.log 2>&1 || { sed -n "1,8p" /tmp/dbtk-replay-$$.log >&2; rm -f /tmp/dbtk-replay-$$.log; vfail "binlog replay failed"; }
+    dir=/var/lib/dbtk-binlog
+    target_file="$1"; target_pos="$2"; tool="$3"; client="$4"; pw="$5"
+    logs=""
+    for f in $(ls -1 "$dir" | grep -E "^binlog\.[0-9]+$" | sort); do
+        logs="$logs $dir/$f"
+        [ "$f" = "$target_file" ] && break
+    done
+    [ -n "$logs" ] || { echo "no binary logs found" >&2; exit 1; }
+    # shellcheck disable=SC2086
+    $tool --stop-position="$target_pos" $logs \
+      | "$client" --protocol=socket -uroot -p"$pw"
+' _ "$target_file" "$target_pos" "$binlog_tool" "$client" "$pw" \
+    > /tmp/dbtk-replay-$$.log 2>&1 \
+    || { sed -n "1,8p" /tmp/dbtk-replay-$$.log >&2; rm -f /tmp/dbtk-replay-$$.log; vfail "binlog replay failed"; }
 rm -f /tmp/dbtk-replay-$$.log
 
 # THE assertion.
@@ -117,12 +129,5 @@ dropped="$(run_sql "SELECT COUNT(*) FROM pitrdemo.t WHERE label='after'" | tr -d
 [[ "$dropped" == "0" ]] \
     || vfail "the row written AFTER the target survived recovery (found '$dropped'); the target was not honoured"
 
-# KNOWN RED at this assertion. Everything above passes: binary logging is on,
-# in ROW format, on its own volume, and the writes are in the log (a replay
-# with no --stop-datetime emits them). What does not work yet is the bounded
-# replay: mariadb-binlog --stop-datetime emits ~41 lines and no CREATE
-# DATABASE, cutting events whose timestamps are demonstrably BEFORE the target.
-# Committed red deliberately, per CLAUDE.md: the check is right and the
-# implementation is not finished.
 vinfo "recovered to the target: the earlier write survived, the later one did not"
 vinfo "$engine PITR is active and recovers to a point in time"

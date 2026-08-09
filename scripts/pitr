@@ -84,67 +84,102 @@ if is_mysql_family; then
             -p"$(root_pw)" -N -B -e "$1" 2>/dev/null
     }
 
+    # The coordinate-reporting statement was renamed. MariaDB 10.5.2 added
+    # SHOW BINLOG STATUS; MySQL 8.4 uses SHOW BINARY LOG STATUS. Both keep the
+    # old SHOW MASTER STATUS as a deprecated alias, so that is what is used
+    # here rather than branching on a version.
+    coordinate_now() { my "SHOW MASTER STATUS" | awk '{print $1":"$2}'; }
+
+    # Files up to AND INCLUDING the one holding the target, in order.
+    #
+    # --stop-position applies only to the LAST file named, which is exactly the
+    # behaviour wanted: everything before that file replays in full, and the
+    # final file stops at the byte offset.
+    files_through() {
+        local target_file="$1" f out=""
+        for f in $(docker compose exec -T "$svc" sh -c "ls -1 '$dir' 2>/dev/null" \
+                    | tr -d '\r' | grep -E '^binlog\.[0-9]+$' | sort); do
+            out="$out $dir/$f"
+            [ "$f" = "$target_file" ] && break
+        done
+        printf '%s' "$out"
+    }
+
     case "$verb" in
         info)
-            log "binary logs in $dir (on their own volume, not inside the data directory)"
+            log "binary logs in $dir (their own volume, not inside the data directory)"
             docker compose exec -T "$svc" sh -c "ls -lh '$dir' 2>/dev/null" || true
             printf '\n'
-            log "server-side view:"
-            my "SHOW BINARY LOGS" || die "could not query the server; is $svc running?"
+            log "current coordinate: $(coordinate_now)"
             printf '\n'
-            log "recovery replays a dump, then binlog events up to your target time"
+            log "recover with: make pitr-restore ENGINE=$ENGINE TO=<file>:<position>"
+            log "the coordinate above is 'now'; earlier ones come from a dump's header"
             ;;
 
         backup)
             # A binlog is only replayable ONTO something. The base is an
-            # ordinary dump, which already records its binlog coordinates when
-            # PITR is on, so this deliberately reuses that path rather than
-            # inventing a second kind of backup that could drift from it.
+            # ordinary dump, which already records its coordinates when PITR is
+            # on, so this reuses that path rather than inventing a second kind
+            # of backup that could drift from it.
             log "flushing binary logs so the current one is closed and complete"
             my "FLUSH BINARY LOGS" >/dev/null || die "FLUSH BINARY LOGS failed"
-            log "taking the base dump (its binlog position is recorded inside it)"
+            log "taking the base dump (its binlog coordinate is recorded inside it)"
             "$ROOT/scripts/backup" --engine "$ENGINE" --all
-            log "done; verify with: make pitr-info ENGINE=$ENGINE"
+            log "coordinate after backup: $(coordinate_now)"
             ;;
 
         restore)
-            [[ -n "$TARGET" ]] || die "specify a target: --to '2026-08-09 12:34:56'"
+            [[ -n "$TARGET" ]] || die "specify a target: --to <file>:<position>, or --to latest.
+       Find coordinates with: make pitr-info ENGINE=$ENGINE"
+
+            tool="$(binlog_tool)"
+
+            # POSITIONS, not timestamps.
+            #
+            # mariadb-binlog with --stop-datetime across multiple files exits
+            # after the FIRST file and silently skips the rest (MDEV-35528), so
+            # a time-bounded replay quietly recovers almost nothing. Positions
+            # are exact, have no second-granularity ambiguity and no timezone
+            # interpretation, and --stop-position applies to the last file
+            # named -- which is precisely the semantics needed.
+            if [[ "$TARGET" == latest ]]; then
+                stop_args=()
+                target_file=""
+            else
+                target_file="${TARGET%%:*}"
+                stop_pos="${TARGET##*:}"
+                [[ "$target_file" != "$TARGET" && -n "$stop_pos" ]] \
+                    || die "target must be <file>:<position>, for example binlog.000002:838"
+                stop_args=(--stop-position="$stop_pos")
+            fi
 
             printf 'Point-in-time recovery for %s replays the binary log onto a restored\n' "$ENGINE"
-            printf 'dump, up to:\n\n    %s\n\n' "$TARGET"
-            printf 'Everything written after that point is discarded. Restore the base dump\n'
-            printf 'FIRST (make restore ENGINE=%s DB=...), then run this.\n\n' "$ENGINE"
+            printf 'dump, stopping at:\n\n    %s\n\n' "$TARGET"
+            printf 'Restore the base dump FIRST (make restore ENGINE=%s DB=...), then run\n' "$ENGINE"
+            printf 'this. Everything after the target is discarded.\n\n'
             printf 'Type %s to continue: ' "$ENGINE"
             read -r answer
             [[ "$answer" == "$ENGINE" ]] || die "confirmation did not match; nothing was changed"
 
-            # --stop-datetime is EXCLUSIVE of events at the target, and it
-            # compares against each event's timestamp, which the SERVER wrote.
-            # Passing a time from the host's clock would silently land on the
-            # wrong side of a write whenever the two disagree.
-            log "replaying binary logs up to $TARGET"
+            if [[ -n "$target_file" ]]; then
+                logs="$(files_through "$target_file")"
+                [[ "$logs" == *"$target_file"* ]] \
+                    || die "no binary log named $target_file in $dir"
+            else
+                logs="$(files_through '')"
+            fi
+            [[ -n "$logs" ]] || die "no binary logs found in $dir"
 
-            # ONLY the logs. MariaDB writes a .idx sidecar beside each one, and
-            # a binlog.[0-9]* glob catches those too -- the replay tool then
-            # rejects the whole batch as not a binary log file, which reads as
-            # a corrupt log rather than a glob that caught the wrong files.
-            # binlog.index is excluded for the same reason.
-            #
-            # The tool name is expanded HERE, on the host: binlog_tool is a
-            # function of this script and does not exist inside the container.
-            tool="$(binlog_tool)"
-            docker compose exec -T "$svc" bash -c '
-                set -e
-                set -o pipefail
-                dir="$1"; tool="$2"; stop="$3"; client="$4"; pw="$5"
-                logs=$(ls -1 "$dir" 2>/dev/null | grep -E "^binlog\.[0-9]+$" \
-                       | sort | sed "s|^|$dir/|")
-                [ -n "$logs" ] || { echo "no binary logs found in $dir" >&2; exit 1; }
-                # shellcheck disable=SC2086
-                $tool --stop-datetime="$stop" $logs \
-                  | "$client" --protocol=socket -uroot -p"$pw"
-            ' _ "$dir" "$tool" "$TARGET" "$client" "$(root_pw)" \
-                || die "binlog replay failed"
+            log "replaying:$logs"
+            # shellcheck disable=SC2086  # $logs is a deliberate argument list
+            docker compose exec -T "$svc" "$tool" ${stop_args[@]+"${stop_args[@]}"} $logs \
+                > /tmp/dbtk-replay.$$.sql 2>/dev/null \
+                || { rm -f "/tmp/dbtk-replay.$$.sql"; die "reading the binary log failed"; }
+
+            docker compose exec -T "$svc" "$client" --protocol=socket -uroot -p"$(root_pw)" \
+                < "/tmp/dbtk-replay.$$.sql" \
+                || { rm -f "/tmp/dbtk-replay.$$.sql"; die "applying the binary log failed"; }
+            rm -f "/tmp/dbtk-replay.$$.sql"
 
             log "replay complete; the database is at $TARGET"
             ;;
