@@ -73,4 +73,28 @@ for engine in "${engines[@]}"; do
         -t "$tag" "$ROOT/images"
 done
 
-printf '✓ built %d image(s)\n' "${#engines[@]}"
+# ---------------------------------------------------------------------------
+# Derived images, built last because their base is one of ours.
+#
+# The Patroni image is FROM db-toolkit-pg, so an HA node is the same PostgreSQL
+# as a standalone one -- same extensions, same hardening. That also means it has
+# no entry in images/bases.tsv, which holds digest-pinned UPSTREAM references
+# and would be the wrong place to name an image we just built.
+#
+# Built here rather than left to `docker compose up --build`, because a compose
+# auto-build happens inside whichever check first needs it, where a build
+# failure surfaces as that check timing out.
+derived=0
+if [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
+    pg_version="$(version_for pg)"
+    tag="$PREFIX/db-toolkit-patroni:$pg_version"
+    printf 'building %s\n  from %s/db-toolkit-pg:%s\n' "$tag" "$PREFIX" "$pg_version"
+    docker build \
+        -f "$ROOT/images/patroni/Dockerfile" \
+        --build-arg "ENGINE_VERSION=$pg_version" \
+        --build-arg "IMAGE_PREFIX=$PREFIX" \
+        -t "$tag" "$ROOT/images"
+    derived=1
+fi
+
+printf '✓ built %d image(s)\n' "$(( ${#engines[@]} + derived ))"
