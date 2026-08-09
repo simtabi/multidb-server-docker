@@ -28,7 +28,7 @@ add_cleanup "docker compose exec -T pg psql -U postgres -q -c 'DROP ROLE IF EXIS
 add_cleanup "rm -f secrets/pg_${a}_user_password.txt secrets/pg_${b}_user_password.txt"
 add_cleanup "make down"
 
-make up PROFILES=pg >/dev/null 2>&1 || vfail "make up failed"
+mdb_up PROFILES=pg || vfail "make up failed"
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 120 "pg to report healthy" bash -c \
     'docker compose ps --format "{{.Service}} {{.Health}}" | grep -q "^pg healthy$"'

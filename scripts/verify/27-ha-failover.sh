@@ -76,7 +76,7 @@ docker volume rm -f \
     "${COMPOSE_PROJECT_NAME:-mdb}_patroni2_pg${_pgv}_data" \
     "${COMPOSE_PROJECT_NAME:-mdb}_patroni3_pg${_pgv}_data" >/dev/null 2>&1 || true
 
-make up PROFILES=ha >/dev/null 2>&1 || vfail "make up PROFILES=ha failed"
+mdb_up PROFILES=ha || vfail "make up PROFILES=ha failed"
 add_cleanup 'make down'
 
 # Parsed through `scripts/ha`'s machine-readable verbs, not by grepping the

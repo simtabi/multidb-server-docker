@@ -180,6 +180,26 @@ need_image() {
     vfail "image not built yet: $img (run: make build)"
 }
 
+# `make up`, keeping the output for the failure path.
+#
+# Nine call sites ran `mdb_up ... || vfail "make up failed"`,
+# which names the command and nothing whatsoever about why it failed. Six checks
+# reported exactly that string on CI at once, and it was equally consistent with
+# a missing image, a port collision, an unhealthy container and a compose syntax
+# error -- so the harness produced six identical sentences and no lead.
+#
+# The tail is bounded because a failing boot can emit hundreds of lines of pull
+# progress, and the useful part -- the service that went unhealthy, the port that
+# was taken -- is always at the end.
+mdb_up() {
+    local out rc=0
+    out="$(make up "$@" 2>&1)" || rc=$?
+    if (( rc != 0 )); then
+        printf '%s\n' "$out" | tail -25 | sed 's/^/      /' >&2
+    fi
+    return "$rc"
+}
+
 # Resolve the digest-pinned upstream base for an engine + version from the
 # single source of truth in images/bases.tsv.
 base_image() {

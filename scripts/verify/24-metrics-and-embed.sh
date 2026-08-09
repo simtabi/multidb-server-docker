@@ -53,7 +53,7 @@ vinfo "embedded exporter serves metrics on 9187"
 cd "$MDB_ROOT" || exit 1
 need_file "$MDB_ROOT/docker-compose.yml"
 
-make up PROFILES=pg,metrics >/dev/null 2>&1 || vfail "make up PROFILES=pg,metrics failed"
+mdb_up PROFILES=pg,metrics || vfail "make up PROFILES=pg,metrics failed"
 add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here

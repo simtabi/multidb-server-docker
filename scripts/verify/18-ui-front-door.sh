@@ -17,7 +17,7 @@ need_file "$MDB_ROOT/docker-compose.yml"
 
 domain="$(env_get MDB_UI_DOMAIN db.localhost)"
 
-make up PROFILES=pg,mysql,mariadb,ui >/dev/null 2>&1 || vfail "make up with the ui profile failed"
+mdb_up PROFILES=pg,mysql,mariadb,ui || vfail "make up with the ui profile failed"
 add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here

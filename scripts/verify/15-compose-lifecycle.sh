@@ -27,7 +27,8 @@ if ! compose_err="$(docker compose config 2>&1 >/dev/null)"; then
 fi
 vinfo "compose file is valid"
 
-make up >/dev/null 2>&1 || vfail "make up failed"
+# shellcheck disable=SC2119  # no profile override: this is the DEFAULT boot
+mdb_up || vfail "make up failed"
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 90 "pg service to report healthy" bash -c \
@@ -55,7 +56,8 @@ vols="$(docker volume ls --format '{{.Name}}' | grep -c '^mdb_' || true)"
 (( vols > 0 )) || vfail "make down removed data volumes; SPEC section 15 forbids it"
 vinfo "$vols data volume(s) survived make down"
 
-make up >/dev/null 2>&1 || vfail "make up failed on the second boot"
+# shellcheck disable=SC2119  # default boot again, deliberately
+mdb_up || vfail "make up failed on the second boot"
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 90 "pg to report healthy again" bash -c \
     'docker compose ps --format "{{.Service}} {{.Health}}" | grep -q "^pg healthy$"'

@@ -36,7 +36,7 @@ proj="px$$"
 add_cleanup "rm -f '$secret_dir'/${engine}_${proj}_user*_password.txt"
 add_cleanup "make down >/dev/null 2>&1 || true"
 
-make up "PROFILES=${engine},pooler" >/dev/null 2>&1 \
+mdb_up "PROFILES=${engine},pooler" \
     || vfail "make up PROFILES=${engine},pooler failed"
 
 wait_ready 180 "the engine to accept connections" \

@@ -18,7 +18,7 @@ cd "$MDB_ROOT" || exit 1
 
 need_file "$MDB_ROOT/scripts/backup"
 
-make up PROFILES=pg,mysql,mariadb,backup >/dev/null 2>&1 || vfail "make up failed"
+mdb_up PROFILES=pg,mysql,mariadb,backup || vfail "make up failed"
 add_cleanup 'make down'
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
