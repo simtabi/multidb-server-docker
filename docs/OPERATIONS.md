@@ -158,10 +158,17 @@ rotation.
 
 ## High availability
 
-For PostgreSQL, `DBTK_HA_ENABLE=true` brings up Patroni with etcd and HAProxy.
+```bash
+make up PROFILES=ha
+```
+
+That is three Patroni nodes, a three-member etcd quorum, and HAProxy in front.
+
+**`ha` replaces the `pg` profile rather than joining it.** HAProxy owns the
+PostgreSQL port and routes it to whichever node is currently leader, so asking
+for both binds 5432 twice — `check-env` refuses that combination outright.
 
 ```
-DBTK_HA_ENABLE=true
 DBTK_HA_CLUSTER_NAME=dbtk-pg
 DBTK_HA_ETCD_HOSTS=etcd1:2379,etcd2:2379,etcd3:2379
 DBTK_HAPROXY_WRITE_PORT=5432
@@ -177,10 +184,45 @@ HAProxy routes by Patroni's REST health check: the write port follows the
 primary, the read port the replicas.
 
 ```bash
-make ha-status        # topology and replication lag
-make ha-failover      # controlled switchover, typed confirmation
-make ha-reinit NODE=  # rebuild a replica from the pgBackRest repo
+make ha-status              # topology, roles and replication lag
+make ha-failover            # controlled switchover, typed confirmation
+make ha-reinit NODE=patroni2   # rebuild one replica from the leader
 ```
+
+`ha-failover` performs a **switchover** on a healthy cluster, not a failover:
+it hands the role over cleanly instead of simulating a crash. Using a real
+failover on a healthy cluster is how people lose the transactions in flight.
+
+For scripting, `scripts/ha leader` prints the leader's name and
+`scripts/ha roles` prints member/role/state, tab separated. Use those rather
+than parsing `ha-status`, which is formatted for people and includes the
+election history.
+
+### What failover actually costs
+
+A killed leader is replaced in about **20 seconds**, which the harness asserts
+on every run. That number is not arbitrary and cannot be tuned to zero:
+
+| Setting | Value | Why |
+|---|---|---|
+| `ttl` | 20s | The leader lock's lifetime. No election can start before it expires, so **a failover budget at or below the ttl is unreachable by construction.** |
+| `loop_wait` | 5s | How often each node re-evaluates. |
+| `retry_timeout` | 5s | Patroni requires `ttl >= loop_wait + 2 × retry_timeout`. |
+
+Lower is not automatically better. A short `ttl` makes a brief network stall
+look like a dead leader, and demoting a healthy primary costs more than a few
+extra seconds of failover would have.
+
+### What will not be promoted
+
+Patroni refuses to promote a replica lagging more than
+`maximum_lag_on_failover` (1 MB here), and that is correct — promoting a node
+that is behind silently discards the writes it never received. The consequence
+worth knowing: **if every replica is behind, there is no election at all.** The
+cluster stays leaderless and every node logs "I am not the healthiest node".
+
+That is Patroni working, not failing. Check replication lag with
+`make ha-status` before assuming a failover mechanism is broken.
 
 `DBTK_PG_SYNC_MODE=on` gives zero data loss on failover, at the cost of every
 commit waiting for a replica. That is a real latency cost, and the right answer

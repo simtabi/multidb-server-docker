@@ -172,6 +172,11 @@ if [[ ",${DBTK_CHECK_PROFILES:-$ha_profiles}," == *",ha,"* ]]; then
 
     [[ "$hap_w" == "$hap_r" ]] \
         && err "DBTK_HAPROXY_WRITE_PORT and DBTK_HAPROXY_READ_PORT are both $hap_w"
+
+    etcd_hosts="$(get DBTK_HA_ETCD_HOSTS)"
+    members="$(awk -F, '{print NF}' <<< "$etcd_hosts")"
+    (( members >= 3 )) \
+        || err "DBTK_HA_ETCD_HOSTS lists $members endpoint(s); a quorum needs 3 minimum (SPEC 21.2)"
 fi
 
 # -----------------------------------------------------------------------------
@@ -192,13 +197,12 @@ if [[ ",${profiles}," == *",prod,"* ]]; then
     [[ -n "$(get DBTK_UI_BASIC_AUTH_HASH)" ]] \
         || err "the prod profile requires DBTK_UI_BASIC_AUTH_HASH on every UI route"
 
-    if [[ "$(get DBTK_HA_ENABLE)" == "true" ]]; then
-        etcd_hosts="$(get DBTK_HA_ETCD_HOSTS)"
-        members="$(awk -F, '{print NF}' <<< "$etcd_hosts")"
-        (( members >= 3 )) \
-            || err "DBTK_HA_ETCD_HOSTS lists $members endpoint(s); a quorum needs 3 minimum (SPEC 21.2)"
-    fi
 fi
+
+# The etcd quorum is validated whenever the `ha` PROFILE is selected, which is
+# what actually starts etcd. It used to hang off a separate DBTK_HA_ENABLE
+# flag, so `PROFILES=ha` with the flag left false ran HA with no validation at
+# all -- two switches for one thing, free to disagree.
 
 # -----------------------------------------------------------------------------
 # 6. Secret files referenced must be resolvable once initialised

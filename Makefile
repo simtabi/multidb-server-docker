@@ -201,7 +201,7 @@ ha-failover: ## Controlled switchover (typed confirmation required)
 	@scripts/ha failover $(if $(NODE),--node "$(NODE)",)
 
 .PHONY: ha-reinit
-ha-reinit: ## Rebuild a replica from the pgBackRest repo (NODE=)
+ha-reinit: ## Rebuild one replica from the current leader (NODE=)
 	@scripts/ha reinit --node "$(NODE)"
 
 # -----------------------------------------------------------------------------
