@@ -9,20 +9,20 @@
 # engine cost a descriptor file and nothing here.
 
 _mongo_uri() {
-    # _mmdb_pw, not pw: `local pw` would shadow a caller's own $pw, and a
+    # _mdb_pw, not pw: `local pw` would shadow a caller's own $pw, and a
     # caller whose secret() returns "$pw" would read this empty local instead.
-    local _mmdb_pw user host
-    _mmdb_pw="$(secret "$MMDB_ENGINE_ROOT_SECRET")"
-    user="${MMDB_MONGODB_ROOT_USER:-root}"
-    if [ "${IN_CONTAINER:-0}" = "1" ]; then host="$MMDB_ENGINE_NAME"; else host="127.0.0.1"; fi
+    local _mdb_pw user host
+    _mdb_pw="$(secret "$MDB_ENGINE_ROOT_SECRET")"
+    user="${MDB_MONGODB_ROOT_USER:-root}"
+    if [ "${IN_CONTAINER:-0}" = "1" ]; then host="$MDB_ENGINE_NAME"; else host="127.0.0.1"; fi
     # authSource=admin because the root user is created in the admin database,
     # not in whichever database is being addressed.
     printf 'mongodb://%s:%s@%s:%s/?authSource=admin' \
-        "$user" "$_mmdb_pw" "$host" "$MMDB_ENGINE_PORT"
+        "$user" "$_mdb_pw" "$host" "$MDB_ENGINE_PORT"
 }
 
 _mongosh() {
-    engine_exec "$MMDB_ENGINE_NAME" mongosh "$(_mongo_uri)" --quiet "$@"
+    engine_exec "$MDB_ENGINE_NAME" mongosh "$(_mongo_uri)" --quiet "$@"
 }
 
 hook_ping() {
@@ -50,11 +50,11 @@ hook_list_databases() {
 hook_dump_database() {
     local db="$1" out="$2"
     if [ -n "$(compress_ext)" ]; then
-        engine_exec "$MMDB_ENGINE_NAME" mongodump --uri "$(_mongo_uri)" \
+        engine_exec "$MDB_ENGINE_NAME" mongodump --uri "$(_mongo_uri)" \
             --db "$db" --archive \
-            | zstd -q -T0 -"${MMDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+            | zstd -q -T0 -"${MDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
     else
-        engine_exec "$MMDB_ENGINE_NAME" mongodump --uri "$(_mongo_uri)" \
+        engine_exec "$MDB_ENGINE_NAME" mongodump --uri "$(_mongo_uri)" \
             --db "$db" --archive > "$out"
     fi
 }
@@ -73,7 +73,7 @@ hook_recreate_database() {
 # what was there before.
 hook_restore_database() {
     local db="$1"
-    engine_exec "$MMDB_ENGINE_NAME" mongorestore --uri "$(_mongo_uri)" \
+    engine_exec "$MDB_ENGINE_NAME" mongorestore --uri "$(_mongo_uri)" \
         --archive --drop --nsInclude "${db}.*"
 }
 
@@ -93,7 +93,7 @@ hook_row_count() {
 # No credentials at all must be refused. MongoDB runs wide open unless a root
 # user is supplied, so this is the assertion that catches a regression there.
 hook_auth_enforced() {
-    if engine_exec "$MMDB_ENGINE_NAME" mongosh --quiet \
+    if engine_exec "$MDB_ENGINE_NAME" mongosh --quiet \
         --eval 'db.adminCommand({listDatabases:1}).ok' >/dev/null 2>&1; then
         return 1
     fi
@@ -114,7 +114,7 @@ hook_provision_project() {
 
     _mongosh --eval "
         const db2 = db.getSiblingDB('${db}');
-        db2.createCollection('_mmdb_provisioned');
+        db2.createCollection('_mdb_provisioned');
         const mk = (u, p, r) => {
             try { db2.createUser({user: u, pwd: p, roles: [{role: r, db: '${db}'}]}); }
             catch (e) {

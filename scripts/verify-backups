@@ -13,11 +13,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
-BACKUP_DIR="${MMDB_BACKUP_DIR:-$ROOT/backups}"
-PREFIX="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
+BACKUP_DIR="${MDB_BACKUP_DIR:-$ROOT/backups}"
+PREFIX="${MDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 log() { printf '[verify-backups] %s\n' "$*"; }
@@ -54,9 +54,9 @@ for engine in $(engine_list); do
 
     engine_load "$engine" || continue
 
-    prefix_img="$PREFIX/my-multidb-server-$engine"
+    prefix_img="$PREFIX/multidb-server-$engine"
     upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
-    ver="$(get "MMDB_${upper}_VERSION")"; ver="${ver:-$MMDB_ENGINE_DEFAULT_VERSION}"
+    ver="$(get "MDB_${upper}_VERSION")"; ver="${ver:-$MDB_ENGINE_DEFAULT_VERSION}"
 
     if ! docker image inspect "$prefix_img:$ver" >/dev/null 2>&1; then
         log "$engine: image $prefix_img:$ver not built; skipping"
@@ -68,16 +68,16 @@ for engine in $(engine_list); do
     db="$(basename "$f" | sed -E "s/^${engine}_(.+)_[0-9]{8}T[0-9]{6}Z\\..*\$/\\1/")"
     log "restoring $engine database '$db' from $(basename "$f") into a throwaway container"
 
-    c="mmdb-verifybak-${engine}-$$"
+    c="mdb-verifybak-${engine}-$$"
     CONTAINERS+=("$c")
 
     # A throwaway container, never the running stack: a verification that
     # damaged production to prove production is recoverable would be its own
     # disaster.
     docker run -d --name "$c" \
-        -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
-        -e MYSQL_ROOT_PASSWORD=mmdb-throwaway-verify \
-        -e MARIADB_ROOT_PASSWORD=mmdb-throwaway-verify \
+        -e POSTGRES_PASSWORD=mdb-throwaway-verify \
+        -e MYSQL_ROOT_PASSWORD=mdb-throwaway-verify \
+        -e MARIADB_ROOT_PASSWORD=mdb-throwaway-verify \
         "$prefix_img:$ver" >/dev/null 2>&1 || {
             log "$engine: FAILED, could not start a throwaway container"
             failed=$(( failed + 1 )); continue
@@ -88,7 +88,7 @@ for engine in $(engine_list); do
     # shellcheck disable=SC2034  # read by the family hooks
     IN_CONTAINER=0
     engine_exec() { shift; docker exec -i "$c" "$@"; }
-    secret() { printf 'mmdb-throwaway-verify'; }
+    secret() { printf 'mdb-throwaway-verify'; }
     compress_ext() { case "$f" in *.zst) printf '.zst' ;; *) printf '' ;; esac; }
     engine_load_hooks || { log "$engine: no hooks"; failed=$(( failed + 1 )); continue; }
 
@@ -102,7 +102,7 @@ for engine in $(engine_list); do
 
     # PostgreSQL roles live only in the globals dump; restoring data without
     # them produces broken grants.
-    if [ -n "${MMDB_ENGINE_DUMP_GLOBALS:-}" ]; then
+    if [ -n "${MDB_ENGINE_DUMP_GLOBALS:-}" ]; then
         globals="$(find "$BACKUP_DIR" -maxdepth 1 -name "${engine}_globals_*" ! -name '*.sha256' | sort | tail -1)"
         if [ -n "$globals" ]; then
             zstd -dc "$globals" 2>/dev/null | docker exec -i "$c" psql -U postgres -q >/dev/null 2>&1 || true

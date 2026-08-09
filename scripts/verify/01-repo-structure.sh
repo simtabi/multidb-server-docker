@@ -5,18 +5,18 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 for d in images/pg images/mysql images/mariadb images/cli \
          overrides/pg overrides/mysql overrides/mariadb \
          caddy scripts scripts/verify rls docs .github/workflows; do
-    need_dir "$MMDB_ROOT/$d"
+    need_dir "$MDB_ROOT/$d"
 done
 
 for f in Makefile .env.example .gitignore .gitattributes .editorconfig \
          README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md CHANGELOG.md LICENSE \
          CLAUDE.md DESIGN.md docs/SPEC.md docs/KIT.md; do
-    need_file "$MMDB_ROOT/$f"
+    need_file "$MDB_ROOT/$f"
 done
 
 # SPEC section 15 requires named volumes for data, never bind mounts: WSL2
@@ -61,7 +61,7 @@ while IFS= read -r hit; do
         *) continue ;;
     esac
     offenders+="        ${hit}"$'\n'
-done < <(grep -rn -- '-f docker-compose.yml' "$MMDB_ROOT/Makefile" "$MMDB_ROOT/scripts" 2>/dev/null || true)
+done < <(grep -rn -- '-f docker-compose.yml' "$MDB_ROOT/Makefile" "$MDB_ROOT/scripts" 2>/dev/null || true)
 
 if [[ -n "$offenders" ]]; then
     printf '%s' "$offenders" >&2

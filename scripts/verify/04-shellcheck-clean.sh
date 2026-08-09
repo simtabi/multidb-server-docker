@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 command -v shellcheck >/dev/null 2>&1 \
     || vfail "shellcheck is not installed; CONTRIBUTING.md requires it (brew install shellcheck)"
 
-output="$("$MMDB_ROOT/scripts/lint.sh" 2>&1)" || {
+output="$("$MDB_ROOT/scripts/lint.sh" 2>&1)" || {
     printf '%s\n' "$output" >&2
     vfail "shellcheck reported problems"
 }

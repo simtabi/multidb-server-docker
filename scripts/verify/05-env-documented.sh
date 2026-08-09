@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# verify: every MMDB_ variable in use is documented in .env.example
+# verify: every MDB_ variable in use is documented in .env.example
 # tags: fast structure
 # phase: 1
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
-need_file "$MMDB_ROOT/.env.example"
+need_file "$MDB_ROOT/.env.example"
 
 # SPEC section 13: "One .env.example, every variable documented inline".
 # An undocumented variable is a variable nobody can discover.
@@ -16,14 +16,14 @@ documented=()
 while IFS= read -r v; do
     [ -n "$v" ] && documented+=("$v")
 done < <(
-    grep -oE '^#?[[:space:]]*MMDB_[A-Z0-9_]+=' .env.example \
+    grep -oE '^#?[[:space:]]*MDB_[A-Z0-9_]+=' .env.example \
         | sed -E 's/^#?[[:space:]]*//; s/=$//' | sort -u
 )
 
 # Internal variables, deliberately NOT documented in .env.example.
 #
 # These are not user configuration: they are set by the toolkit itself or baked
-# into an image at build time. MMDB_ENGINE in particular is an ENV in each
+# into an image at build time. MDB_ENGINE in particular is an ENV in each
 # MySQL-family Dockerfile that selects which half of the shared init scripts
 # applies (D-29); documenting it in .env.example would invite a user to set it
 # and quietly mismatch the image they are running.
@@ -31,7 +31,7 @@ done < <(
 # The rule this check enforces is "every variable a user can meaningfully set
 # is documented", so the list is kept explicit and short rather than allowing a
 # pattern that could hide a real omission.
-INTERNAL_VARS='MMDB_ROOT|MMDB_ENV_FILE|MMDB_IMAGE_PREFIX|MMDB_ENGINE|MMDB_STAGE|MMDB_CONF_DIR|MMDB_CERT_DIR|MMDB_INITDB_DIR|MMDB_DATA_DIR|MMDB_OVERRIDE_CONF_DIR|MMDB_DAEMON|MMDB_CLIENT|MMDB_ADMIN|MMDB_CONF_SECTION|MMDB_ROOT_PW_ENV|MMDB_PG_TEST_MODE|MMDB_MYSQL_TEST_MODE|MMDB_MARIADB_TEST_MODE|MMDB_IN_CONTAINER'
+INTERNAL_VARS='MDB_ROOT|MDB_ENV_FILE|MDB_IMAGE_PREFIX|MDB_ENGINE|MDB_STAGE|MDB_CONF_DIR|MDB_CERT_DIR|MDB_INITDB_DIR|MDB_DATA_DIR|MDB_OVERRIDE_CONF_DIR|MDB_DAEMON|MDB_CLIENT|MDB_ADMIN|MDB_CONF_SECTION|MDB_ROOT_PW_ENV|MDB_PG_TEST_MODE|MDB_MYSQL_TEST_MODE|MDB_MARIADB_TEST_MODE|MDB_IN_CONTAINER'
 
 # Only files that actually consume variables at runtime. Scripts under
 # scripts/verify are excluded: they name variables in order to assert on them,
@@ -40,7 +40,7 @@ used=()
 while IFS= read -r v; do
     [ -n "$v" ] && used+=("$v")
 done < <(
-    grep -rhoE '\bMMDB_[A-Z0-9_]+' \
+    grep -rhoE '\bMDB_[A-Z0-9_]+' \
         --include='*.yml' --include='*.yaml' --include='Dockerfile*' \
         --include='*.tmpl' --include='*.cnf' \
         images caddy overrides . 2>/dev/null \
@@ -48,19 +48,19 @@ done < <(
 )
 
 if (( ${#used[@]} == 0 )); then
-    vinfo "no MMDB_ variables consumed yet; ${#documented[@]} documented and ready"
+    vinfo "no MDB_ variables consumed yet; ${#documented[@]} documented and ready"
     exit 0
 fi
 
 missing=0
 for v in "${used[@]}"; do
-    [[ "$v" == "MMDB_ROOT" ]] && continue
+    [[ "$v" == "MDB_ROOT" ]] && continue
     if ! printf '%s\n' "${documented[@]}" | grep -qx "$v"; then
         printf '      %s is used but not documented in .env.example\n' "$v" >&2
         (( missing++ )) || true
     fi
 done
 
-(( missing == 0 )) || vfail "$missing undocumented MMDB_ variable(s)"
+(( missing == 0 )) || vfail "$missing undocumented MDB_ variable(s)"
 
 vinfo "${#used[@]} variable(s) in use, all documented"

@@ -2,7 +2,7 @@
 
 One document, two jobs. Sections 1-16 are the design spec. Section 17 is the build contract. Hand the whole file to the builder; the builder produces DESIGN.md, stops for approval, then implements. Answer section 19 before starting.
 
-Architecture, in three layers, and one correction that matters: this is a toolkit STACK, not a single toolkit image, since one container runs one concern. Layer 1: per-engine build stages producing my-multidb-server-pg, my-multidb-server-mysql, and my-multidb-server-mariadb, each a derived image with comprehensive configuration, provisioning, healthchecks, and the full tool suite baked in, supervised by s6-overlay as PID 1. Layer 2: every engine image is standalone-complete, fully usable via docker run alone, including optional embedded helpers (metrics, backup cron) behind env toggles. Layer 3: a thin docker-compose orchestrator that fires up whichever engines the user selects. Baked-in means baked-in defaults only; env vars and optional mounts override everything, so images stay twelve-factor. What makes it "one tool" is one repo, one .env, one Makefile, one command. Project name: my-multidb-server (repo laranail/my-multidb-server; images my-multidb-server-pg, my-multidb-server-mysql, my-multidb-server-mariadb, my-multidb-server-cli). Env prefix: MMDB_. KISS and DRY govern everything; nothing hardcoded.
+Architecture, in three layers, and one correction that matters: this is a toolkit STACK, not a single toolkit image, since one container runs one concern. Layer 1: per-engine build stages producing multidb-server-pg, multidb-server-mysql, and multidb-server-mariadb, each a derived image with comprehensive configuration, provisioning, healthchecks, and the full tool suite baked in, supervised by s6-overlay as PID 1. Layer 2: every engine image is standalone-complete, fully usable via docker run alone, including optional embedded helpers (metrics, backup cron) behind env toggles. Layer 3: a thin docker-compose orchestrator that fires up whichever engines the user selects. Baked-in means baked-in defaults only; env vars and optional mounts override everything, so images stay twelve-factor. What makes it "one tool" is one repo, one .env, one Makefile, one command. Project name: multidb-server (repo laranail/multidb-server; images multidb-server-pg, multidb-server-mysql, multidb-server-mariadb, multidb-server-cli). Env prefix: MDB_. KISS and DRY govern everything; nothing hardcoded.
 
 ## 1. Vision
 
@@ -36,9 +36,9 @@ A complete local database toolkit: PostgreSQL (full suite), MySQL, and MariaDB, 
 | 7 | No ports published by default; per-service env toggles with bind address (127.0.0.1 default) | Most DB breaches are "accidentally public" | Default 0.0.0.0 |
 | 8 | Backup sidecar: tiredofit/db-backup jobs per engine; pgBackRest PITR included for PG prod | One sidecar covers all three engines; PITR now standard, not optional | Cron-in-container |
 | 9 | Makefile is the single entry point; WSL2/git-bash documented for Windows | One interface for humans and CI | Raw docker commands |
-| 10 | Version switching = change MMDB_<ENGINE>_VERSION, volumes follow | Explicit, reversible, data preserved per major | latest tags (breakage by surprise) |
+| 10 | Version switching = change MDB_<ENGINE>_VERSION, volumes follow | Explicit, reversible, data preserved per major | latest tags (breakage by surprise) |
 | 11 | Per-engine derived images with baked defaults; compose is a thin orchestrator only | Standalone reuse (docker run works alone), config versioned with the image, no mount fragility | Mounting vendored scripts into official images (earlier draft) |
-| 12 | One combined my-multidb-server-cli image for all client tooling (psql, mysql/mariadb clients, dump/restore, toolkit scripts) | CLI tools are not daemons, so the one-process rule doesn't apply; tools usable with no engine container running | Needing a running engine container just to get a client shell |
+| 12 | One combined multidb-server-cli image for all client tooling (psql, mysql/mariadb clients, dump/restore, toolkit scripts) | CLI tools are not daemons, so the one-process rule doesn't apply; tools usable with no engine container running | Needing a running engine container just to get a client shell |
 | 13 | s6-overlay supervises every engine image; embedded helpers (exporter, backup cron) exist behind env toggles, OFF under compose | Proper PID 1, zombie reaping, ordered init; standalone docker run can self-backup and self-report without the stack; everything supervised must serve that one engine | A supervisor hosting multiple engines or UIs (that's the compose layer's job) |
 
 ### 3.1 One image or split, settled
@@ -51,7 +51,7 @@ Split. Servers are processes with lifecycles: one healthcheck, one restart polic
   - Postgres: 15, 16, 17 (default), 18
   - MySQL: 8.0, 8.4 LTS (default), 9.x innovation
   - MariaDB: 10.11 LTS, 11.4 LTS (default), latest 11.x
-- MMDB_PG_VERSION / MMDB_MYSQL_VERSION / MMDB_MARIADB_VERSION select image tag AND data volume name. Switching majors starts a fresh versioned volume; the old one stays intact for rollback or migration.
+- MDB_PG_VERSION / MDB_MYSQL_VERSION / MDB_MARIADB_VERSION select image tag AND data volume name. Switching majors starts a fresh versioned volume; the old one stays intact for rollback or migration.
 - PG 18+ image change: data mounts at /var/lib/postgresql (major-version-specific subdirs) rather than /var/lib/postgresql/data; the compose handles both paths by version so pg_upgrade --link works.
 - make upgrade ENGINE=pg FROM=16 TO=17: guided dump/restore (default) or pg_upgrade path; equivalents for mysql (in-place minor, dump for major) and mariadb documented in UPGRADE.md.
 - Running two majors of the same engine simultaneously (e.g. pg16 and pg17 during a migration window) is a documented compose-override recipe (second service with distinct port and volume), not a core toggle.
@@ -61,24 +61,24 @@ Split. Servers are processes with lifecycles: one healthcheck, one restart polic
 
 - FROM pgvector/pgvector:<ver>-pg${PG_MAJOR}, pinned digest; PGDG apt for the rest in one layer.
 - Included and enabled-ready: vector, postgis (+ topology, raster), pg_cron, pgaudit, pg_stat_statements, pg_trgm, uuid-ossp, pgcrypto, citext, hstore, pg_repack, pg_partman, pgtap, http, pgjwt, pgsodium, pg_net, pg_graphql. Where no PGDG/apt package exists for an arch, build from source in a builder stage; if one is genuinely unavailable on arm64, document the gap in DESIGN.md rather than silently dropping it.
-- plpython3u available behind MMDB_PG_PLPYTHON=true (superuser-only, off by default; it is an untrusted language).
-- shared_preload_libraries assembled from env; MMDB_PG_INIT_EXTENSIONS per-database CREATE EXTENSION at provision time.
-- Tags: my-multidb-server-pg:17 (full, the default) and :17-slim (official base + vector + contrib essentials only, no PostGIS or supabase-family extensions); matrix 15-18.
+- plpython3u available behind MDB_PG_PLPYTHON=true (superuser-only, off by default; it is an untrusted language).
+- shared_preload_libraries assembled from env; MDB_PG_INIT_EXTENSIONS per-database CREATE EXTENSION at provision time.
+- Tags: multidb-server-pg:17 (full, the default) and :17-slim (official base + vector + contrib essentials only, no PostGIS or supabase-family extensions); matrix 15-18.
 
 ## 6. The MySQL and MariaDB images
 
-- my-multidb-server-mysql and my-multidb-server-mariadb: FROM the official images, pinned by digest, with baked-in conf.d (utf8mb4 + utf8mb4_unicode_ci, explicit sql_mode, timezone from MMDB_TZ), vendored provisioning scripts in /docker-entrypoint-initdb.d, healthchecks (mysqladmin/mariadb-admin ping), OCI labels, and client tooling.
+- multidb-server-mysql and multidb-server-mariadb: FROM the official images, pinned by digest, with baked-in conf.d (utf8mb4 + utf8mb4_unicode_ci, explicit sql_mode, timezone from MDB_TZ), vendored provisioning scripts in /docker-entrypoint-initdb.d, healthchecks (mysqladmin/mariadb-admin ping), OCI labels, and client tooling.
 - Baked config is defaults only; every setting remains env-overridable and conf mounts still win, so a plain docker run of either image yields a fully configured server and compose users can still tune freely.
-- Same triplet provisioning contract as PG: MMDB_MYSQL_DATABASES / MMDB_MARIADB_DATABASES = "db:user:__FILE__,...".
-- Tags: my-multidb-server-mysql:8.0, :8.4, :9; my-multidb-server-mariadb:10.11, :11.4, :11.
+- Same triplet provisioning contract as PG: MDB_MYSQL_DATABASES / MDB_MARIADB_DATABASES = "db:user:__FILE__,...".
+- Tags: multidb-server-mysql:8.0, :8.4, :9; multidb-server-mariadb:10.11, :11.4, :11.
 - MySQL 8.4+ removes mysql_native_password by default; caching_sha2_password is the standard, with a documented compat toggle for legacy clients.
 - Both run concurrently: distinct host ports (defaults 3306 mysql, 3307 mariadb) when published.
 
 ### 6.1 Supervision, tooling, and embedded services (all engine images)
 
 - s6-overlay v3 is PID 1 in every engine image: zombie reaping, clean shutdown ordering, and ordered init stages (fix permissions → assemble conf from env → certs → provisioning → engine start). The engine itself remains the main supervised service.
-- Full tool suite baked into every engine image: that engine's clients, dump/restore utilities, compression (zstd), an S3 push tool (rclone), and the toolkit scripts. The separate my-multidb-server-cli image remains as tools-without-a-server; engine images carry the same tools so a bare docker run needs nothing else.
-- Embedded helper services, env-toggled and OFF by default under compose (compose runs these as separate services instead): MMDB_<ENGINE>_EMBED_EXPORTER runs the metrics exporter under s6 inside the engine container; MMDB_<ENGINE>_EMBED_BACKUP runs scheduled dumps with retention and optional S3 push. These exist so a standalone docker run image can self-report and self-backup.
+- Full tool suite baked into every engine image: that engine's clients, dump/restore utilities, compression (zstd), an S3 push tool (rclone), and the toolkit scripts. The separate multidb-server-cli image remains as tools-without-a-server; engine images carry the same tools so a bare docker run needs nothing else.
+- Embedded helper services, env-toggled and OFF by default under compose (compose runs these as separate services instead): MDB_<ENGINE>_EMBED_EXPORTER runs the metrics exporter under s6 inside the engine container; MDB_<ENGINE>_EMBED_BACKUP runs scheduled dumps with retention and optional S3 push. These exist so a standalone docker run image can self-report and self-backup.
 - Hard rule that keeps the supervisor honest: everything under one s6 tree serves that one engine. Never a second engine, never a UI. Cross-engine composition is the compose layer's job, full stop.
 - Integration risk, named so the builder respects it: the upstream docker-entrypoint.sh scripts own first-run initdb and the POSTGRES_*/MYSQL_* env semantics. s6 wraps and invokes them as the engine service; it does not replace them. First-run behavior, _FILE handling, and /docker-entrypoint-initdb.d execution must stay behavior-compatible with the official images, and CI proves it by running the official images' env scenarios against ours.
 
@@ -86,36 +86,36 @@ Split. Servers are processes with lifecycles: one healthcheck, one restart polic
 
 | Service | Image | Profile | Default host port (env-overridable, publish opt-in) |
 |---|---|---|---|
-| pg | my-multidb-server-pg:<ver> | pg | 5432 |
-| mysql | my-multidb-server-mysql:<ver> | mysql | 3306 |
-| mariadb | my-multidb-server-mariadb:<ver> | mariadb | 3307 |
+| pg | multidb-server-pg:<ver> | pg | 5432 |
+| mysql | multidb-server-mysql:<ver> | mysql | 3306 |
+| mariadb | multidb-server-mariadb:<ver> | mariadb | 3307 |
 | adminer | adminer (pinned) | ui | 8080 (all engines) |
 | phpmyadmin | phpmyadmin (pinned) | ui | 8081, PMA_HOSTS=mysql,mariadb |
 | pgadmin | dpage/pgadmin4 (pinned) | ui | 8082 |
 | backup | tiredofit/db-backup | backup | none |
 | pgbackrest | pgBackRest | prod | none |
 | metrics | postgres_exporter + mysqld_exporter | metrics | none published |
-| cli | my-multidb-server-cli (all clients + scripts) | on demand | none; used via make psql / make mysql / make shell |
+| cli | multidb-server-cli (all clients + scripts) | on demand | none; used via make psql / make mysql / make shell |
 | pgbouncer | pgbouncer (pinned) | prod, optional | none; for connection-hungry apps |
-| caddy | caddy (pinned) | ui, prod | MMDB_CADDY_HTTP_PORT/MMDB_CADDY_HTTPS_PORT (defaults 80/443); hostname-routes all UIs |
+| caddy | caddy (pinned) | ui, prod | MDB_CADDY_HTTP_PORT/MDB_CADDY_HTTPS_PORT (defaults 80/443); hostname-routes all UIs |
 
-Profiles come in two kinds: engine selectors (pg, mysql, mariadb) and mode overlays (ui, backup, metrics, prod, test). The default is COMPOSE_PROFILES=pg,ui, which is what a bare make up boots; MMDB_PROFILES in .env changes it permanently, PROFILES= on the command line changes it for one run.
+Profiles come in two kinds: engine selectors (pg, mysql, mariadb) and mode overlays (ui, backup, metrics, prod, test). The default is COMPOSE_PROFILES=pg,ui, which is what a bare make up boots; MDB_PROFILES in .env changes it permanently, PROFILES= on the command line changes it for one run.
 
 Prod profile: UIs off, limits on, TLS enforced, log caps set. UIs in prod only behind reverse proxy auth or IP allowlist, documented, never default.
 
 Test profile: speed over durability for CI and test suites. PGDATA on tmpfs with fsync=off, synchronous_commit=off, full_page_writes=off, and the MySQL-family equivalents; throwaway triplet databases; notes for Laravel parallel testing (one database per process). Data loss on stop is the point, and the docs say so in bold.
 
-UIs come pre-wired: Adminer via ADMINER_DEFAULT_SERVER, pgAdmin with a baked servers.json listing the PG service (login via MMDB_PGADMIN_EMAIL/PASSWORD), phpMyAdmin via PMA_HOSTS. Every UI opens ready to log in instead of asking for hostnames.
+UIs come pre-wired: Adminer via ADMINER_DEFAULT_SERVER, pgAdmin with a baked servers.json listing the PG service (login via MDB_PGADMIN_EMAIL/PASSWORD), phpMyAdmin via PMA_HOSTS. Every UI opens ready to log in instead of asking for hostnames.
 
 Caddy is the web front door. In dev it hostname-routes the UIs (adminer.db.localhost, pgadmin.db.localhost, pma.db.localhost; *.localhost resolves to 127.0.0.1 with no hosts-file edits) with Caddy's internal CA providing local HTTPS. In prod it is the only exposed web surface: automatic Let's Encrypt certificates and basic auth on every UI route, satisfying the "reverse proxy with auth" requirement concretely. The Caddyfile is a template rendered by scripts/env-render; direct per-UI ports remain available in dev when Caddy is off.
 
-Port mapping contract: internal container ports are fixed and never change (5432, 3306, 80, and so on); everything host-side is .env-driven. Every published binding is written as ${MMDB_<SERVICE>_HOST_PORT:-default}:internal, so resolving any port collision on any machine is a one-line .env change, never a compose edit.
+Port mapping contract: internal container ports are fixed and never change (5432, 3306, 80, and so on); everything host-side is .env-driven. Every published binding is written as ${MDB_<SERVICE>_HOST_PORT:-default}:internal, so resolving any port collision on any machine is a one-line .env change, never a compose edit.
 
-Runtime knobs that are always forgotten and therefore specified here: MMDB_PG_SHM (shm_size for the PG service, default 256m; parallel HNSW index builds need shm at least maintenance_work_mem); MMDB_STOP_GRACE (stop_grace_period per engine, default 60s, because the docker default of 10s force-kills a database mid-checkpoint); nofile ulimits set for the MySQL family; COMPOSE_PROJECT_NAME pinned to mmdb so container, network, and volume names are stable across machines; vm.overcommit and swappiness guidance for VPS hosts lives in OPERATIONS.md.
+Runtime knobs that are always forgotten and therefore specified here: MDB_PG_SHM (shm_size for the PG service, default 256m; parallel HNSW index builds need shm at least maintenance_work_mem); MDB_STOP_GRACE (stop_grace_period per engine, default 60s, because the docker default of 10s force-kills a database mid-checkpoint); nofile ulimits set for the MySQL family; COMPOSE_PROJECT_NAME pinned to mdb so container, network, and volume names are stable across machines; vm.overcommit and swappiness guidance for VPS hosts lives in OPERATIONS.md.
 
 ## 8. Multi-project provisioning
 
-- Triplets per engine (section 6 and MMDB_PG_DATABASES), passwords via _FILE.
+- Triplets per engine (section 6 and MDB_PG_DATABASES), passwords via _FILE.
 - make new-project NAME=x ENGINE=pg|mysql|mariadb: creates DB, least-privilege owner role, readonly role, runs init extensions (PG), prints the paste-ready Laravel .env block.
 - PG RLS kit: rls-template.sql (tenant policies via set_config('app.tenant_id')), roles doc, worked Laravel 13 example.
 
@@ -131,22 +131,22 @@ Runtime knobs that are always forgotten and therefore specified here: MMDB_PG_SH
 
 ### 9.1 Certificates (database TLS, distinct from Caddy's web TLS)
 
-- make certs creates a toolkit-internal CA once, then per-engine server certificates with SANs covering the service names, localhost, and any MMDB_EXTRA_SANS. Keys land with 0600 permissions owned by the engine user, which PG refuses to start without.
+- make certs creates a toolkit-internal CA once, then per-engine server certificates with SANs covering the service names, localhost, and any MDB_EXTRA_SANS. Keys land with 0600 permissions owned by the engine user, which PG refuses to start without.
 - Clients get one ca.crt and connect verify-full; the Laravel snippets ship with sslmode=verify-full (PG) and the equivalent ssl options (MySQL family) pointing at it.
 - Prod: mount real CA-issued certs, or distribute the toolkit CA to clients; both paths documented. MySQL and MariaDB run require_secure_transport=ON in the prod profile so plaintext TCP is refused at the server; unix sockets count as secure transport, so socket connections keep working.
 - make certs-renew rotates server certs without downtime: PG reloads via pg_reload_conf, MySQL via ALTER INSTANCE RELOAD TLS, MariaDB via FLUSH SSL.
-- Optional mutual TLS behind MMDB_MTLS=true: client certificates enforced via clientcert=verify-full in pg_hba and REQUIRE X509 grants on the MySQL side.
+- Optional mutual TLS behind MDB_MTLS=true: client certificates enforced via clientcert=verify-full in pg_hba and REQUIRE X509 grants on the MySQL side.
 - Caddy's certificates are a separate concern (web UIs); engines never share the web certs.
 
 ## 10. Networking and external access
 
-- Default publish: nothing. Apps join the mmdb network by service name.
-- Dev exposure per engine: MMDB_PG_PUBLISH=5432 etc., bound to MMDB_BIND_ADDR (default 127.0.0.1).
+- Default publish: nothing. Apps join the mdb network by service name.
+- Dev exposure per engine: MDB_PG_PUBLISH=5432 etc., bound to MDB_BIND_ADDR (default 127.0.0.1).
 - Prod access recipes in OPERATIONS.md, in order: Tailscale/WireGuard sidecar (network_mode: service:ts, DB never on public internet), SSH tunnel, public port as last resort with ufw allowlist + TLS-only + fail2ban note.
 
 ### 10.1 Unix socket connections
 
-- MMDB_SOCKETS=true creates a shared sockets volume mounted into each engine (PG at /var/run/postgresql, MySQL family at /var/run/mysqld). Any container that mounts the volume connects locally with no TCP at all, which is both faster and removes a network surface.
+- MDB_SOCKETS=true creates a shared sockets volume mounted into each engine (PG at /var/run/postgresql, MySQL family at /var/run/mysqld). Any container that mounts the volume connects locally with no TCP at all, which is both faster and removes a network surface.
 - make psql / make mysql / make mariadb prefer the socket when present; the Laravel snippets include the unix_socket (MySQL) and host=/var/run/postgresql (PG) configuration variants.
 - Auth discipline holds on sockets too: scram/password auth for app roles; peer auth stays reserved for make-driven maintenance as the engine user.
 - Platform truth stated in the docs: container-to-container sockets work everywhere; host-to-container sockets work only on native Linux, because Docker Desktop on macOS and Windows runs a VM between your host and the containers. On those platforms the host uses TCP on 127.0.0.1, apps in containers still get sockets.
@@ -167,9 +167,9 @@ Runtime knobs that are always forgotten and therefore specified here: MMDB_PG_SH
 
 ## 13. Configuration reference
 
-- One .env.example, every variable documented inline, grouped by engine, all MMDB_-prefixed.
-- Engine config = image defaults + mounted conf.d overrides; PG presets (dev-small, prod-medium) computed PGTune-style from MMDB_MEM/MMDB_CPUS; MySQL-family equivalents (innodb_buffer_pool_size etc.) from the same two vars.
-- MMDB_TZ, locale, and all ports/versions/toggles in one place. PG locale and encoding are init-time only: MMDB_LOCALE applies at first initdb, and changing it later means dump and restore; the docs say this loudly next to the variable.
+- One .env.example, every variable documented inline, grouped by engine, all MDB_-prefixed.
+- Engine config = image defaults + mounted conf.d overrides; PG presets (dev-small, prod-medium) computed PGTune-style from MDB_MEM/MDB_CPUS; MySQL-family equivalents (innodb_buffer_pool_size etc.) from the same two vars.
+- MDB_TZ, locale, and all ports/versions/toggles in one place. PG locale and encoding are init-time only: MDB_LOCALE applies at first initdb, and changing it later means dump and restore; the docs say this loudly next to the variable.
 - Project initialization commands: make init copies .env.example to .env, generates strong random secrets into secrets/ files, runs make certs so the always-on PG TLS can actually boot, and finishes with check-env; make init-prod renders .env.prod from the same template with prod-safe values (TLS enforced, no published UI or engine ports, backups on, Caddy as the only web surface). Both are idempotent and refuse to overwrite an existing env file without FORCE=1.
 - scripts/env-render is the single interpolation path for every templated file (Caddyfile, conf.d fragments, pg_hba, pgAdmin servers.json). envsubst-based with ${VAR:-default} support, it hard-fails with a list of any required-but-unset variables, and never writes secret values into rendered world-readable files; secrets stay _FILE references end to end.
 
@@ -181,11 +181,11 @@ Runtime knobs that are always forgotten and therefore specified here: MMDB_PG_SH
 ## 15. Repo layout and conventions
 
 ```
-my-multidb-server/
+multidb-server/
   images/
-    pg/       # Dockerfile, conf/, initdb.d/  (baked into my-multidb-server-pg)
-    mysql/    # Dockerfile, conf/, initdb.d/  (baked into my-multidb-server-mysql)
-    mariadb/  # Dockerfile, conf/, initdb.d/  (baked into my-multidb-server-mariadb)
+    pg/       # Dockerfile, conf/, initdb.d/  (baked into multidb-server-pg)
+    mysql/    # Dockerfile, conf/, initdb.d/  (baked into multidb-server-mysql)
+    mariadb/  # Dockerfile, conf/, initdb.d/  (baked into multidb-server-mariadb)
     cli/      # Dockerfile: psql, mysql/mariadb clients, dump/restore tools, toolkit scripts
   docker-compose.yml        # thin orchestrator: selection + wiring only
   compose.prod.yml
@@ -227,7 +227,7 @@ my-multidb-server/
 
 ## 16. CI and publishing
 
-- buildx matrices per engine, all to ghcr.io/simtabi/: my-multidb-server-pg (15,16,17,18) x (amd64, arm64) x (full, slim); my-multidb-server-mysql (8.0, 8.4, 9) x (amd64, arm64); my-multidb-server-mariadb (10.11, 11.4, 11) x (amd64, arm64); my-multidb-server-cli (amd64, arm64). Upstream digests pinned, bump-tested by Renovate PRs.
+- buildx matrices per engine, all to ghcr.io/simtabi/: multidb-server-pg (15,16,17,18) x (amd64, arm64) x (full, slim); multidb-server-mysql (8.0, 8.4, 9) x (amd64, arm64); multidb-server-mariadb (10.11, 11.4, 11) x (amd64, arm64); multidb-server-cli (amd64, arm64). Upstream digests pinned, bump-tested by Renovate PRs.
 - Smoke per image: boots healthy standalone via docker run (no compose); s6 init stages run in order and shutdown is clean; EMBED toggles verified on and off; every baked setting takes effect; every extension in section 5 creates (PG); TLS handshake (PG); non-TLS rejected in prod profile; triplet isolation verified; backup/restore round-trip; version-switch test (start 16, switch env to 17, both volumes intact).
 - trivy gate; releases cut images + notes.
 
@@ -244,8 +244,8 @@ You are a senior database and DevOps engineer building the Complete DB Toolkit f
 
 - Fresh machine, any OS: clone, make init, make up → PG + Adminer running in two commands; make up PROFILES=pg,mysql,ui brings the rest, and Caddy serves every UI at its *.db.localhost hostname over HTTPS.
 - make init-prod renders a prod env that passes check-env with TLS enforced, nothing published except Caddy, and any host port remappable from .env alone.
-- Each engine image runs standalone: docker run ghcr.io/simtabi/my-multidb-server-<engine> with only a password env yields a fully configured server, no compose required; with EMBED toggles on, the same container self-backs-up on schedule and exposes metrics.
-- Version switch: change MMDB_PG_VERSION 16→17, make up; new volume in use, old intact; make upgrade migrates data; same demonstrated for MySQL 8.0→8.4.
+- Each engine image runs standalone: docker run ghcr.io/simtabi/multidb-server-<engine> with only a password env yields a fully configured server, no compose required; with EMBED toggles on, the same container self-backs-up on schedule and exposes metrics.
+- Version switch: change MDB_PG_VERSION 16→17, make up; new volume in use, old intact; make upgrade migrates data; same demonstrated for MySQL 8.0→8.4.
 - Both MySQL and MariaDB run concurrently with phpMyAdmin seeing both via one UI.
 - Two projects per engine, isolated roles, cross-access denied; PG RLS demo passes.
 - Fresh VPS path ends TLS-only, unpublished-or-firewalled, nightly S3 backups, PITR active for PG, no UI exposed.
@@ -301,7 +301,7 @@ Amendment authored during step 1 and approved before implementation: the kickoff
 
 Scale up before scaling out. A single well-tuned engine on adequate RAM serves the overwhelming majority of Laranail projects, and every HA mechanism below adds failure modes of its own. The numbers that decide when to stop tuning and start pooling:
 
-| Tier | MMDB_MEM | shared_buffers | max_connections (direct) | RAM spent on connections | pgBouncer default_pool_size | App-side connections supported |
+| Tier | MDB_MEM | shared_buffers | max_connections (direct) | RAM spent on connections | pgBouncer default_pool_size | App-side connections supported |
 |---|---|---|---|---|---|---|
 | dev-small | 2 GB | 512 MB | 100 | ~1.0 GB | not used (direct) | 100 |
 | prod-small | 4 GB | 1 GB | 100 | ~1.0 GB | 25 | ~1000 |
@@ -309,7 +309,7 @@ Scale up before scaling out. A single well-tuned engine on adequate RAM serves t
 | prod-large | 16 GB | 4 GB | 300 | ~3.0 GB | 100 | ~5000 |
 | anti-pattern | any | any | 500 direct | ~5.0 GB before a single query runs | none | context-switch thrashing |
 
-Roughly 10 MB per direct PostgreSQL connection is the planning figure: ~500 direct connections cost about 5 GB of RAM before a single query executes. That is the whole argument for pooling. **Connection pooling is mandatory in the prod profile**, not optional, and pgBouncer moves from "optional" in section 7 to required whenever MMDB_PROFILES contains prod. Transaction-pooling caveats (no session state, no prepared statements outside the transaction, no LISTEN/NOTIFY) are documented in OPERATIONS.md next to the Laravel/Octane/Horizon guidance in section 14.
+Roughly 10 MB per direct PostgreSQL connection is the planning figure: ~500 direct connections cost about 5 GB of RAM before a single query executes. That is the whole argument for pooling. **Connection pooling is mandatory in the prod profile**, not optional, and pgBouncer moves from "optional" in section 7 to required whenever MDB_PROFILES contains prod. Transaction-pooling caveats (no session state, no prepared statements outside the transaction, no LISTEN/NOTIFY) are documented in OPERATIONS.md next to the Laravel/Octane/Horizon guidance in section 14.
 
 ### 21.2 PostgreSQL high availability
 
@@ -325,14 +325,14 @@ PostgreSQL has no built-in automatic failover; something outside the engine must
 
 ### 21.3 Replication and sync
 
-- **PostgreSQL**: streaming replication, asynchronous by default. `MMDB_PG_SYNC_MODE=on` switches to synchronous commit for zero-data-loss at a latency cost; the tradeoff is stated at the variable.
+- **PostgreSQL**: streaming replication, asynchronous by default. `MDB_PG_SYNC_MODE=on` switches to synchronous commit for zero-data-loss at a latency cost; the tradeoff is stated at the variable.
 - **MySQL / MariaDB**: asynchronous replication (GTID-based on MySQL, semi-sync available on MariaDB) is **documented, not automated**. There is no Patroni equivalent in scope for v1, so failover is a runbook, and REPLICATION.md says so rather than implying parity with the PG path.
 - Read-replica routing is an application concern; the toolkit exposes the read port and documents the Laravel read/write connection split.
 
 ### 21.4 Folded requirements
 
 - **Services**: `etcd`, `haproxy`, `patroni` (PG image variant), `pgbouncer` promoted to required under prod — all under the `ha` profile.
-- **Env**: `MMDB_HA_*` (enable, node name, cluster name, etcd hosts), `MMDB_PGBOUNCER_*` (pool mode, sizes), `MMDB_PG_SYNC_MODE`, `MMDB_HAPROXY_*` ports.
+- **Env**: `MDB_HA_*` (enable, node name, cluster name, etcd hosts), `MDB_PGBOUNCER_*` (pool mode, sizes), `MDB_PG_SYNC_MODE`, `MDB_HAPROXY_*` ports.
 - **Commands**: `make ha-status` (cluster topology and lag), `make ha-failover` (controlled switchover, typed confirmation), `make ha-reinit NODE=` (rebuild a replica from the pgBackRest repo).
 - **CI**: an HA smoke job boots a 3-node cluster, kills the leader, and asserts a new leader is elected and the write port follows it within a bounded time.
 - **Acceptance**: see the section 18 additions for HA.
@@ -340,7 +340,7 @@ PostgreSQL has no built-in automatic failover; something outside the engine must
 ### 21.5 Acceptance additions
 
 - `make up PROFILES=pg,ha` boots a 3-node Patroni cluster with etcd quorum; `make ha-status` shows one leader and two streaming replicas.
-- Killing the leader container elects a new leader, and the HAProxy write port routes to it, within MMDB_HA_FAILOVER_BUDGET seconds.
+- Killing the leader container elects a new leader, and the HAProxy write port routes to it, within MDB_HA_FAILOVER_BUDGET seconds.
 - The read port serves only replicas; writes against it are refused.
 - `make ha-reinit NODE=pg3` rebuilds that replica from the pgBackRest repo and it rejoins streaming.
 - Capacity: a prod-profile boot without a reachable pooler fails `check-env` rather than starting unpooled.
@@ -430,7 +430,7 @@ they are running. So each engine declares a publish policy:
 
 | Policy | Meaning | Applies to |
 |---|---|---|
-| `derive` | We build and publish `my-multidb-server-<engine>` from the upstream base | Every OSI-licensed engine |
+| `derive` | We build and publish `multidb-server-<engine>` from the upstream base | Every OSI-licensed engine |
 | `reference` | We publish nothing; the upstream image is used directly and configured at runtime | Source-available engines |
 
 **MongoDB Community is SSPL**, which the Open Source Initiative has explicitly

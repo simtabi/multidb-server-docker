@@ -5,7 +5,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # What must survive what.
 #
@@ -26,17 +26,17 @@ cd "$MMDB_ROOT" || exit 1
 # An unmapped VOLUME gets an anonymous one, which compose discards on recreate:
 # the data appears to persist across restarts and vanishes on the first
 # `docker compose up --force-recreate`.
-need_file "$MMDB_ROOT/compose.engines.yml"
+need_file "$MDB_ROOT/compose.engines.yml"
 # shellcheck source=../engine-lib.sh
-. "$MMDB_ROOT/scripts/engine-lib.sh"
+. "$MDB_ROOT/scripts/engine-lib.sh"
 
 unmapped=0
 while IFS= read -r engine; do
     [[ -z "$engine" ]] && continue
     engine_load "$engine" || continue
-    grep -q -- "- ${MMDB_ENGINE_NAME}_data:${MMDB_ENGINE_DATA_DIR}" "$MMDB_ROOT/compose.engines.yml" \
+    grep -q -- "- ${MDB_ENGINE_NAME}_data:${MDB_ENGINE_DATA_DIR}" "$MDB_ROOT/compose.engines.yml" \
         || { printf '      %s: data dir %s is not mapped to a named volume\n' \
-                "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_DATA_DIR" >&2; unmapped=$(( unmapped + 1 )); }
+                "$MDB_ENGINE_NAME" "$MDB_ENGINE_DATA_DIR" >&2; unmapped=$(( unmapped + 1 )); }
 done < <(engine_list)
 (( unmapped == 0 )) || vfail "$unmapped engine(s) would write data to an anonymous volume"
 vinfo "every engine's data directory is a named volume"
@@ -45,38 +45,38 @@ vinfo "every engine's data directory is a named volume"
 while IFS= read -r engine; do
     [[ -z "$engine" ]] && continue
     engine_load "$engine" || continue
-    [[ "${MMDB_ENGINE_PITR_CAPABLE:-false}" == "true" ]] || continue
+    [[ "${MDB_ENGINE_PITR_CAPABLE:-false}" == "true" ]] || continue
 
-    repo="${MMDB_ENGINE_PITR_REPO_PATH:?}"
+    repo="${MDB_ENGINE_PITR_REPO_PATH:?}"
     case "$repo" in
-        "$MMDB_ENGINE_DATA_DIR"/*|"$MMDB_ENGINE_DATA_DIR")
-            vfail "$MMDB_ENGINE_NAME keeps recovery data at $repo, inside its data directory.
+        "$MDB_ENGINE_DATA_DIR"/*|"$MDB_ENGINE_DATA_DIR")
+            vfail "$MDB_ENGINE_NAME keeps recovery data at $repo, inside its data directory.
        A backup stored inside the thing it backs up goes when that goes." ;;
     esac
-    grep -q -- "- ${MMDB_ENGINE_NAME}_pitr:${repo}" "$MMDB_ROOT/compose.engines.yml" \
-        || vfail "$MMDB_ENGINE_NAME: $repo is not mapped to a named volume; binlogs would die with the container"
+    grep -q -- "- ${MDB_ENGINE_NAME}_pitr:${repo}" "$MDB_ROOT/compose.engines.yml" \
+        || vfail "$MDB_ENGINE_NAME: $repo is not mapped to a named volume; binlogs would die with the container"
 done < <(engine_list)
 vinfo "recovery repositories are separate named volumes"
 
 # 3. `make destroy` must not take the recovery repositories with it.
-grep -q 'is_recovery_volume' "$MMDB_ROOT/scripts/destroy" \
+grep -q 'is_recovery_volume' "$MDB_ROOT/scripts/destroy" \
     || vfail "scripts/destroy does not distinguish recovery volumes; --all would delete the backups
        along with the data they exist to recover"
-grep -q -- '--include-recovery' "$MMDB_ROOT/scripts/destroy" \
+grep -q -- '--include-recovery' "$MDB_ROOT/scripts/destroy" \
     || vfail "scripts/destroy has no explicit opt-in for deleting recovery volumes"
 vinfo "destroy keeps recovery repositories unless explicitly told otherwise"
 
 # 4. Configuration is generated at start, so it is reproducible rather than
 #    merely persistent. A rebuild must not lose a setting.
 for f in images/pg/scripts/20-conf.sh images/_shared/mysql-family/scripts/20-conf.sh; do
-    need_file "$MMDB_ROOT/$f"
-    grep -q 'MMDB_CONF_DIR\|conf=' "$MMDB_ROOT/$f" \
+    need_file "$MDB_ROOT/$f"
+    grep -q 'MDB_CONF_DIR\|conf=' "$MDB_ROOT/$f" \
         || vfail "$f no longer generates configuration at start"
 done
 vinfo "engine configuration is regenerated from .env on every start"
 
 # 5. Host-side state that must never be silently replaced.
-grep -q 'Refusing to overwrite it' "$MMDB_ROOT/scripts/init" \
+grep -q 'Refusing to overwrite it' "$MDB_ROOT/scripts/init" \
     || vfail "scripts/init no longer refuses to overwrite an existing .env; regenerating it would
        orphan every password already in use"
 vinfo "init refuses to overwrite an existing environment file"

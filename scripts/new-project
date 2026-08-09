@@ -23,7 +23,7 @@ cd "$ROOT" || exit 1
 # shellcheck source=engine-lib.sh
 . "$ROOT/scripts/engine-lib.sh"
 
-ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
@@ -52,23 +52,23 @@ done
 # Engine
 # -----------------------------------------------------------------------------
 # Descriptors are keyed by directory name; engines are addressed by their
-# MMDB_ENGINE_NAME. `pg` is the descriptor in engines/postgres/, so a lookup by
+# MDB_ENGINE_NAME. `pg` is the descriptor in engines/postgres/, so a lookup by
 # directory alone would reject the toolkit's own default.
 resolved=""
 for candidate in $(engine_list); do
     engine_load "$candidate" || continue
-    if [[ "$MMDB_ENGINE_NAME" == "$ENGINE" || "$candidate" == "$ENGINE" ]]; then
+    if [[ "$MDB_ENGINE_NAME" == "$ENGINE" || "$candidate" == "$ENGINE" ]]; then
         resolved="$candidate"
         break
     fi
 done
 [[ -n "$resolved" ]] || die "unknown engine: $ENGINE (have: $(engine_list | tr '\n' ' '))"
 engine_load "$resolved" || die "could not load the descriptor for $resolved"
-ENGINE="$MMDB_ENGINE_NAME"
+ENGINE="$MDB_ENGINE_NAME"
 
-engine_load_hooks || die "no hooks for engine family ${MMDB_ENGINE_FAMILY:-?}"
+engine_load_hooks || die "no hooks for engine family ${MDB_ENGINE_FAMILY:-?}"
 command -v hook_provision_project >/dev/null 2>&1 \
-    || die "the ${MMDB_ENGINE_FAMILY} family defines no hook_provision_project"
+    || die "the ${MDB_ENGINE_FAMILY} family defines no hook_provision_project"
 
 DB="$NAME"
 USER_NAME="${NAME}_user"
@@ -78,7 +78,7 @@ USER_NAME="${NAME}_user"
 # -----------------------------------------------------------------------------
 # Same shape as scripts/backup: hooks call engine_exec and secret rather than
 # knowing whether they are inside a container or on the host.
-IN_CONTAINER="${MMDB_IN_CONTAINER:-0}"
+IN_CONTAINER="${MDB_IN_CONTAINER:-0}"
 
 engine_exec() {
     local engine="$1"; shift
@@ -133,7 +133,7 @@ RO_PASSWORD="$(cat "$RO_SECRET_FILE")"
 # Provision
 # -----------------------------------------------------------------------------
 upper="$(printf '%s' "$ENGINE" | tr '[:lower:]-' '[:upper:]_')"
-EXTENSIONS="$(get "MMDB_${upper}_INIT_EXTENSIONS")"
+EXTENSIONS="$(get "MDB_${upper}_INIT_EXTENSIONS")"
 
 hook_provision_project "$DB" "$USER_NAME" "$PASSWORD" "$EXTENSIONS" "$RO_PASSWORD" \
     || die "provisioning failed on $ENGINE; is it running? (make up PROFILES=$ENGINE)"
@@ -149,9 +149,9 @@ cat <<BLOCK
 ────────────────────────────────────────────────────────────────────────
 Paste into your .env:
 
-DB_CONNECTION=${MMDB_ENGINE_DRIVER}
+DB_CONNECTION=${MDB_ENGINE_DRIVER}
 DB_HOST=${ENGINE}
-DB_PORT=${MMDB_ENGINE_PORT}
+DB_PORT=${MDB_ENGINE_PORT}
 DB_DATABASE=${DB}
 DB_USERNAME=${USER_NAME}
 DB_PASSWORD=${PASSWORD}
@@ -163,14 +163,14 @@ if engine_tls_always; then
 # TLS is always on for this engine. verify-full is the only mode that checks
 # the hostname, so it is the only one worth using; point it at the toolkit CA:
 DB_SSLMODE=verify-full
-DB_SSLROOTCERT=/path/to/my-multidb-server/certs/ca.crt
+DB_SSLROOTCERT=/path/to/multidb-server/certs/ca.crt
 BLOCK
 else
     cat <<'BLOCK'
 
 # In the prod profile the server refuses plaintext TCP, so point your client
 # at the toolkit CA:
-DB_SSL_CA=/path/to/my-multidb-server/certs/ca.crt
+DB_SSL_CA=/path/to/multidb-server/certs/ca.crt
 BLOCK
 fi
 
@@ -179,7 +179,7 @@ if engine_has_external_pooler; then
 
 # A pooler is available and is REQUIRED in production for this engine. With
 # \`make up PROFILES=${ENGINE},pooler\`, connect through it instead:
-#   DB_PORT=${MMDB_ENGINE_POOLER_PORT:-6432}
+#   DB_PORT=${MDB_ENGINE_POOLER_PORT:-6432}
 BLOCK
 fi
 
@@ -190,7 +190,7 @@ Your app container must join the toolkit network:
   networks:
     default:
       external: true
-      name: ${COMPOSE_PROJECT_NAME:-mmdb}_net
+      name: ${COMPOSE_PROJECT_NAME:-mdb}_net
 
 Passwords also live in:
   ${SECRET_FILE}

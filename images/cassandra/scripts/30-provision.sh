@@ -13,10 +13,10 @@
 # polled here because a longrun counts as "started" the moment it execs, not
 # when the database is queryable.
 
-MMDB_STAGE=mmdb-provision
-export MMDB_STAGE
-# shellcheck source=mmdb-lib.sh
-source /usr/local/lib/mmdb/mmdb-lib.sh
+MDB_STAGE=mdb-provision
+export MDB_STAGE
+# shellcheck source=mdb-lib.sh
+source /usr/local/lib/mdb/mdb-lib.sh
 
 SECRET=/run/secrets/cassandra_root_password.txt
 [ -r "$SECRET" ] || { stage "no root secret mounted; leaving credentials alone"; exit 0; }
@@ -63,7 +63,7 @@ stage "default superuser credential replaced"
 
 # Projects: keyspace plus a least-privilege role, the same triplet contract
 # every other engine honours (SPEC section 22.2).
-triplets="${MMDB_CASSANDRA_DATABASES:-}"
+triplets="${MDB_CASSANDRA_DATABASES:-}"
 [ -z "$triplets" ] && exit 0
 
 IFS=',' read -ra entries <<< "$triplets"

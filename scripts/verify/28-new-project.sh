@@ -6,7 +6,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 18: "Two projects per engine, isolated roles, cross-access
 # denied." Check 13 proves that for the env-triplet path used at first init.
@@ -14,10 +14,10 @@ cd "$MMDB_ROOT" || exit 1
 # one humans actually use day to day -- the guarantee has to hold on both or it
 # does not hold.
 
-need_file "$MMDB_ROOT/scripts/new-project"
+need_file "$MDB_ROOT/scripts/new-project"
 
-a="mmdbchk_alpha"
-b="mmdbchk_beta"
+a="mdbchk_alpha"
+b="mdbchk_beta"
 
 add_cleanup "docker compose exec -T pg psql -U postgres -q -c 'DROP DATABASE IF EXISTS $a;' >/dev/null 2>&1"
 add_cleanup "docker compose exec -T pg psql -U postgres -q -c 'DROP DATABASE IF EXISTS $b;' >/dev/null 2>&1"

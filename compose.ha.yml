@@ -1,4 +1,4 @@
-# my-multidb-server HA — Patroni, an etcd quorum, and HAProxy.
+# multidb-server HA — Patroni, an etcd quorum, and HAProxy.
 #
 # **This is a REHEARSAL topology, not production HA.** Every node here is on one
 # host, so the host is a single point of failure and no amount of Patroni fixes
@@ -14,11 +14,11 @@ x-etcd: &etcd
   image: quay.io/coreos/etcd:v3.5.21@sha256:a3ccd299377af4b9968d8cbaaf9722fe354297f11908f74a846075e1e5f4ee89
   profiles: [ha]
   restart: unless-stopped
-  networks: [mmdb]
+  networks: [mdb]
   environment: &etcd_env
     ETCD_INITIAL_CLUSTER: etcd1=http://etcd1:2380,etcd2=http://etcd2:2380,etcd3=http://etcd3:2380
     ETCD_INITIAL_CLUSTER_STATE: new
-    ETCD_INITIAL_CLUSTER_TOKEN: mmdb-etcd
+    ETCD_INITIAL_CLUSTER_TOKEN: mdb-etcd
     ETCD_ENABLE_V2: "false"
     # etcd refuses to serve once its disk fills, and a dev machine's disk does
     # fill. Auto-compaction keeps the history bounded so the cluster does not
@@ -36,11 +36,11 @@ x-patroni: &patroni
     context: ./images
     dockerfile: patroni/Dockerfile
     args:
-      ENGINE_VERSION: ${MMDB_PG_VERSION:-17}
-  image: ghcr.io/simtabi/my-multidb-server-patroni:${MMDB_PG_VERSION:-17}
+      ENGINE_VERSION: ${MDB_PG_VERSION:-17}
+  image: ghcr.io/simtabi/multidb-server-patroni:${MDB_PG_VERSION:-17}
   profiles: [ha]
   restart: unless-stopped
-  networks: [mmdb]
+  networks: [mdb]
   depends_on:
     etcd1: {condition: service_healthy}
     etcd2: {condition: service_healthy}
@@ -56,16 +56,16 @@ x-patroni: &patroni
     # "Device or resource busy" and the replica never joins, while the leader
     # looks perfectly healthy.
     PGDATA: /var/lib/postgresql/patroni/pgdata
-    PATRONI_SCOPE: ${MMDB_HA_CLUSTER_NAME:-mmdb-pg}
+    PATRONI_SCOPE: ${MDB_HA_CLUSTER_NAME:-mdb-pg}
     PATRONI_ETCD3_HOSTS: "'etcd1:2379','etcd2:2379','etcd3:2379'"
-    MMDB_PG_SYNC_MODE: ${MMDB_PG_SYNC_MODE:-false}
-    MMDB_TZ: ${MMDB_TZ:-UTC}
+    MDB_PG_SYNC_MODE: ${MDB_PG_SYNC_MODE:-false}
+    MDB_TZ: ${MDB_TZ:-UTC}
   volumes:
     - ./certs:/certs:ro
     - ./secrets:/run/secrets:ro
   # Patroni shuts PostgreSQL down itself, and a demotion or a checkpoint is not
   # something to interrupt after Docker's 10s default.
-  stop_grace_period: ${MMDB_STOP_GRACE:-60s}
+  stop_grace_period: ${MDB_STOP_GRACE:-60s}
   healthcheck:
     # Any Patroni node answering its REST API is healthy; being the LEADER is a
     # different question, and one that changes. A healthcheck that demanded
@@ -79,7 +79,7 @@ x-patroni: &patroni
 services:
   etcd1:
     <<: *etcd
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-etcd1
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-etcd1
     environment:
       <<: *etcd_env
       ETCD_NAME: etcd1
@@ -91,7 +91,7 @@ services:
 
   etcd2:
     <<: *etcd
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-etcd2
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-etcd2
     environment:
       <<: *etcd_env
       ETCD_NAME: etcd2
@@ -106,7 +106,7 @@ services:
   # and check 27 fails on a member count below three rather than warning.
   etcd3:
     <<: *etcd
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-etcd3
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-etcd3
     environment:
       <<: *etcd_env
       ETCD_NAME: etcd3
@@ -118,7 +118,7 @@ services:
 
   patroni1:
     <<: *patroni
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-patroni1
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-patroni1
     hostname: patroni1
     environment:
       <<: *patroni_env
@@ -130,7 +130,7 @@ services:
 
   patroni2:
     <<: *patroni
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-patroni2
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-patroni2
     hostname: patroni2
     environment:
       <<: *patroni_env
@@ -142,7 +142,7 @@ services:
 
   patroni3:
     <<: *patroni
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-patroni3
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-patroni3
     hostname: patroni3
     environment:
       <<: *patroni_env
@@ -154,17 +154,17 @@ services:
 
   haproxy:
     image: haproxy:3.0-alpine@sha256:7c8dac975b9def049d6585b7efe865486acaa7b6ec5e74eec45f08fde8bb2ad4
-    container_name: ${COMPOSE_PROJECT_NAME:-mmdb}-haproxy
+    container_name: ${COMPOSE_PROJECT_NAME:-mdb}-haproxy
     profiles: [ha]
     restart: unless-stopped
-    networks: [mmdb]
+    networks: [mdb]
     depends_on: [patroni1, patroni2, patroni3]
     volumes:
       - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
-      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_HAPROXY_WRITE_PORT:-5432}:5432"
-      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_HAPROXY_READ_PORT:-5433}:5433"
-      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_HAPROXY_STATS_PORT:-7000}:7000"
+      - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_HAPROXY_WRITE_PORT:-5432}:5432"
+      - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_HAPROXY_READ_PORT:-5433}:5433"
+      - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_HAPROXY_STATS_PORT:-7000}:7000"
     healthcheck:
       test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg || exit 1"]
       interval: 10s
@@ -173,16 +173,16 @@ services:
 
 volumes:
   etcd1_data:
-    name: ${COMPOSE_PROJECT_NAME:-mmdb}_etcd1_data
+    name: ${COMPOSE_PROJECT_NAME:-mdb}_etcd1_data
   etcd2_data:
-    name: ${COMPOSE_PROJECT_NAME:-mmdb}_etcd2_data
+    name: ${COMPOSE_PROJECT_NAME:-mdb}_etcd2_data
   etcd3_data:
-    name: ${COMPOSE_PROJECT_NAME:-mmdb}_etcd3_data
+    name: ${COMPOSE_PROJECT_NAME:-mdb}_etcd3_data
   # Per node AND per major, for the same reason the standalone volumes are:
   # pointing a new major at an old data directory fails hard.
   patroni1_data:
-    name: ${COMPOSE_PROJECT_NAME:-mmdb}_patroni1_pg${MMDB_PG_VERSION:-17}_data
+    name: ${COMPOSE_PROJECT_NAME:-mdb}_patroni1_pg${MDB_PG_VERSION:-17}_data
   patroni2_data:
-    name: ${COMPOSE_PROJECT_NAME:-mmdb}_patroni2_pg${MMDB_PG_VERSION:-17}_data
+    name: ${COMPOSE_PROJECT_NAME:-mdb}_patroni2_pg${MDB_PG_VERSION:-17}_data
   patroni3_data:
-    name: ${COMPOSE_PROJECT_NAME:-mmdb}_patroni3_pg${MMDB_PG_VERSION:-17}_data
+    name: ${COMPOSE_PROJECT_NAME:-mdb}_patroni3_pg${MDB_PG_VERSION:-17}_data

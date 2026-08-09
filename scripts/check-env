@@ -7,12 +7,12 @@
 # a placeholder can satisfy is not a gate, so every rule here fails closed.
 #
 # Usage: scripts/check-env [--quiet]
-#        MMDB_ENV_FILE=path/to/.env scripts/check-env
+#        MDB_ENV_FILE=path/to/.env scripts/check-env
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
 QUIET=0
 [[ "${1:-}" == "--quiet" ]] && QUIET=1
 
@@ -75,8 +75,8 @@ done < "$ENV_FILE"
 # -----------------------------------------------------------------------------
 # 2. Required variables
 # -----------------------------------------------------------------------------
-for key in COMPOSE_PROJECT_NAME MMDB_PROFILES MMDB_TZ MMDB_BIND_ADDR \
-           MMDB_PG_VERSION MMDB_MYSQL_VERSION MMDB_MARIADB_VERSION; do
+for key in COMPOSE_PROJECT_NAME MDB_PROFILES MDB_TZ MDB_BIND_ADDR \
+           MDB_PG_VERSION MDB_MYSQL_VERSION MDB_MARIADB_VERSION; do
     [[ -n "$(get "$key")" ]] || err "$key is required but unset"
 done
 
@@ -97,11 +97,11 @@ check_menu() {
 
 for _engine in $(engine_list); do
     engine_load "$_engine" || continue
-    _upper="$(printf '%s' "$MMDB_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
+    _upper="$(printf '%s' "$MDB_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
     # Unquoted on purpose: VERSIONS is a space-separated menu and check_menu
     # takes each version as its own argument.
     # shellcheck disable=SC2086
-    check_menu "MMDB_${_upper}_VERSION" $MMDB_ENGINE_VERSIONS
+    check_menu "MDB_${_upper}_VERSION" $MDB_ENGINE_VERSIONS
 done
 
 # PostgreSQL 18 moved the expected mount point. Up to 17 the data directory is
@@ -112,15 +112,15 @@ done
 # Getting this pair wrong does not fail loudly at boot -- it silently
 # initialises a second, empty database in the wrong place -- so it is checked
 # here rather than discovered later.
-pg_version="$(get MMDB_PG_VERSION)"
-pg_mount="$(get MMDB_PG_DATA_MOUNT)"
+pg_version="$(get MDB_PG_VERSION)"
+pg_mount="$(get MDB_PG_DATA_MOUNT)"
 if [[ -n "$pg_version" && -n "$pg_mount" ]]; then
     if (( ${pg_version%%.*} >= 18 )); then
         [[ "$pg_mount" == "/var/lib/postgresql" ]] \
-            || err "MMDB_PG_VERSION=$pg_version needs MMDB_PG_DATA_MOUNT=/var/lib/postgresql (got $pg_mount)"
+            || err "MDB_PG_VERSION=$pg_version needs MDB_PG_DATA_MOUNT=/var/lib/postgresql (got $pg_mount)"
     else
         [[ "$pg_mount" == "/var/lib/postgresql/data" ]] \
-            || err "MMDB_PG_VERSION=$pg_version needs MMDB_PG_DATA_MOUNT=/var/lib/postgresql/data (got $pg_mount)"
+            || err "MDB_PG_VERSION=$pg_version needs MDB_PG_DATA_MOUNT=/var/lib/postgresql/data (got $pg_mount)"
     fi
 fi
 
@@ -143,40 +143,40 @@ while IFS= read -r line; do
             seen_ports="$seen_ports ${value}:${key}"
             ;;
     esac
-done < <(grep -E '^MMDB_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null || true)
+done < <(grep -E '^MDB_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null || true)
 
 # -----------------------------------------------------------------------------
 # 4b. HA and standalone cannot both own the PostgreSQL port
 # -----------------------------------------------------------------------------
 # The collision above only compares values WRITTEN in the env file, and
-# MMDB_PG_HOST_PORT is commented out by default -- the generated compose still
+# MDB_PG_HOST_PORT is commented out by default -- the generated compose still
 # publishes 5432 for it. So `PROFILES=pg,ha` binds 5432 twice, once for the
 # standalone engine and once for HAProxy, and the only symptom is a Docker
 # "port is already allocated" at the end of an otherwise successful boot.
 #
 # Effective values, not written ones, is the point: a default that collides is
 # still a collision.
-ha_profiles="$(get MMDB_PROFILES)"
-if [[ ",${MMDB_CHECK_PROFILES:-$ha_profiles}," == *",ha,"* ]]; then
-    pg_port="$(get MMDB_PG_HOST_PORT)"; pg_port="${pg_port:-5432}"
-    hap_w="$(get MMDB_HAPROXY_WRITE_PORT)"; hap_w="${hap_w:-5432}"
-    hap_r="$(get MMDB_HAPROXY_READ_PORT)"; hap_r="${hap_r:-5433}"
+ha_profiles="$(get MDB_PROFILES)"
+if [[ ",${MDB_CHECK_PROFILES:-$ha_profiles}," == *",ha,"* ]]; then
+    pg_port="$(get MDB_PG_HOST_PORT)"; pg_port="${pg_port:-5432}"
+    hap_w="$(get MDB_HAPROXY_WRITE_PORT)"; hap_w="${hap_w:-5432}"
+    hap_r="$(get MDB_HAPROXY_READ_PORT)"; hap_r="${hap_r:-5433}"
 
-    if [[ ",${MMDB_CHECK_PROFILES:-$ha_profiles}," == *",pg,"* ]]; then
+    if [[ ",${MDB_CHECK_PROFILES:-$ha_profiles}," == *",pg,"* ]]; then
         if [[ "$pg_port" == "$hap_w" || "$pg_port" == "$hap_r" ]]; then
             err "profiles 'pg' and 'ha' both publish port $pg_port.
        HA replaces the standalone engine rather than joining it -- run
-       PROFILES=ha, or set MMDB_PG_HOST_PORT to something else."
+       PROFILES=ha, or set MDB_PG_HOST_PORT to something else."
         fi
     fi
 
     [[ "$hap_w" == "$hap_r" ]] \
-        && err "MMDB_HAPROXY_WRITE_PORT and MMDB_HAPROXY_READ_PORT are both $hap_w"
+        && err "MDB_HAPROXY_WRITE_PORT and MDB_HAPROXY_READ_PORT are both $hap_w"
 
-    etcd_hosts="$(get MMDB_HA_ETCD_HOSTS)"
+    etcd_hosts="$(get MDB_HA_ETCD_HOSTS)"
     members="$(awk -F, '{print NF}' <<< "$etcd_hosts")"
     (( members >= 3 )) \
-        || err "MMDB_HA_ETCD_HOSTS lists $members endpoint(s); a quorum needs 3 minimum (SPEC 21.2)"
+        || err "MDB_HA_ETCD_HOSTS lists $members endpoint(s); a quorum needs 3 minimum (SPEC 21.2)"
 fi
 
 # -----------------------------------------------------------------------------
@@ -200,14 +200,14 @@ fi
 # the machine that will run it. Deriving this from the filename means no caller
 # has to remember a flag -- check 06 validates the template, check 26 validates
 # a render, and both were failing on ports neither of them was about to bind.
-# The filename sets the DEFAULT; an explicit MMDB_CHECK_RENDERING still wins,
+# The filename sets the DEFAULT; an explicit MDB_CHECK_RENDERING still wins,
 # so a caller can ask "would this file boot?" of a file that is not .env --
 # which is exactly what check 26 does to prove the deferred credential
 # requirement is enforced somewhere rather than merely deferred.
-if [[ -z "${MMDB_CHECK_RENDERING:-}" ]]; then
+if [[ -z "${MDB_CHECK_RENDERING:-}" ]]; then
     case "$(basename "$ENV_FILE")" in
-        .env) MMDB_CHECK_RENDERING=0 ;;
-        *)    MMDB_CHECK_RENDERING=1 ;;
+        .env) MDB_CHECK_RENDERING=0 ;;
+        *)    MDB_CHECK_RENDERING=1 ;;
     esac
 fi
 
@@ -215,7 +215,7 @@ ours=""
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     # Space separated, not newline: the membership test below compares
     # " $ours " against *" $value "*, and newlines make every match fail.
-    ours="$(docker ps --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-mmdb}" \
+    ours="$(docker ps --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-mdb}" \
              --format '{{.Ports}}' 2>/dev/null | grep -oE '[0-9]+->' | tr -d '>-' \
              | sort -u | tr '\n' ' ' || true)"
 fi
@@ -224,20 +224,20 @@ fi
 # nobody selected is not a collision -- flagging HAProxy's 5433 when HA is off
 # would train people to ignore this check, which is worse than not having it.
 # COMPOSE_PROFILES first: the Makefile has already resolved PROFILES= from the
-# command line, MMDB_PROFILES from the file, and the default. Reading the file
+# command line, MDB_PROFILES from the file, and the default. Reading the file
 # directly ignores `make up PROFILES=pg` and judges ports for services that run
 # that are not about to start -- which failed nine checks with "make up failed":
 # because another project held 443 and `pg` does not publish 443.
-active_profiles=",${COMPOSE_PROFILES:-${MMDB_CHECK_PROFILES:-$(get MMDB_PROFILES)}},"
+active_profiles=",${COMPOSE_PROFILES:-${MDB_CHECK_PROFILES:-$(get MDB_PROFILES)}},"
 port_is_active() {
     case "$1" in
-        MMDB_HAPROXY_*)  [[ "$active_profiles" == *,ha,* ]] ;;
-        MMDB_CADDY_*|MMDB_ADMINER_*|MMDB_PGADMIN_*|MMDB_PMA_*|MMDB_UI_*)
+        MDB_HAPROXY_*)  [[ "$active_profiles" == *,ha,* ]] ;;
+        MDB_CADDY_*|MDB_ADMINER_*|MDB_PGADMIN_*|MDB_PMA_*|MDB_UI_*)
                          [[ "$active_profiles" == *,ui,* || "$active_profiles" == *,prod,* ]] ;;
-        MMDB_*_POOLER_HOST_PORT)
+        MDB_*_POOLER_HOST_PORT)
                          [[ "$active_profiles" == *,pooler,* ]] ;;
-        MMDB_*_HOST_PORT)
-            local eng; eng="$(printf '%s' "$1" | sed -E 's/^MMDB_//; s/_HOST_PORT$//' \
+        MDB_*_HOST_PORT)
+            local eng; eng="$(printf '%s' "$1" | sed -E 's/^MDB_//; s/_HOST_PORT$//' \
                               | tr '[:upper:]_' '[:lower:]-')"
             [[ "$active_profiles" == *,"$eng",* ]] ;;
         *) return 1 ;;
@@ -254,7 +254,7 @@ port_in_use() {
 #
 # The file only carries the ones an operator has uncommented; every other
 # published port is a default baked into the compose files
-# (${MMDB_ADMINER_HOST_PORT:-8080}). Scanning the file therefore missed exactly
+# (${MDB_ADMINER_HOST_PORT:-8080}). Scanning the file therefore missed exactly
 # the collisions that actually happen -- Adminer on 8080 is the single most
 # contended port on a developer machine, and it slipped through because nobody
 # had written it down. `compose config` resolves every default and every
@@ -290,7 +290,7 @@ fi
 # Fall back to the env file when compose or python is unavailable: a partial
 # check beats none, and this path still catches every explicitly-set port.
 if [[ -z "$resolved" ]]; then
-    resolved="$(grep -E '^MMDB_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+    resolved="$(grep -E '^MDB_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 fi
 
 while IFS= read -r value; do
@@ -306,10 +306,10 @@ while IFS= read -r value; do
         # -- 5432 is both the engine's port and HAProxy's write port -- and
         # naming an arbitrary one sends people to edit a setting that is not
         # the one being published.
-        matches="$(grep -cE "^MMDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null || true)"
+        matches="$(grep -cE "^MDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null || true)"
         key=""
         if [[ "${matches:-0}" == "1" ]]; then
-            key="$(grep -E "^MMDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
+            key="$(grep -E "^MDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
                    | head -1 | cut -d= -f1 || true)"
         fi
         taken="${taken}       $value${key:+ ($key)}"$'\n'
@@ -322,7 +322,7 @@ if [[ -n "$taken" ]]; then
     # RENDERING a prod file, which binds nothing: the machine that renders the
     # config is often not the machine that runs it, and `make init-prod` must
     # produce an env that passes check-env (SPEC section 18, criterion 2).
-    if [[ "${MMDB_CHECK_RENDERING:-0}" == "1" ]]; then
+    if [[ "${MDB_CHECK_RENDERING:-0}" == "1" ]]; then
         note "port(s) currently in use on THIS machine (fine if you deploy elsewhere):
 ${taken%$'\n'}"
     else
@@ -335,32 +335,32 @@ fi
 # -----------------------------------------------------------------------------
 # 5. Prod-profile guards (SPEC sections 18 and 21.1)
 # -----------------------------------------------------------------------------
-profiles="$(get MMDB_PROFILES)"
+profiles="$(get MDB_PROFILES)"
 if [[ ",${profiles}," == *",prod,"* ]]; then
     note "prod profile detected: applying prod guards"
 
-    [[ "$(get MMDB_TLS_ENFORCE)" == "true" ]] \
-        || err "the prod profile requires MMDB_TLS_ENFORCE=true"
+    [[ "$(get MDB_TLS_ENFORCE)" == "true" ]] \
+        || err "the prod profile requires MDB_TLS_ENFORCE=true"
 
     # Pooling is mandatory, not advisory: ~10 MB per direct PostgreSQL
     # connection means ~500 connections cost ~5 GB before a query runs.
-    [[ -n "$(get MMDB_PGBOUNCER_POOL_MODE)" ]] \
-        || err "the prod profile requires a pooler (MMDB_PGBOUNCER_POOL_MODE); see SPEC section 21.1"
+    [[ -n "$(get MDB_PGBOUNCER_POOL_MODE)" ]] \
+        || err "the prod profile requires a pooler (MDB_PGBOUNCER_POOL_MODE); see SPEC section 21.1"
 
-    [[ -n "$(get MMDB_UI_BASIC_AUTH_HASH)" ]] \
-        || err "the prod profile requires MMDB_UI_BASIC_AUTH_HASH on every UI route"
+    [[ -n "$(get MDB_UI_BASIC_AUTH_HASH)" ]] \
+        || err "the prod profile requires MDB_UI_BASIC_AUTH_HASH on every UI route"
 
     # SPEC section 18, criterion 7c: the fresh VPS path ends with PITR active.
     # A nightly dump means losing up to a day; WAL archiving means losing up to
     # a transaction, and that is the difference this guard exists to enforce.
-    [[ "$(get MMDB_PG_PITR)" == "true" ]] \
-        || err "the prod profile requires MMDB_PG_PITR=true (SPEC section 18, 7c).
+    [[ "$(get MDB_PG_PITR)" == "true" ]] \
+        || err "the prod profile requires MDB_PG_PITR=true (SPEC section 18, 7c).
        Without WAL archiving, recovery granularity is the last dump."
 
     # posix is a local directory. It dies with the machine, which is the exact
     # scenario a backup exists for.
-    if [[ "$(get MMDB_PGBACKREST_REPO_TYPE)" != "s3" ]]; then
-        err "the prod profile requires MMDB_PGBACKREST_REPO_TYPE=s3 (SPEC section 18, 7b).
+    if [[ "$(get MDB_PGBACKREST_REPO_TYPE)" != "s3" ]]; then
+        err "the prod profile requires MDB_PGBACKREST_REPO_TYPE=s3 (SPEC section 18, 7b).
        A posix repository lives on the machine it is backing up."
     fi
 
@@ -371,13 +371,13 @@ if [[ ",${profiles}," == *",prod,"* ]]; then
     # reports healthy. But only a note while RENDERING a prod file, because
     # `make init-prod` must produce an env that passes check-env (SPEC section
     # 18, criterion 2) and it cannot invent someone's S3 keys. Same contract as
-    # MMDB_CADDY_ACME_EMAIL, which init-prod also surfaces as still-required.
+    # MDB_CADDY_ACME_EMAIL, which init-prod also surfaces as still-required.
     for f in pgbackrest_s3_key.txt pgbackrest_s3_secret.txt; do
         [[ -s "$ROOT/secrets/$f" ]] && continue
-        if [[ "${MMDB_CHECK_RENDERING:-0}" == "1" ]]; then
+        if [[ "${MDB_CHECK_RENDERING:-0}" == "1" ]]; then
             note "still required before 'make up': secrets/$f (your object-store credentials)"
         else
-            err "MMDB_PGBACKREST_REPO_TYPE=s3 needs secrets/$f
+            err "MDB_PGBACKREST_REPO_TYPE=s3 needs secrets/$f
        (your object-store credentials; they are never written to .env)"
         fi
     done
@@ -385,7 +385,7 @@ if [[ ",${profiles}," == *",prod,"* ]]; then
 fi
 
 # The etcd quorum is validated whenever the `ha` PROFILE is selected, which is
-# what actually starts etcd. It used to hang off a separate MMDB_HA_ENABLE
+# what actually starts etcd. It used to hang off a separate MDB_HA_ENABLE
 # flag, so `PROFILES=ha` with the flag left false ran HA with no validation at
 # all -- two switches for one thing, free to disagree.
 
@@ -399,7 +399,7 @@ while IFS= read -r line; do
     if [[ ! -f "$ROOT/$value" ]] && [[ -f "$ROOT/.env" ]] && [[ "$ENV_FILE" == "$ROOT/.env" ]]; then
         err "$key points at $value, which does not exist (run: make init)"
     fi
-done < <(grep -E '^MMDB_[A-Z0-9_]*_FILE=' "$ENV_FILE" 2>/dev/null || true)
+done < <(grep -E '^MDB_[A-Z0-9_]*_FILE=' "$ENV_FILE" 2>/dev/null || true)
 
 # -----------------------------------------------------------------------------
 if (( errors )); then

@@ -11,10 +11,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
-profiles="${COMPOSE_PROFILES:-$(grep -E '^MMDB_PROFILES=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true)}"
+profiles="${COMPOSE_PROFILES:-$(grep -E '^MDB_PROFILES=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true)}"
 profiles="${profiles:-pg,ui}"
 
 # Dev and prod are separate templates rather than one file full of
@@ -27,5 +27,5 @@ else
     caddy_template="caddy/Caddyfile.tmpl"
 fi
 
-MMDB_ENV_FILE="$ENV_FILE" "$ROOT/scripts/env-render" "$caddy_template" "$ROOT/caddy/Caddyfile"
-MMDB_ENV_FILE="$ENV_FILE" "$ROOT/scripts/env-render" "caddy/servers.json.tmpl" "$ROOT/caddy/servers.json"
+MDB_ENV_FILE="$ENV_FILE" "$ROOT/scripts/env-render" "$caddy_template" "$ROOT/caddy/Caddyfile"
+MDB_ENV_FILE="$ENV_FILE" "$ROOT/scripts/env-render" "caddy/servers.json.tmpl" "$ROOT/caddy/servers.json"

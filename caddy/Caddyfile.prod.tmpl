@@ -1,4 +1,4 @@
-# my-multidb-server web front door — PROD.
+# multidb-server web front door — PROD.
 #
 # In production Caddy is the ONLY service with a published port: engines and
 # UIs are reachable only through here, on the internal network
@@ -10,16 +10,16 @@
 # missing and exits nonzero.
 
 {
-	email ${MMDB_CADDY_ACME_EMAIL}
+	email ${MDB_CADDY_ACME_EMAIL}
 	admin off
 }
 
-(mmdb_ui) {
+(mdb_ui) {
 	# The value is a bcrypt hash from `caddy hash-password`, never a plaintext
 	# password, which is what makes this rendered file safe to leave
 	# world-readable.
 	basic_auth {
-		${MMDB_UI_BASIC_AUTH_USER} ${MMDB_UI_BASIC_AUTH_HASH}
+		${MDB_UI_BASIC_AUTH_USER} ${MDB_UI_BASIC_AUTH_HASH}
 	}
 
 	header {
@@ -31,17 +31,17 @@
 	}
 }
 
-adminer.${MMDB_UI_DOMAIN} {
-	import mmdb_ui
+adminer.${MDB_UI_DOMAIN} {
+	import mdb_ui
 	reverse_proxy adminer:8080
 }
 
-pma.${MMDB_UI_DOMAIN} {
-	import mmdb_ui
+pma.${MDB_UI_DOMAIN} {
+	import mdb_ui
 	reverse_proxy phpmyadmin:80
 }
 
-pgadmin.${MMDB_UI_DOMAIN} {
-	import mmdb_ui
+pgadmin.${MDB_UI_DOMAIN} {
+	import mdb_ui
 	reverse_proxy pgadmin:80
 }

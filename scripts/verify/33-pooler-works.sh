@@ -23,13 +23,13 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-pooler_img="$(grep -oE "^MMDB_ENGINE_POOLER_IMAGE='[^']+'" engines/postgres/engine.conf \
-              | sed "s/^MMDB_ENGINE_POOLER_IMAGE='//; s/'$//")"
+pooler_img="$(grep -oE "^MDB_ENGINE_POOLER_IMAGE='[^']+'" engines/postgres/engine.conf \
+              | sed "s/^MDB_ENGINE_POOLER_IMAGE='//; s/'$//")"
 [[ -n "$pooler_img" ]] || vfail "engines/postgres/engine.conf declares no pooler image"
 
-net="mmdb-verify-pool-net-$$"
-pg="mmdb-verify-pool-pg-$$"
-bouncer="mmdb-verify-pool-bouncer-$$"
+net="mdb-verify-pool-net-$$"
+pg="mdb-verify-pool-pg-$$"
+bouncer="mdb-verify-pool-bouncer-$$"
 secrets="$(mktemp -d)"
 
 track_container "$pg"
@@ -37,7 +37,7 @@ track_container "$bouncer"
 add_cleanup "docker network rm '$net' >/dev/null 2>&1 || true"
 add_cleanup "rm -rf '$secrets'"
 
-printf 'mmdb-throwaway-bouncer\n' > "$secrets/pgbouncer_password.txt"
+printf 'mdb-throwaway-bouncer\n' > "$secrets/pgbouncer_password.txt"
 chmod 0600 "$secrets"/*
 
 docker network create "$net" >/dev/null || vfail "could not create the test network"
@@ -46,8 +46,8 @@ docker network create "$net" >/dev/null || vfail "could not create the test netw
 # THIS check and to PostgreSQL -- and, the point of the exercise, never to the
 # pooler.
 docker run -d --name "$pg" --network "$net" --network-alias pg \
-    -e POSTGRES_PASSWORD=mmdb-throwaway-super \
-    -e MMDB_PG_DATABASES="poolapp:poolapp:mmdb-throwaway-app" \
+    -e POSTGRES_PASSWORD=mdb-throwaway-super \
+    -e MDB_PG_DATABASES="poolapp:poolapp:mdb-throwaway-app" \
     -v "$secrets:/run/secrets:ro" \
     "$img" >/dev/null || vfail "PostgreSQL failed to start"
 
@@ -100,12 +100,12 @@ via_pooler() {
 }
 
 wait_ready 60 "the pooler to accept connections" \
-    docker run --rm --network "$net" -e PGPASSWORD=mmdb-throwaway-app \
+    docker run --rm --network "$net" -e PGPASSWORD=mdb-throwaway-app \
         --entrypoint psql "$img" \
         -h "$bouncer" -p 6432 -U poolapp -d poolapp -qtAX -c 'SELECT 1'
 
 # 1. An application user connects through the pooler.
-got="$(via_pooler mmdb-throwaway-app poolapp poolapp 'SELECT 42')"
+got="$(via_pooler mdb-throwaway-app poolapp poolapp 'SELECT 42')"
 [[ "$got" == "42" ]] || vfail "query through the pooler returned '$got', expected 42"
 vinfo "application user authenticated through the pooler with auth_query"
 
@@ -113,7 +113,7 @@ vinfo "application user authenticated through the pooler with auth_query"
 #    its own credential; finding the app user's password there would mean the
 #    auth_query path is not actually in use.
 if docker exec "$bouncer" sh -c 'cat /etc/pgbouncer/userlist.txt 2>/dev/null' \
-     | grep -q 'mmdb-throwaway-app'; then
+     | grep -q 'mdb-throwaway-app'; then
     vfail "the pooler stored an application password; auth_query must resolve them instead"
 fi
 vinfo "no application password is stored in the pooler"
@@ -121,7 +121,7 @@ vinfo "no application password is stored in the pooler"
 # 3. Multiplexing: more clients than server connections. DEFAULT_POOL_SIZE=2,
 #    so eight concurrent clients must not open eight backends.
 for _ in 1 2 3 4 5 6 7 8; do
-    docker run --rm -d --network "$net" -e PGPASSWORD=mmdb-throwaway-app \
+    docker run --rm -d --network "$net" -e PGPASSWORD=mdb-throwaway-app \
         --entrypoint psql "$img" \
         -h "$bouncer" -p 6432 -U poolapp -d poolapp -qtAX \
         -c 'SELECT pg_sleep(3)' >/dev/null 2>&1 || true
@@ -139,7 +139,7 @@ vinfo "8 clients collapsed onto $backends server connection(s) (pool_size 2)"
 # 4. A wrong password is still refused. Asserted on exit status rather than on
 #    the text of the error: matching strings would pass for any failure at all,
 #    including "could not connect", which proves nothing about authentication.
-if via_pooler mmdb-throwaway-wrong-password poolapp poolapp 'SELECT 1' >/dev/null 2>&1; then
+if via_pooler mdb-throwaway-wrong-password poolapp poolapp 'SELECT 1' >/dev/null 2>&1; then
     vfail "the pooler accepted a wrong password"
 fi
 vinfo "wrong password refused through the pooler"

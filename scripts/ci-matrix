@@ -27,8 +27,8 @@ mode="${1:-versions}"
 # licence) has no Dockerfile of ours, and an engine that is declared but not
 # yet implemented has none either -- neither belongs in a build matrix.
 buildable() {
-    [ "${MMDB_ENGINE_PUBLISH:-derive}" = "derive" ] \
-        && [ -f "$ROOT/images/$MMDB_ENGINE_NAME/Dockerfile" ]
+    [ "${MDB_ENGINE_PUBLISH:-derive}" = "derive" ] \
+        && [ -f "$ROOT/images/$MDB_ENGINE_NAME/Dockerfile" ]
 }
 
 first=1
@@ -41,18 +41,18 @@ for engine in $(engine_list); do
         engines)
             [ "$first" -eq 1 ] || printf ','
             printf '{"engine":"%s","version":"%s"}' \
-                "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_DEFAULT_VERSION"
+                "$MDB_ENGINE_NAME" "$MDB_ENGINE_DEFAULT_VERSION"
             first=0
             ;;
         versions)
-            for v in $MMDB_ENGINE_VERSIONS; do
+            for v in $MDB_ENGINE_VERSIONS; do
                 # A version with no pinned base cannot be built. Check 31
                 # already fails on that, so this stays silent rather than
                 # reporting the same gap in a second, less clear place.
-                awk -v e="$MMDB_ENGINE_NAME" -v ver="$v" \
+                awk -v e="$MDB_ENGINE_NAME" -v ver="$v" \
                     '$1==e && $2==ver {found=1} END{exit !found}' images/bases.tsv || continue
                 [ "$first" -eq 1 ] || printf ','
-                printf '{"engine":"%s","version":"%s"}' "$MMDB_ENGINE_NAME" "$v"
+                printf '{"engine":"%s","version":"%s"}' "$MDB_ENGINE_NAME" "$v"
                 first=0
             done
             ;;

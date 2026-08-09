@@ -14,10 +14,10 @@
 # the image's entrypoint templates only a handful of settings and these are not
 # among them.
 
-MMDB_STAGE=mmdb-conf
-export MMDB_STAGE
-# shellcheck source=mmdb-lib.sh
-source /usr/local/lib/mmdb/mmdb-lib.sh
+MDB_STAGE=mdb-conf
+export MDB_STAGE
+# shellcheck source=mdb-lib.sh
+source /usr/local/lib/mdb/mdb-lib.sh
 
 stage "enabling authentication and authorization"
 
@@ -25,11 +25,11 @@ sed -i \
     -e 's/^authenticator:.*/authenticator: PasswordAuthenticator/' \
     -e 's/^authorizer:.*/authorizer: CassandraAuthorizer/' \
     -e 's/^role_manager:.*/role_manager: CassandraRoleManager/' \
-    "$MMDB_CONF"
+    "$MDB_CONF"
 
-grep -q '^authenticator: PasswordAuthenticator' "$MMDB_CONF" \
+grep -q '^authenticator: PasswordAuthenticator' "$MDB_CONF" \
     || die "could not enable PasswordAuthenticator; refusing to start wide open"
-grep -q '^authorizer: CassandraAuthorizer' "$MMDB_CONF" \
+grep -q '^authorizer: CassandraAuthorizer' "$MDB_CONF" \
     || die "could not enable CassandraAuthorizer; refusing to start wide open"
 
 # With authentication on, the system_auth keyspace holds the credentials. Its
@@ -39,7 +39,7 @@ grep -q '^authorizer: CassandraAuthorizer' "$MMDB_CONF" \
 stage "authentication and authorization enabled"
 
 # A mounted override wins, as everywhere else in the toolkit.
-if [ -d /mmdb/overrides ] && [ -n "$(ls -A /mmdb/overrides 2>/dev/null)" ]; then
-    cp -f /mmdb/overrides/*.yaml /etc/cassandra/ 2>/dev/null || true
+if [ -d /mdb/overrides ] && [ -n "$(ls -A /mdb/overrides 2>/dev/null)" ]; then
+    cp -f /mdb/overrides/*.yaml /etc/cassandra/ 2>/dev/null || true
     stage "applied mounted overrides"
 fi

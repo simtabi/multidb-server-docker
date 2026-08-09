@@ -1,4 +1,4 @@
       # Supplying a root username is what ENABLES authentication. Without it
       # the image runs wide open and any client reaching the port is an
       # administrator (SPEC section 22.3), so this is not optional here.
-      MONGO_INITDB_ROOT_USERNAME: ${MMDB_MONGODB_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_USERNAME: ${MDB_MONGODB_ROOT_USER:-root}

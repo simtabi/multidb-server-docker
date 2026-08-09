@@ -24,20 +24,20 @@ cd "$ROOT" || exit 1
 # shellcheck source=engine-lib.sh
 . "$ROOT/scripts/engine-lib.sh"
 
-# Every MMDB_<ENGINE>_* variable documented in .env.example is passed through.
+# Every MDB_<ENGINE>_* variable documented in .env.example is passed through.
 # Enumerating them in this generator would put engine knowledge back into it,
 # which is precisely what the descriptor exists to prevent.
 emit_engine_env() {
     local up="$1" v
     # shellcheck disable=SC2013  # variable NAMES contain no whitespace
-    for v in $(grep -oE "^#?MMDB_${up}_[A-Z0-9_]+" .env.example 2>/dev/null \
+    for v in $(grep -oE "^#?MDB_${up}_[A-Z0-9_]+" .env.example 2>/dev/null \
                  | sed 's/^#//' | sort -u); do
         case "$v" in
             *_VERSION|*_HOST_PORT|*_DATABASES|*_EMBED_EXPORTER|*_EMBED_BACKUP) continue ;;
         esac
         printf '      %s: ${%s:-}\n' "$v" "$v"
     done
-    for v in MMDB_CPUS MMDB_SOCKETS MMDB_MTLS MMDB_EXTRA_SANS; do
+    for v in MDB_CPUS MDB_SOCKETS MDB_MTLS MDB_EXTRA_SANS; do
         printf '      %s: ${%s:-}\n' "$v" "$v"
     done
 }
@@ -57,34 +57,34 @@ poolers=0
 for engine in $(engine_list); do
     engine_load "$engine" || continue
 
-    upper="$(printf '%s' "$MMDB_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
+    upper="$(printf '%s' "$MDB_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
 
     # A referenced engine is not rebuilt under our namespace, so it runs the
     # upstream image directly (SPEC section 22.5). Everything else runs the
     # image we publish.
-    if [ "${MMDB_ENGINE_PUBLISH:-derive}" = "reference" ]; then
-        image_line="\${MMDB_${upper}_IMAGE:-$(awk -v e="$MMDB_ENGINE_NAME" -v v="$MMDB_ENGINE_DEFAULT_VERSION" \
+    if [ "${MDB_ENGINE_PUBLISH:-derive}" = "reference" ]; then
+        image_line="\${MDB_${upper}_IMAGE:-$(awk -v e="$MDB_ENGINE_NAME" -v v="$MDB_ENGINE_DEFAULT_VERSION" \
             '$1==e && $2==v {print $3; exit}' images/bases.tsv)}"
         build_block=""
     else
-        image_line="ghcr.io/simtabi/my-multidb-server-${MMDB_ENGINE_NAME}:\${MMDB_${upper}_VERSION:-${MMDB_ENGINE_DEFAULT_VERSION}}"
+        image_line="ghcr.io/simtabi/multidb-server-${MDB_ENGINE_NAME}:\${MDB_${upper}_VERSION:-${MDB_ENGINE_DEFAULT_VERSION}}"
         build_block="    build:
       context: ./images
-      dockerfile: ${MMDB_ENGINE_NAME}/Dockerfile
+      dockerfile: ${MDB_ENGINE_NAME}/Dockerfile
       args:
-        ENGINE_VERSION: \${MMDB_${upper}_VERSION:-${MMDB_ENGINE_DEFAULT_VERSION}}
+        ENGINE_VERSION: \${MDB_${upper}_VERSION:-${MDB_ENGINE_DEFAULT_VERSION}}
 "
     fi
 
     {
         printf '  # ---------------------------------------------------------------------------\n'
-        printf '  # %s (%s, %s)\n' "$MMDB_ENGINE_TITLE" "$MMDB_ENGINE_PARADIGM" "$MMDB_ENGINE_LICENSE"
-        if [ "${MMDB_ENGINE_PUBLISH:-derive}" = "reference" ]; then
-            printf '  # Referenced, not published: %s\n' "${MMDB_ENGINE_LICENSE_NOTE:-see SPEC 22.5}"
+        printf '  # %s (%s, %s)\n' "$MDB_ENGINE_TITLE" "$MDB_ENGINE_PARADIGM" "$MDB_ENGINE_LICENSE"
+        if [ "${MDB_ENGINE_PUBLISH:-derive}" = "reference" ]; then
+            printf '  # Referenced, not published: %s\n' "${MDB_ENGINE_LICENSE_NOTE:-see SPEC 22.5}"
         fi
         printf '  # ---------------------------------------------------------------------------\n'
-        printf '  %s:\n' "$MMDB_ENGINE_NAME"
-        printf '    profiles: [%s]\n' "$MMDB_ENGINE_NAME"
+        printf '  %s:\n' "$MDB_ENGINE_NAME"
+        printf '    profiles: [%s]\n' "$MDB_ENGINE_NAME"
         [ -n "$build_block" ] && printf '%s' "$build_block"
         printf '    image: %s\n' "$image_line"
         printf '    restart: unless-stopped\n'
@@ -94,46 +94,46 @@ for engine in $(engine_list); do
         # entrypoint's drop to the engine user.
         printf '    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]\n'
         printf '    environment:\n'
-        printf '      %s: /run/secrets/%s\n' "$MMDB_ENGINE_ROOT_PW_ENV" "$MMDB_ENGINE_ROOT_SECRET"
-        printf '      MMDB_TLS_ENFORCE: ${MMDB_TLS_ENFORCE:-false}\n'
-        printf '      MMDB_MEM: ${MMDB_MEM:-4}\n'
-        printf '      MMDB_TZ: ${MMDB_TZ:-UTC}\n'
-        printf '      MMDB_%s_DATABASES: ${MMDB_%s_DATABASES:-}\n' "$upper" "$upper"
+        printf '      %s: /run/secrets/%s\n' "$MDB_ENGINE_ROOT_PW_ENV" "$MDB_ENGINE_ROOT_SECRET"
+        printf '      MDB_TLS_ENFORCE: ${MDB_TLS_ENFORCE:-false}\n'
+        printf '      MDB_MEM: ${MDB_MEM:-4}\n'
+        printf '      MDB_TZ: ${MDB_TZ:-UTC}\n'
+        printf '      MDB_%s_DATABASES: ${MDB_%s_DATABASES:-}\n' "$upper" "$upper"
         # Embedded helpers stay OFF under compose, which runs them as separate
         # services (SPEC section 6.1).
-        printf '      MMDB_%s_EMBED_EXPORTER: "false"\n' "$upper"
-        printf '      MMDB_%s_EMBED_BACKUP: "false"\n' "$upper"
+        printf '      MDB_%s_EMBED_EXPORTER: "false"\n' "$upper"
+        printf '      MDB_%s_EMBED_BACKUP: "false"\n' "$upper"
         emit_engine_env "$upper"
-        # An engine may need variables of the image's own, not MMDB_ ones.
+        # An engine may need variables of the image's own, not MDB_ ones.
         # These go INSIDE the environment block; service-level settings use
         # compose-extra.yml instead.
-        [ -f "$MMDB_ENGINE_DIR/compose-env.yml" ] && cat "$MMDB_ENGINE_DIR/compose-env.yml"
+        [ -f "$MDB_ENGINE_DIR/compose-env.yml" ] && cat "$MDB_ENGINE_DIR/compose-env.yml"
         printf '    volumes:\n'
-        printf '      - %s_data:%s\n' "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_DATA_DIR"
+        printf '      - %s_data:%s\n' "$MDB_ENGINE_NAME" "$MDB_ENGINE_DATA_DIR"
         printf '      - ./certs:/certs:ro\n'
         printf '      - ./secrets:/run/secrets:ro\n'
-        printf '      - ./overrides/%s:%s:ro\n' "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_OVERRIDES_DIR"
+        printf '      - ./overrides/%s:%s:ro\n' "$MDB_ENGINE_NAME" "$MDB_ENGINE_OVERRIDES_DIR"
         # The PITR repository. A named volume, not a bind mount, and separate
         # from the data volume on purpose: a backup living inside the thing it
         # backs up is not a backup, and `make destroy` takes the data with it.
-        if [ "${MMDB_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
+        if [ "${MDB_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
             printf '      - %s_pitr:%s\n' \
-                "$MMDB_ENGINE_NAME" "${MMDB_ENGINE_PITR_REPO_PATH:-/var/lib/pgbackrest}"
+                "$MDB_ENGINE_NAME" "${MDB_ENGINE_PITR_REPO_PATH:-/var/lib/pgbackrest}"
         fi
         printf '    ports:\n'
-        printf '      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_%s_HOST_PORT:-%s}:%s"\n' \
-            "$upper" "$MMDB_ENGINE_HOST_PORT_DEFAULT" "$MMDB_ENGINE_PORT"
+        printf '      - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_%s_HOST_PORT:-%s}:%s"\n' \
+            "$upper" "$MDB_ENGINE_HOST_PORT_DEFAULT" "$MDB_ENGINE_PORT"
         # Docker's 10s default force-kills a database mid-checkpoint.
-        printf '    stop_grace_period: ${MMDB_STOP_GRACE:-60s}\n'
-        printf '    networks: [mmdb]\n'
+        printf '    stop_grace_period: ${MDB_STOP_GRACE:-60s}\n'
+        printf '    networks: [mdb]\n'
         printf '    logging:\n      driver: json-file\n'
         printf '      options:\n'
-        printf '        max-size: ${MMDB_LOG_MAX_SIZE:-10m}\n'
-        printf '        max-file: "${MMDB_LOG_MAX_FILE:-3}"\n'
+        printf '        max-size: ${MDB_LOG_MAX_SIZE:-10m}\n'
+        printf '        max-file: "${MDB_LOG_MAX_FILE:-3}"\n'
         # Genuinely engine-specific service settings -- PostgreSQL's shm_size,
         # the MySQL family's ulimits, Cassandra's heap -- live beside the
         # descriptor rather than as branches in here.
-        [ -f "$MMDB_ENGINE_DIR/compose-extra.yml" ] && cat "$MMDB_ENGINE_DIR/compose-extra.yml"
+        [ -f "$MDB_ENGINE_DIR/compose-extra.yml" ] && cat "$MDB_ENGINE_DIR/compose-extra.yml"
         printf '\n'
     } >> "$tmp"
 
@@ -151,23 +151,23 @@ for engine in $(engine_list); do
     # upstream address cannot be overridden, and two `environment:` keys in one
     # service is a YAML duplicate that silently keeps only the last.
     # -------------------------------------------------------------------------
-    if [ "${MMDB_ENGINE_POOLING:-driver}" = "external" ] \
-       && [ -n "${MMDB_ENGINE_POOLER_IMAGE:-}" ] \
-       && [ -f "$MMDB_ENGINE_DIR/compose-pooler.yml" ]; then
+    if [ "${MDB_ENGINE_POOLING:-driver}" = "external" ] \
+       && [ -n "${MDB_ENGINE_POOLER_IMAGE:-}" ] \
+       && [ -f "$MDB_ENGINE_DIR/compose-pooler.yml" ]; then
         {
             printf '  # ---------------------------------------------------------------------------\n'
-            printf '  # %s pooler\n' "$MMDB_ENGINE_TITLE"
+            printf '  # %s pooler\n' "$MDB_ENGINE_TITLE"
             printf '  # ---------------------------------------------------------------------------\n'
-            printf '  %s-pooler:\n' "$MMDB_ENGINE_NAME"
+            printf '  %s-pooler:\n' "$MDB_ENGINE_NAME"
             # Its OWN profile, not a shared `pooler` one. Compose profiles
             # are OR: a shared profile starts every pooler, including those
             # whose engine was not selected, and compose then rejects the whole
             # project over the dangling depends_on. scripts/profiles expands
             # `pooler` into the ones that match the selected engines.
-            printf '    profiles: [%s-pooler]\n' "$MMDB_ENGINE_NAME"
-            printf '    image: %s\n' "$MMDB_ENGINE_POOLER_IMAGE"
+            printf '    profiles: [%s-pooler]\n' "$MDB_ENGINE_NAME"
+            printf '    image: %s\n' "$MDB_ENGINE_POOLER_IMAGE"
             printf '    restart: unless-stopped\n'
-            printf '    depends_on: [%s]\n' "$MMDB_ENGINE_NAME"
+            printf '    depends_on: [%s]\n' "$MDB_ENGINE_NAME"
             printf '    security_opt:\n      - no-new-privileges:true\n'
             printf '    cap_drop:\n      - ALL\n'
             # Every pooler starts through a bootstrap script from the
@@ -177,37 +177,37 @@ for engine in $(engine_list); do
             # password verifiers through its admin interface -- and encoding
             # either of those as a `sh -c` string here would put engine
             # knowledge back into the generator.
-            printf '    entrypoint: ["%s"]\n' "$MMDB_ENGINE_POOLER_CMD"
+            printf '    entrypoint: ["%s"]\n' "$MDB_ENGINE_POOLER_CMD"
             printf '    environment:\n'
-            printf '      DB_PASSWORD_FILE: /run/secrets/%s\n' "${MMDB_ENGINE_POOLER_SECRET:-pgbouncer_password.txt}"
+            printf '      DB_PASSWORD_FILE: /run/secrets/%s\n' "${MDB_ENGINE_POOLER_SECRET:-pgbouncer_password.txt}"
             # Upstream host and port come from the descriptor, never from the
             # pooler config file, so the pooler cannot end up aimed at a
             # service name that no longer exists.
-            printf '      DB_HOST: %s\n' "$MMDB_ENGINE_NAME"
-            printf '      DB_PORT: "%s"\n' "$MMDB_ENGINE_PORT"
-            cat "$MMDB_ENGINE_DIR/compose-pooler.yml"
+            printf '      DB_HOST: %s\n' "$MDB_ENGINE_NAME"
+            printf '      DB_PORT: "%s"\n' "$MDB_ENGINE_PORT"
+            cat "$MDB_ENGINE_DIR/compose-pooler.yml"
             # The pooler writes a generated userlist under /etc; tmpfs keeps it
             # off disk and out of any committed layer.
             printf '    tmpfs:\n      - %s:exec,mode=0700,uid=%s,gid=%s\n' \
-                "${MMDB_ENGINE_POOLER_STATE_DIR:-/tmp/pooler}" \
-                "${MMDB_ENGINE_POOLER_UID:-0}" "${MMDB_ENGINE_POOLER_UID:-0}"
+                "${MDB_ENGINE_POOLER_STATE_DIR:-/tmp/pooler}" \
+                "${MDB_ENGINE_POOLER_UID:-0}" "${MDB_ENGINE_POOLER_UID:-0}"
             printf '    volumes:\n'
             printf '      - ./secrets:/run/secrets:ro\n'
             printf '      - ./certs:/certs:ro\n'
             # Bootstrap scripts are baked into the images now, not mounted
             # from the repo -- an image that needs a file from the checkout to
             # start is not the standalone image SPEC section 3 promises.
-            [ -n "${MMDB_ENGINE_POOLER_BOOTSTRAP:-}" ] && \
+            [ -n "${MDB_ENGINE_POOLER_BOOTSTRAP:-}" ] && \
                 printf '      - ./%s:%s:ro\n' \
-                    "$MMDB_ENGINE_POOLER_BOOTSTRAP" "$MMDB_ENGINE_POOLER_CMD"
+                    "$MDB_ENGINE_POOLER_BOOTSTRAP" "$MDB_ENGINE_POOLER_CMD"
             printf '    ports:\n'
-            printf '      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_%s_POOLER_HOST_PORT:-%s}:%s"\n' \
-                "$upper" "${MMDB_ENGINE_POOLER_HOST_PORT_DEFAULT:-6432}" "${MMDB_ENGINE_POOLER_PORT:-6432}"
-            printf '    networks: [mmdb]\n'
+            printf '      - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_%s_POOLER_HOST_PORT:-%s}:%s"\n' \
+                "$upper" "${MDB_ENGINE_POOLER_HOST_PORT_DEFAULT:-6432}" "${MDB_ENGINE_POOLER_PORT:-6432}"
+            printf '    networks: [mdb]\n'
             printf '    logging:\n      driver: json-file\n'
             printf '      options:\n'
-            printf '        max-size: ${MMDB_LOG_MAX_SIZE:-10m}\n'
-            printf '        max-file: "${MMDB_LOG_MAX_FILE:-3}"\n'
+            printf '        max-size: ${MDB_LOG_MAX_SIZE:-10m}\n'
+            printf '        max-file: "${MDB_LOG_MAX_FILE:-3}"\n'
             printf '\n'
         } >> "$tmp"
         poolers=$(( poolers + 1 ))
@@ -222,18 +222,18 @@ done
     printf 'volumes:\n'
     for engine in $(engine_list); do
         engine_load "$engine" || continue
-        upper="$(printf '%s' "$MMDB_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
-        printf '  %s_data:\n' "$MMDB_ENGINE_NAME"
-        printf '    name: ${COMPOSE_PROJECT_NAME:-mmdb}_%s${MMDB_%s_VERSION:-%s}_data\n' \
-            "$MMDB_ENGINE_NAME" "$upper" "$MMDB_ENGINE_DEFAULT_VERSION"
+        upper="$(printf '%s' "$MDB_ENGINE_NAME" | tr '[:lower:]-' '[:upper:]_')"
+        printf '  %s_data:\n' "$MDB_ENGINE_NAME"
+        printf '    name: ${COMPOSE_PROJECT_NAME:-mdb}_%s${MDB_%s_VERSION:-%s}_data\n' \
+            "$MDB_ENGINE_NAME" "$upper" "$MDB_ENGINE_DEFAULT_VERSION"
         # NOT per major. The repository spans version upgrades: a backup taken
         # before an upgrade is exactly the one you want after a failed upgrade.
-        if [ "${MMDB_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
+        if [ "${MDB_ENGINE_PITR_CAPABLE:-false}" = "true" ]; then
             # Neutral name: PostgreSQL's repository is pgBackRest's, the MySQL
             # family's is a binary-log directory. The volume is "where this
             # engine's point-in-time recovery data lives", not one tool's.
-            printf '  %s_pitr:\n' "$MMDB_ENGINE_NAME"
-            printf '    name: ${COMPOSE_PROJECT_NAME:-mmdb}_%s_pitr\n' "$MMDB_ENGINE_NAME"
+            printf '  %s_pitr:\n' "$MDB_ENGINE_NAME"
+            printf '    name: ${COMPOSE_PROJECT_NAME:-mdb}_%s_pitr\n' "$MDB_ENGINE_NAME"
         fi
     done
 } >> "$tmp"

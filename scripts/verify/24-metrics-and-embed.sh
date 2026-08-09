@@ -17,23 +17,23 @@ img="$(image_name pg)"
 need_image "$img"
 
 # --- EMBED off (the compose default) -----------------------------------------
-off="mmdb-verify-embed-off-$$"
+off="mdb-verify-embed-off-$$"
 track_container "$off"
-docker run -d --name "$off" -e POSTGRES_PASSWORD=mmdb-throwaway-verify "$img" >/dev/null \
+docker run -d --name "$off" -e POSTGRES_PASSWORD=mdb-throwaway-verify "$img" >/dev/null \
     || vfail "container failed to start"
 wait_ready 60 "postgres to accept connections" docker exec "$off" pg_isready -U postgres
 
 if docker exec "$off" sh -c 'ps -eo comm | grep -q exporter' 2>/dev/null; then
-    vfail "an exporter is running with MMDB_PG_EMBED_EXPORTER unset; it must default off"
+    vfail "an exporter is running with MDB_PG_EMBED_EXPORTER unset; it must default off"
 fi
 vinfo "embedded exporter correctly off by default"
 
 # --- EMBED on (the standalone docker run case) -------------------------------
-on="mmdb-verify-embed-on-$$"
+on="mdb-verify-embed-on-$$"
 track_container "$on"
 docker run -d --name "$on" \
-    -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
-    -e MMDB_PG_EMBED_EXPORTER=true \
+    -e POSTGRES_PASSWORD=mdb-throwaway-verify \
+    -e MDB_PG_EMBED_EXPORTER=true \
     "$img" >/dev/null || vfail "container failed to start with the exporter embedded"
 wait_ready 60 "postgres to accept connections" docker exec "$on" pg_isready -U postgres
 
@@ -50,8 +50,8 @@ printf '%s' "$metrics" | grep -q '^pg_up' \
 vinfo "embedded exporter serves metrics on 9187"
 
 # --- the metrics profile under compose ---------------------------------------
-cd "$MMDB_ROOT" || exit 1
-need_file "$MMDB_ROOT/docker-compose.yml"
+cd "$MDB_ROOT" || exit 1
+need_file "$MDB_ROOT/docker-compose.yml"
 
 make up PROFILES=pg,metrics >/dev/null 2>&1 || vfail "make up PROFILES=pg,metrics failed"
 add_cleanup 'make down'

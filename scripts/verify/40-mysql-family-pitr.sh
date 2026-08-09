@@ -23,15 +23,15 @@ need_docker
 # BOTH engines by default. They diverge in three places that each silently
 # break recovery -- the coordinate statement's name, the replay tool's name,
 # and whether the image ships that tool at all -- so checking one proves
-# nothing about the other. MMDB_PITR_ENGINE narrows it for debugging.
-for engine in ${MMDB_PITR_ENGINE:-mysql mariadb}; do
+# nothing about the other. MDB_PITR_ENGINE narrows it for debugging.
+for engine in ${MDB_PITR_ENGINE:-mysql mariadb}; do
     img="$(image_name "$engine")"
     need_image "$img"
 
     # Per ENGINE, not just per run: the loop would otherwise reuse a name
     # whose container is still being removed from the previous iteration.
-    name="mmdb-verify-mypitr-${engine}-$$"
-    vol="mmdb-verify-mypitr-binlog-${engine}-$$"
+    name="mdb-verify-mypitr-${engine}-$$"
+    vol="mdb-verify-mypitr-binlog-${engine}-$$"
     track_container "$name"
 
     docker volume rm -f "$vol" >/dev/null 2>&1 || true
@@ -39,12 +39,12 @@ for engine in ${MMDB_PITR_ENGINE:-mysql mariadb}; do
     track_volume "$vol"
 
     upper="$(printf '%s' "$engine" | tr '[:lower:]' '[:upper:]')"
-    pw=mmdb-throwaway-mypitr
+    pw=mdb-throwaway-mypitr
 
     docker run -d --name "$name" \
         -e "${upper}_ROOT_PASSWORD=$pw" \
-        -e "MMDB_${upper}_PITR=true" \
-        -v "$vol:/var/lib/mmdb-binlog" \
+        -e "MDB_${upper}_PITR=true" \
+        -v "$vol:/var/lib/mdb-binlog" \
         "$img" >/dev/null || vfail "container failed to start"
 
     client="$( [[ "$engine" == mariadb ]] && printf 'mariadb' || printf 'mysql' )"
@@ -71,7 +71,7 @@ for engine in ${MMDB_PITR_ENGINE:-mysql mariadb}; do
     # inside the thing it recovers goes when that goes.
     basename_val="$(run_sql "SELECT @@log_bin_basename" | tr -d ' \r')"
     case "$basename_val" in
-        /var/lib/mmdb-binlog/*) ;;
+        /var/lib/mdb-binlog/*) ;;
         *) vfail "binary logs are at '$basename_val'; they must live outside the data directory" ;;
     esac
     vinfo "binary logs are on their own volume ($basename_val)"
@@ -126,7 +126,7 @@ gone="$(run_sql "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_n
 docker exec "$name" bash -c '
     set -e
     set -o pipefail
-    dir=/var/lib/mmdb-binlog
+    dir=/var/lib/mdb-binlog
     target_file="$1"; target_pos="$2"; tool="$3"; client="$4"; pw="$5"
     logs=""
     for f in $(ls -1 "$dir" | grep -E "^binlog\.[0-9]+$" | sort); do
@@ -138,9 +138,9 @@ docker exec "$name" bash -c '
     $tool --stop-position="$target_pos" $logs \
       | "$client" --protocol=socket -uroot -p"$pw"
 ' _ "$target_file" "$target_pos" "$binlog_tool" "$client" "$pw" \
-    > /tmp/mmdb-replay-$$.log 2>&1 \
-    || { sed -n "1,8p" /tmp/mmdb-replay-$$.log >&2; rm -f /tmp/mmdb-replay-$$.log; vfail "binlog replay failed"; }
-rm -f /tmp/mmdb-replay-$$.log
+    > /tmp/mdb-replay-$$.log 2>&1 \
+    || { sed -n "1,8p" /tmp/mdb-replay-$$.log >&2; rm -f /tmp/mdb-replay-$$.log; vfail "binlog replay failed"; }
+rm -f /tmp/mdb-replay-$$.log
 
 # THE assertion.
 kept="$(run_sql "SELECT COUNT(*) FROM pitrdemo.t WHERE label='before'" | tr -d ' \r')"

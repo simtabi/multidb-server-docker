@@ -7,17 +7,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
 
-# SPEC section 18: "docker run ghcr.io/simtabi/my-multidb-server-pg with only a
+# SPEC section 18: "docker run ghcr.io/simtabi/multidb-server-pg with only a
 # password env yields a fully configured server, no compose required."
 # This is the check that keeps layer 2 of the architecture honest.
 
 img="$(image_name pg)"
 need_image "$img"
 
-name="mmdb-verify-pg-standalone-$$"
+name="mdb-verify-pg-standalone-$$"
 track_container "$name"
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=mmdb-throwaway-verify "$img" >/dev/null \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=mdb-throwaway-verify "$img" >/dev/null \
     || vfail "docker run failed with only POSTGRES_PASSWORD set"
 
 wait_ready 60 "postgres to accept connections" \

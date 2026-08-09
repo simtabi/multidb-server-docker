@@ -1,6 +1,6 @@
 # Adding an engine
 
-How to add a database to my-multidb-server. If you find yourself editing compose, the
+How to add a database to multidb-server. If you find yourself editing compose, the
 backup script, or a check, stop — that is a bug in this design, not in your
 engine, and it is worth reporting.
 
@@ -15,7 +15,7 @@ Three files, sometimes two:
 | `images/<name>/Dockerfile` | Only when publishing | Absent for engines we reference rather than build |
 
 An engine joining an existing family costs **one file**. FerretDB speaks the
-MongoDB wire protocol, so it declared `MMDB_ENGINE_FAMILY=mongodb` and inherited
+MongoDB wire protocol, so it declared `MDB_ENGINE_FAMILY=mongodb` and inherited
 `mongosh`, `mongodump` and `mongorestore` without a line of new code.
 
 ## 1. Write the descriptor
@@ -25,39 +25,39 @@ here is bash, and a format needing `yq` would add a dependency the toolkit does
 not otherwise have.
 
 ```sh
-MMDB_ENGINE_NAME=redis
-MMDB_ENGINE_TITLE="Redis"
-MMDB_ENGINE_FAMILY=redis
-MMDB_ENGINE_PARADIGM=key-value
+MDB_ENGINE_NAME=redis
+MDB_ENGINE_TITLE="Redis"
+MDB_ENGINE_FAMILY=redis
+MDB_ENGINE_PARADIGM=key-value
 
-MMDB_ENGINE_VERSIONS="7.2 7.4"
-MMDB_ENGINE_DEFAULT_VERSION=7.4
+MDB_ENGINE_VERSIONS="7.2 7.4"
+MDB_ENGINE_DEFAULT_VERSION=7.4
 
-MMDB_ENGINE_PORT=6379
-MMDB_ENGINE_HOST_PORT_DEFAULT=6379
-MMDB_ENGINE_DATA_DIR=/data
-MMDB_ENGINE_USER=redis
-MMDB_ENGINE_ROOT_SECRET=redis_root_password.txt
-MMDB_ENGINE_ROOT_PW_ENV=REDIS_PASSWORD_FILE
+MDB_ENGINE_PORT=6379
+MDB_ENGINE_HOST_PORT_DEFAULT=6379
+MDB_ENGINE_DATA_DIR=/data
+MDB_ENGINE_USER=redis
+MDB_ENGINE_ROOT_SECRET=redis_root_password.txt
+MDB_ENGINE_ROOT_PW_ENV=REDIS_PASSWORD_FILE
 
-MMDB_ENGINE_PING='redis-cli ping'
-MMDB_ENGINE_CLIENT=redis-cli
-MMDB_ENGINE_DUMP='redis-cli --rdb'
-MMDB_ENGINE_RESTORE='redis-cli'
-MMDB_ENGINE_BACKUP_EXT=rdb
+MDB_ENGINE_PING='redis-cli ping'
+MDB_ENGINE_CLIENT=redis-cli
+MDB_ENGINE_DUMP='redis-cli --rdb'
+MDB_ENGINE_RESTORE='redis-cli'
+MDB_ENGINE_BACKUP_EXT=rdb
 
-MMDB_ENGINE_AUTH_METHOD=requirepass
-MMDB_ENGINE_TLS_ALWAYS=false
+MDB_ENGINE_AUTH_METHOD=requirepass
+MDB_ENGINE_TLS_ALWAYS=false
 
-MMDB_ENGINE_POOLING=driver
-MMDB_ENGINE_POOLING_RATIONALE='clients multiplex over one connection'
+MDB_ENGINE_POOLING=driver
+MDB_ENGINE_POOLING_RATIONALE='clients multiplex over one connection'
 
-MMDB_ENGINE_LICENSE=RSALv2
-MMDB_ENGINE_OSI_APPROVED=false
-MMDB_ENGINE_LICENSE_NOTE='Source-available since 7.4. See docs/licensing.md.'
-MMDB_ENGINE_PUBLISH=reference
+MDB_ENGINE_LICENSE=RSALv2
+MDB_ENGINE_OSI_APPROVED=false
+MDB_ENGINE_LICENSE_NOTE='Source-available since 7.4. See docs/licensing.md.'
+MDB_ENGINE_PUBLISH=reference
 
-MMDB_ENGINE_OVERRIDES_DIR=/mmdb/overrides
+MDB_ENGINE_OVERRIDES_DIR=/mdb/overrides
 ```
 
 Then pin every version's base in `images/bases.tsv`:

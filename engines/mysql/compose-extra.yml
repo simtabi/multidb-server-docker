@@ -1,4 +1,4 @@
     ulimits:
       nofile:
-        soft: ${MMDB_MYSQL_NOFILE:-10240}
-        hard: ${MMDB_MYSQL_NOFILE:-10240}
+        soft: ${MDB_MYSQL_NOFILE:-10240}
+        hard: ${MDB_MYSQL_NOFILE:-10240}

@@ -17,7 +17,7 @@
 # because UNHEX() is a SQL function and a .cnf has no way to express it.
 #
 # DB_HOST, DB_PORT and DB_PASSWORD_FILE are the generator's existing pooler
-# contract, shared with pgBouncer. Inventing MMDB_-prefixed names here would
+# contract, shared with pgBouncer. Inventing MDB_-prefixed names here would
 # have made container-internal plumbing look like toolkit configuration a user
 # is meant to set.
 
@@ -43,7 +43,7 @@ admin_pw="$(tr -d '\n' < "$admin_pw_file" 2>/dev/null || echo "")"
 # "self-signed certificate in certificate chain" -- a connection error that says
 # nothing about certificates being the thing to configure. The CA is already
 # mounted at /certs for exactly this.
-UPSTREAM_ARGS="--protocol=TCP --ssl-ca=${MMDB_CA_FILE:-/certs/ca.crt}"
+UPSTREAM_ARGS="--protocol=TCP --ssl-ca=${MDB_CA_FILE:-/certs/ca.crt}"
 
 mysql_up() {
     # shellcheck disable=SC2086  # deliberately word-split into arguments

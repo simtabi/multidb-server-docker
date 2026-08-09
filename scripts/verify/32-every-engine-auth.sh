@@ -5,9 +5,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # shellcheck source=../engine-lib.sh
-source "$MMDB_ROOT/scripts/engine-lib.sh"
+source "$MDB_ROOT/scripts/engine-lib.sh"
 
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 22.3. This is the check that makes "every engine authenticates"
 # a property of the toolkit rather than a claim about three of them.
@@ -34,21 +34,21 @@ for engine in $(engine_list); do
     # Not every engine has a hooks implementation yet; say so rather than
     # passing silently, which would read as coverage that does not exist.
     if ! engine_load_hooks 2>/dev/null; then
-        vinfo "$engine: SKIPPED, no family hooks for '${MMDB_ENGINE_FAMILY}'"
+        vinfo "$engine: SKIPPED, no family hooks for '${MDB_ENGINE_FAMILY}'"
         skipped=$(( skipped + 1 ))
         continue
     fi
 
     if ! declare -f hook_auth_enforced >/dev/null 2>&1; then
-        vfail "$engine: family '${MMDB_ENGINE_FAMILY}' declares no hook_auth_enforced; auth cannot be proven"
+        vfail "$engine: family '${MDB_ENGINE_FAMILY}' declares no hook_auth_enforced; auth cannot be proven"
     fi
 
     ver="$(engine_version "$engine")"
-    img="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}/my-multidb-server-${engine}:${ver}"
+    img="${MDB_IMAGE_PREFIX:-ghcr.io/simtabi}/multidb-server-${engine}:${ver}"
 
     # A referenced engine is not published by us, so it runs the pinned
     # upstream image (SPEC section 22.5).
-    if [[ "${MMDB_ENGINE_PUBLISH:-derive}" == "reference" ]]; then
+    if [[ "${MDB_ENGINE_PUBLISH:-derive}" == "reference" ]]; then
         img="$(awk -v e="$engine" -v v="$ver" '$1==e && $2==v {print $3; exit}' images/bases.tsv)"
     fi
 
@@ -60,13 +60,13 @@ for engine in $(engine_list); do
     #
     # Three cases, distinguished because they mean different things:
     if ! image_exists "$img"; then
-        if [[ "${MMDB_ENGINE_PUBLISH:-derive}" == "reference" ]]; then
+        if [[ "${MDB_ENGINE_PUBLISH:-derive}" == "reference" ]]; then
             # We do not build it, so fetch it. The reference is digest-pinned,
             # which makes this deterministic rather than a moving target.
             vinfo "$engine: pulling the referenced image"
             docker pull -q "$img" >/dev/null 2>&1 \
                 || vfail "$engine: could not pull $img; auth cannot be proven"
-        elif [[ -f "$MMDB_ROOT/images/$engine/Dockerfile" ]]; then
+        elif [[ -f "$MDB_ROOT/images/$engine/Dockerfile" ]]; then
             vfail "$engine: image not built yet ($img); run: make build"
         else
             # No Dockerfile at all: the engine is declared but not implemented.
@@ -78,7 +78,7 @@ for engine in $(engine_list); do
         fi
     fi
 
-    name="mmdb-verify-auth-${engine}-$$"
+    name="mdb-verify-auth-${engine}-$$"
     track_container "$name"
 
     # Deliberately NOT named pw. The family helpers declare `local pw` for
@@ -87,7 +87,7 @@ for engine in $(engine_list); do
     # value -- every probe would then run with an empty password and the
     # engine would look like it never became ready. The hooks were also fixed;
     # this side is named so neither depends on the other.
-    auth_pw="mmdb-throwaway-verify"
+    auth_pw="mdb-throwaway-verify"
 
     # Not every engine takes its root password from an environment variable.
     # Cassandra reads it from a mounted secret file, so an env-only container
@@ -99,15 +99,15 @@ for engine in $(engine_list); do
     # data surviving from a previous run makes the entrypoint skip first-run
     # initialisation -- so the root user keeps its OLD password and every probe
     # fails with a storedKey mismatch that looks like a broken engine.
-    vol="mmdb-verify-auth-${engine}-vol-$$"
+    vol="mdb-verify-auth-${engine}-vol-$$"
     docker volume rm -f "$vol" >/dev/null 2>&1 || true
     docker volume create "$vol" >/dev/null
     track_volume "$vol"
 
     secrets_dir="$(mktemp -d)"
     add_cleanup "rm -rf '$secrets_dir'"
-    printf '%s' "$auth_pw" > "$secrets_dir/${MMDB_ENGINE_ROOT_SECRET}"
-    chmod 0644 "$secrets_dir/${MMDB_ENGINE_ROOT_SECRET}"
+    printf '%s' "$auth_pw" > "$secrets_dir/${MDB_ENGINE_ROOT_SECRET}"
+    chmod 0644 "$secrets_dir/${MDB_ENGINE_ROOT_SECRET}"
     # Every engine's root password reaches it by a different variable name,
     # which the descriptor already declares. Passing them all is harmless: an
     # engine ignores the ones that are not its own.
@@ -119,7 +119,7 @@ for engine in $(engine_list); do
         -e MONGO_INITDB_ROOT_PASSWORD="$auth_pw" \
         -e MAX_HEAP_SIZE=1G -e HEAP_NEWSIZE=200M \
         -v "$secrets_dir:/run/secrets:ro" \
-        -v "$vol:${MMDB_ENGINE_DATA_DIR}" \
+        -v "$vol:${MDB_ENGINE_DATA_DIR}" \
         "$img" >/dev/null 2>&1 \
         || vfail "$engine: container failed to start from $img"
 
@@ -153,7 +153,7 @@ for engine in $(engine_list); do
 
     # THE assertion.
     if hook_auth_enforced; then
-        vinfo "$(printf '%-10s %-12s auth enforced' "$engine" "$MMDB_ENGINE_PARADIGM")"
+        vinfo "$(printf '%-10s %-12s auth enforced' "$engine" "$MDB_ENGINE_PARADIGM")"
     else
         vfail "$engine ACCEPTS UNAUTHENTICATED CONNECTIONS. SPEC section 22.3 forbids it."
     fi

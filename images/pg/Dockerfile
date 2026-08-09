@@ -1,4 +1,4 @@
-# my-multidb-server-pg — PostgreSQL with the full extension suite, supervised by s6.
+# multidb-server-pg — PostgreSQL with the full extension suite, supervised by s6.
 #
 # BASE_IMAGE is passed digest-pinned from images/bases.tsv (the single source of
 # truth). It varies by PostgreSQL major, which is why it cannot be a literal
@@ -106,11 +106,11 @@ ARG ENGINE_VERSION=17
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG POSTGRES_EXPORTER_VERSION=0.20.1
 
-LABEL org.opencontainers.image.title="my-multidb-server-pg" \
-      org.opencontainers.image.description="PostgreSQL with the full my-multidb-server extension suite, supervised by s6-overlay" \
+LABEL org.opencontainers.image.title="multidb-server-pg" \
+      org.opencontainers.image.description="PostgreSQL with the full multidb-server extension suite, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/my-multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PG_MAJOR=${ENGINE_VERSION}
@@ -169,7 +169,7 @@ RUN set -eux; \
     rm -f /tmp/s6-noarch.tar.xz /tmp/s6-arch.tar.xz
 
 # The optional embedded exporter (SPEC section 6.1). Present in every image but
-# only started when MMDB_PG_EMBED_EXPORTER is true, so a bare `docker run` can
+# only started when MDB_PG_EMBED_EXPORTER is true, so a bare `docker run` can
 # self-report while compose keeps running it as a separate service.
 RUN set -eux; \
     case "$(dpkg --print-architecture)" in \
@@ -190,13 +190,13 @@ COPY pg/s6/ /etc/s6-overlay/s6-rc.d/
 # is deprecated and, more importantly, makes s6 rewrite files under /etc during
 # boot -- which fails outright on a read-only root filesystem.
 COPY pg/user-bundles.d/ /etc/s6-overlay/user-bundles.d/
-COPY pg/scripts/ /usr/local/lib/mmdb/
+COPY pg/scripts/ /usr/local/lib/mdb/
 
 RUN set -eux; \
-    chmod +x /usr/local/lib/mmdb/*.sh; \
-    chmod +x /etc/s6-overlay/s6-rc.d/mmdb-postgres/run; \
-    chmod +x /etc/s6-overlay/s6-rc.d/mmdb-exporter/run; \
-    mkdir -p /etc/mmdb /var/run/postgresql /etc/postgresql/conf.d; \
+    chmod +x /usr/local/lib/mdb/*.sh; \
+    chmod +x /etc/s6-overlay/s6-rc.d/mdb-postgres/run; \
+    chmod +x /etc/s6-overlay/s6-rc.d/mdb-exporter/run; \
+    mkdir -p /etc/mdb /var/run/postgresql /etc/postgresql/conf.d; \
     chown -R postgres:postgres /var/run/postgresql
 
 # STOPSIGNAL is deliberately left at the default SIGTERM.
@@ -208,7 +208,7 @@ RUN set -eux; \
 # SIGKILLed: measurably worse than doing nothing.
 #
 # The correct split is SIGTERM to s6, which then stops each service with that
-# service's own down-signal -- SIGINT for PostgreSQL. See s6/mmdb-postgres/
+# service's own down-signal -- SIGINT for PostgreSQL. See s6/mdb-postgres/
 # down-signal and DESIGN.md D-09.
 
 # Wait indefinitely for init stages rather than starting the engine early, and

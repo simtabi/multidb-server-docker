@@ -5,7 +5,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # "Use official images wherever possible" is easy to agree with and easy to
 # erode: one convenient third-party rebuild at a time, each defensible on its
@@ -17,7 +17,7 @@ cd "$MMDB_ROOT" || exit 1
 # Image (no namespace at all) or the upstream project's own namespace. Anything
 # else has to be justified in IMAGE-PROVENANCE.md, by name.
 
-need_file "$MMDB_ROOT/IMAGE-PROVENANCE.md"
+need_file "$MDB_ROOT/IMAGE-PROVENANCE.md"
 
 # Namespaces belonging to the projects whose software they package.
 UPSTREAM='^(pgvector/pgvector|dpage/pgadmin4|proxysql/proxysql|prom/[a-z-]+|aquasec/trivy|ghcr\.io/ferretdb/[a-z-]+|quay\.io/coreos/etcd|quay\.io/prometheuscommunity/[a-z-]+|ghcr\.io/simtabi/[a-z-]+)$'
@@ -45,7 +45,7 @@ while IFS= read -r ref; do
 
     # Everything else must be named in the provenance document, so an exception
     # is a decision someone wrote down rather than a line nobody noticed.
-    if grep -qF "$repo" "$MMDB_ROOT/IMAGE-PROVENANCE.md"; then
+    if grep -qF "$repo" "$MDB_ROOT/IMAGE-PROVENANCE.md"; then
         vinfo "note: $repo is not upstream but is justified in IMAGE-PROVENANCE.md"
         continue
     fi
@@ -54,11 +54,11 @@ while IFS= read -r ref; do
     violations=$(( violations + 1 ))
 done < <(
     grep -rhoE '(^|[[:space:]])image:[[:space:]]*[A-Za-z0-9][A-Za-z0-9./_-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]+)?' \
-        "$MMDB_ROOT"/docker-compose.yml "$MMDB_ROOT"/compose.*.yml 2>/dev/null \
+        "$MDB_ROOT"/docker-compose.yml "$MDB_ROOT"/compose.*.yml 2>/dev/null \
         | sed -E 's/.*image:[[:space:]]*//'
-    grep -hoE '^[a-z0-9]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+' "$MMDB_ROOT/images/bases.tsv" 2>/dev/null \
+    grep -hoE '^[a-z0-9]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+' "$MDB_ROOT/images/bases.tsv" 2>/dev/null \
         | awk '{print $3}'
-    grep -hoE "_IMAGE='[^']+'" "$MMDB_ROOT"/engines/*/engine.conf 2>/dev/null \
+    grep -hoE "_IMAGE='[^']+'" "$MDB_ROOT"/engines/*/engine.conf 2>/dev/null \
         | sed -E "s/.*='//; s/'$//"
 )
 

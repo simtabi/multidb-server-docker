@@ -1,4 +1,4 @@
-# my-multidb-server-mysql — MySQL with baked configuration, supervised by s6.
+# multidb-server-mysql — MySQL with baked configuration, supervised by s6.
 #
 # Build context is images/, not images/mysql/, so this can share the init
 # scripts and s6 tree with the MariaDB image (see images/_shared/mysql-family).
@@ -12,11 +12,11 @@ ARG ENGINE_VERSION=8.4
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG RCLONE_VERSION=1.75.0
 
-LABEL org.opencontainers.image.title="my-multidb-server-mysql" \
-      org.opencontainers.image.description="MySQL with my-multidb-server configuration and tooling, supervised by s6-overlay" \
+LABEL org.opencontainers.image.title="multidb-server-mysql" \
+      org.opencontainers.image.description="MySQL with multidb-server configuration and tooling, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/my-multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
 
 USER root
 
@@ -86,15 +86,15 @@ COPY _shared/mysql-family/s6/ /etc/s6-overlay/s6-rc.d/
 # user-bundles.d, not s6-rc.d/user: the legacy location makes s6 rewrite files
 # under /etc at boot, which fails on a read-only root filesystem (D-28).
 COPY _shared/mysql-family/user-bundles.d/ /etc/s6-overlay/user-bundles.d/
-COPY _shared/mysql-family/scripts/ /usr/local/lib/mmdb/
+COPY _shared/mysql-family/scripts/ /usr/local/lib/mdb/
 
 # Selects the engine-specific half of the shared scripts: daemon name, client
 # binary, and the [mysqld] vs [mariadbd] config section.
-ENV MMDB_ENGINE=mysql
+ENV MDB_ENGINE=mysql
 
 RUN set -eux; \
-    chmod +x /usr/local/lib/mmdb/*.sh; \
-    chmod +x /etc/s6-overlay/s6-rc.d/mmdb-engine/run; \
+    chmod +x /usr/local/lib/mdb/*.sh; \
+    chmod +x /etc/s6-overlay/s6-rc.d/mdb-engine/run; \
     mkdir -p /etc/mysql/conf.d /var/run/mysqld; \
     chown -R mysql:mysql /var/run/mysqld
 

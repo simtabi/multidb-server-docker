@@ -1,5 +1,5 @@
       # The image's own variables. Cassandra's JVM heap dwarfs the SQL engines,
       # so it is set explicitly rather than left to auto-sizing.
-      MAX_HEAP_SIZE: ${MMDB_CASSANDRA_HEAP:-1G}
-      HEAP_NEWSIZE: ${MMDB_CASSANDRA_HEAP_NEW:-200M}
-      CASSANDRA_CLUSTER_NAME: ${MMDB_CASSANDRA_CLUSTER:-mmdb}
+      MAX_HEAP_SIZE: ${MDB_CASSANDRA_HEAP:-1G}
+      HEAP_NEWSIZE: ${MDB_CASSANDRA_HEAP_NEW:-200M}
+      CASSANDRA_CLUSTER_NAME: ${MDB_CASSANDRA_CLUSTER:-mdb}

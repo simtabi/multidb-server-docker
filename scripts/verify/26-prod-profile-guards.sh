@@ -6,14 +6,14 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 18: "make init-prod renders a prod env that passes check-env
 # with TLS enforced, nothing published except Caddy".
 # SPEC section 21.1: pooling is mandatory under prod, and check-env must fail a
 # prod boot without a reachable pooler rather than starting unpooled.
 
-need_file "$MMDB_ROOT/compose.prod.yml"
+need_file "$MDB_ROOT/compose.prod.yml"
 
 tmp="$(mktemp -d)"
 add_cleanup "rm -rf '$tmp'"
@@ -22,7 +22,7 @@ add_cleanup 'make down'
 make init-prod ENV_FILE="$tmp/.env.prod" >/dev/null 2>&1 \
     || vfail "make init-prod failed"
 
-grep -q '^MMDB_TLS_ENFORCE=true' "$tmp/.env.prod" \
+grep -q '^MDB_TLS_ENFORCE=true' "$tmp/.env.prod" \
     || vfail "init-prod did not enforce TLS"
 vinfo "init-prod renders TLS enforced"
 
@@ -30,7 +30,7 @@ vinfo "init-prod renders TLS enforced"
 # questions: rendering produces a file, often on a machine that is not the one
 # that will run it, so a port held here or an S3 key not yet created is not a
 # defect in the file. Booting is when both must be real.
-MMDB_ENV_FILE="$tmp/.env.prod" MMDB_CHECK_RENDERING=1 scripts/check-env >/dev/null 2>&1 \
+MDB_ENV_FILE="$tmp/.env.prod" MDB_CHECK_RENDERING=1 scripts/check-env >/dev/null 2>&1 \
     || vfail "the rendered prod env does not pass check-env"
 vinfo "rendered prod env passes check-env"
 
@@ -39,26 +39,26 @@ vinfo "rendered prod env passes check-env"
 # acceptable because something later enforces it -- otherwise a prod stack
 # starts with PITR configured, archiving to a repository it cannot reach, and
 # the only symptom is pg_wal growing while everything reports healthy.
-# MMDB_CHECK_RENDERING=0 asks the boot question explicitly: the filename would
+# MDB_CHECK_RENDERING=0 asks the boot question explicitly: the filename would
 # otherwise default a non-.env file to rendering, which is right for init-prod
 # and wrong for this assertion.
-if MMDB_ENV_FILE="$tmp/.env.prod" MMDB_CHECK_RENDERING=0 scripts/check-env >/dev/null 2>&1; then
+if MDB_ENV_FILE="$tmp/.env.prod" MDB_CHECK_RENDERING=0 scripts/check-env >/dev/null 2>&1; then
     vfail "check-env allowed a prod BOOT with no pgBackRest S3 credentials;
        the deferred requirement is never enforced"
 fi
 vinfo "a prod boot without object-store credentials is refused"
 
 # Pooling is not optional under prod (section 21.1).
-sed -i.bak 's/^MMDB_PGBOUNCER_POOL_MODE=.*/MMDB_PGBOUNCER_POOL_MODE=/' "$tmp/.env.prod"
-if MMDB_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1; then
+sed -i.bak 's/^MDB_PGBOUNCER_POOL_MODE=.*/MDB_PGBOUNCER_POOL_MODE=/' "$tmp/.env.prod"
+if MDB_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1; then
     vfail "check-env allowed a prod boot with no pooler; SPEC 21.1 makes pooling mandatory"
 fi
 vinfo "check-env refuses an unpooled prod boot"
 mv "$tmp/.env.prod.bak" "$tmp/.env.prod"
 
 # UI basic auth is mandatory under prod.
-sed -i.bak 's/^MMDB_UI_BASIC_AUTH_HASH=.*/MMDB_UI_BASIC_AUTH_HASH=/' "$tmp/.env.prod"
-if MMDB_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1; then
+sed -i.bak 's/^MDB_UI_BASIC_AUTH_HASH=.*/MDB_UI_BASIC_AUTH_HASH=/' "$tmp/.env.prod"
+if MDB_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1; then
     vfail "check-env allowed a prod boot with no UI basic auth"
 fi
 vinfo "check-env refuses prod without UI basic auth"

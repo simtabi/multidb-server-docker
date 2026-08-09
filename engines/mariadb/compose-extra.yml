@@ -1,4 +1,4 @@
     ulimits:
       nofile:
-        soft: ${MMDB_MARIADB_NOFILE:-10240}
-        hard: ${MMDB_MARIADB_NOFILE:-10240}
+        soft: ${MDB_MARIADB_NOFILE:-10240}
+        hard: ${MDB_MARIADB_NOFILE:-10240}

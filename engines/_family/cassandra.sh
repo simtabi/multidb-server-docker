@@ -16,13 +16,13 @@
 # documented as such rather than pretended away.
 
 _cqlsh() {
-    # _mmdb_pw, not pw. `local pw` here SHADOWS a caller's own $pw, and a
+    # _mdb_pw, not pw. `local pw` here SHADOWS a caller's own $pw, and a
     # caller whose secret() returns "$pw" then reads this function's empty
     # local instead of its own value -- bash locals are dynamically scoped.
     # Check 32 does exactly that, so every probe ran with an empty password
     # and the engine reported "never became ready" for five minutes.
-    local _mmdb_pw; _mmdb_pw="$(secret "$MMDB_ENGINE_ROOT_SECRET")"
-    engine_exec "$MMDB_ENGINE_NAME" cqlsh -u cassandra -p "$_mmdb_pw" "$@"
+    local _mdb_pw; _mdb_pw="$(secret "$MDB_ENGINE_ROOT_SECRET")"
+    engine_exec "$MDB_ENGINE_NAME" cqlsh -u cassandra -p "$_mdb_pw" "$@"
 }
 
 hook_ping() {
@@ -42,7 +42,7 @@ hook_dump_database() {
     # Schema first: a data-only dump restores into nothing.
     if [ -n "$(compress_ext)" ]; then
         _cqlsh -e "DESCRIBE KEYSPACE ${ks}" 2>/dev/null \
-            | zstd -q -T0 -"${MMDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+            | zstd -q -T0 -"${MDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
     else
         _cqlsh -e "DESCRIBE KEYSPACE ${ks}" 2>/dev/null > "$out"
     fi
@@ -72,7 +72,7 @@ hook_row_count() {
 }
 
 hook_auth_enforced() {
-    if engine_exec "$MMDB_ENGINE_NAME" cqlsh \
+    if engine_exec "$MDB_ENGINE_NAME" cqlsh \
         -e "SELECT release_version FROM system.local" >/dev/null 2>&1; then
         return 1
     fi
@@ -134,7 +134,7 @@ _CQL_SQ="'"
 _cass_set_password() {
     local role="$1" pw="$2" i
 
-    if engine_exec "$MMDB_ENGINE_NAME" cqlsh -u "$role" -p "$pw" \
+    if engine_exec "$MDB_ENGINE_NAME" cqlsh -u "$role" -p "$pw" \
          -e "SELECT release_version FROM system.local" >/dev/null 2>&1; then
         return 0
     fi

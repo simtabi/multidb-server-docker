@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The my-multidb-server acceptance harness runner.
+# The multidb-server acceptance harness runner.
 #
 # Discovers every check in this directory, runs it, and reports. A check is a
 # NN-slug.sh script carrying three metadata headers:
@@ -87,12 +87,12 @@ skipped_names=()
 # yet (run: make build)" -- which sends you diagnosing a build that worked
 # perfectly. Recording what was here at the start lets need_image tell the two
 # apart, and lets the summary say so once rather than eight times.
-MMDB_IMAGE_SNAPSHOT="$(mktemp)"
-export MMDB_IMAGE_SNAPSHOT
-trap 'rm -f "$MMDB_IMAGE_SNAPSHOT"' EXIT
-docker images --format '{{.Repository}}:{{.Tag}}' > "$MMDB_IMAGE_SNAPSHOT" 2>/dev/null || true
+MDB_IMAGE_SNAPSHOT="$(mktemp)"
+export MDB_IMAGE_SNAPSHOT
+trap 'rm -f "$MDB_IMAGE_SNAPSHOT"' EXIT
+docker images --format '{{.Repository}}:{{.Tag}}' > "$MDB_IMAGE_SNAPSHOT" 2>/dev/null || true
 
-printf '%s%s my-multidb-server verify %s%s\n' "$BLD" "$BLU" "$(date '+%H:%M:%S')" "$OFF"
+printf '%s%s multidb-server verify %s%s\n' "$BLD" "$BLU" "$(date '+%H:%M:%S')" "$OFF"
 [[ -n "${VERIFY_TAGS:-}" ]] && printf '%sfiltering by tag: %s%s\n' "$DIM" "$VERIFY_TAGS" "$OFF"
 printf '\n'
 
@@ -147,12 +147,12 @@ if (( fail )); then
     for n in "${failed_names[@]}"; do printf '  ✗ %s\n' "$n"; done
     # Say it once. Eight checks each reporting a missing image reads as eight
     # problems; it is one, and it is not a problem with the code.
-    if [[ -s "$MMDB_IMAGE_SNAPSHOT" ]]; then
+    if [[ -s "$MDB_IMAGE_SNAPSHOT" ]]; then
         reclaimed=0
         while IFS= read -r img; do
             [[ -n "$img" ]] || continue
             docker image inspect "$img" >/dev/null 2>&1 || reclaimed=$(( reclaimed + 1 ))
-        done < "$MMDB_IMAGE_SNAPSHOT"
+        done < "$MDB_IMAGE_SNAPSHOT"
         if (( reclaimed > 0 )); then
             printf '\n%s%d image(s) that existed when this run started are gone.%s\n' \
                 "$YLW" "$reclaimed" "$OFF"

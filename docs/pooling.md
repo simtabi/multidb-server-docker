@@ -40,9 +40,9 @@ make up PROFILES=pg,pooler
 Then connect to **6432** instead of 5432 — that is the only application change.
 
 ```
-MMDB_PGBOUNCER_POOL_MODE=transaction
-MMDB_PGBOUNCER_DEFAULT_POOL_SIZE=25
-MMDB_PGBOUNCER_MAX_CLIENT_CONN=1000
+MDB_PGBOUNCER_POOL_MODE=transaction
+MDB_PGBOUNCER_DEFAULT_POOL_SIZE=25
+MDB_PGBOUNCER_MAX_CLIENT_CONN=1000
 ```
 
 ### The pooler holds no application passwords
@@ -164,7 +164,7 @@ MongoDB drivers.
 
 ## How this is enforced
 
-Every engine's descriptor declares `MMDB_ENGINE_POOLING=external` or `=driver`,
+Every engine's descriptor declares `MDB_ENGINE_POOLING=external` or `=driver`,
 and check 31 requires a `driver` declaration to state *why*. An engine cannot
 quietly acquire a pooler nobody thought about, and it cannot quietly go without
 one either.

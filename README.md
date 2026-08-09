@@ -1,8 +1,8 @@
-# simtabi/my-multidb-server
+# simtabi/multidb-server
 
-[![Images](https://img.shields.io/badge/ghcr.io-db--toolkit-blue)](https://github.com/simtabi/my-multidb-server/pkgs/container/my-multidb-server-pg)
-[![Tests](https://github.com/simtabi/my-multidb-server/actions/workflows/ci.yml/badge.svg)](https://github.com/simtabi/my-multidb-server/actions/workflows/ci.yml)
-[![Static analysis](https://github.com/simtabi/my-multidb-server/actions/workflows/lint.yml/badge.svg)](https://github.com/simtabi/my-multidb-server/actions/workflows/lint.yml)
+[![Images](https://img.shields.io/badge/ghcr.io-db--toolkit-blue)](https://github.com/simtabi/multidb-server/pkgs/container/multidb-server-pg)
+[![Tests](https://github.com/simtabi/multidb-server/actions/workflows/ci.yml/badge.svg)](https://github.com/simtabi/multidb-server/actions/workflows/ci.yml)
+[![Static analysis](https://github.com/simtabi/multidb-server/actions/workflows/lint.yml/badge.svg)](https://github.com/simtabi/multidb-server/actions/workflows/lint.yml)
 [![License MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > One local database toolkit for SQL and NoSQL: PostgreSQL, MySQL, MariaDB, MongoDB, Cassandra and FerretDB, each version-switchable, secure by default, with browser UIs — installed once and shared by many projects.
@@ -12,8 +12,8 @@ Runs on macOS, Windows and Linux across amd64 and arm64; dev-first, prod-capable
 ## Install
 
 ```bash
-git clone https://github.com/simtabi/my-multidb-server.git
-cd my-multidb-server
+git clone https://github.com/simtabi/multidb-server.git
+cd multidb-server
 make init
 make up
 ```
@@ -43,13 +43,13 @@ Adding another is a descriptor file — see [Adding an engine](docs/adding-an-en
 ## <a name="documentation"></a>Documentation
 
 Full documentation is hosted at
-**<https://opensource.simtabi.com/documentation/simtabi/my-multidb-server/>**.
+**<https://opensource.simtabi.com/documentation/simtabi/multidb-server/>**.
 
 ### Guides
 
 - [Installation](docs/installation.md) — prerequisites and first run
 - [Getting started](docs/getting-started.md) — a new project connected in under a minute
-- [Configuration](docs/configuration.md) — every `MMDB_` variable
+- [Configuration](docs/configuration.md) — every `MDB_` variable
 - [Architecture](docs/architecture.md) — how engines are declared rather than hardcoded
 - [Adding an engine](docs/adding-an-engine.md) — the extensibility contract
 - [Connection pooling](docs/pooling.md) — why the answer differs per engine
@@ -74,7 +74,7 @@ Full documentation is hosted at
 
 ## Community
 
-Issues and discussions: <https://github.com/simtabi/my-multidb-server/issues>.
+Issues and discussions: <https://github.com/simtabi/multidb-server/issues>.
 
 ## Contributing & security
 

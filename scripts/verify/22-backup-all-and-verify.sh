@@ -6,7 +6,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 18: "make backup-all produces per-database dumps plus PG
 # globals, and make verify-backups restores the latest set green."
@@ -16,7 +16,7 @@ cd "$MMDB_ROOT" || exit 1
 # the manual path. That shared-helper property is asserted here because a drift
 # is otherwise only discovered during a real restore.
 
-need_file "$MMDB_ROOT/scripts/backup"
+need_file "$MDB_ROOT/scripts/backup"
 
 make up PROFILES=pg,mysql,mariadb,backup >/dev/null 2>&1 || vfail "make up failed"
 add_cleanup 'make down'
@@ -60,7 +60,7 @@ vinfo "verify-backups restored the latest set and asserted row counts"
 # it would be trusted right up until a restore was needed. The harness did not
 # catch it -- so it is a permanent check now.
 before="$(find backups -maxdepth 1 -type f | wc -l | tr -d ' ')"
-if scripts/backup --engine pg --db mmdb_no_such_database_exists >/dev/null 2>&1; then
+if scripts/backup --engine pg --db mdb_no_such_database_exists >/dev/null 2>&1; then
     vfail "backup reported success for a database that does not exist"
 fi
 after="$(find backups -maxdepth 1 -type f | wc -l | tr -d ' ')"

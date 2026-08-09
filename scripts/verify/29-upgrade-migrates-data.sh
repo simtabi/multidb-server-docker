@@ -6,20 +6,20 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 18: "make upgrade migrates data". Check 14 proves the per-major
 # VOLUMES stay separate; this proves the migration between them actually moves
 # the rows, and — the half that matters when an upgrade goes wrong at 2am —
 # that the old major is still sitting there, complete, to roll back to.
 
-prefix="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
-old_img="$prefix/my-multidb-server-pg:16"
-new_img="$prefix/my-multidb-server-pg:17"
+prefix="${MDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
+old_img="$prefix/multidb-server-pg:16"
+new_img="$prefix/multidb-server-pg:17"
 need_image "$old_img"
 need_image "$new_img"
 
-project="${COMPOSE_PROJECT_NAME:-mmdb}"
+project="${COMPOSE_PROJECT_NAME:-mdb}"
 vol16="${project}_pg16_data"
 vol17="${project}_pg17_data"
 
@@ -28,13 +28,13 @@ vol17="${project}_pg17_data"
 docker volume rm -f "$vol16" "$vol17" >/dev/null 2>&1 || true
 track_volume "$vol16"
 track_volume "$vol17"
-add_cleanup "rm -rf '$MMDB_ROOT/backups/upgrade'"
+add_cleanup "rm -rf '$MDB_ROOT/backups/upgrade'"
 
-seed="mmdb-verify-upg-seed-$$"
+seed="mdb-verify-upg-seed-$$"
 track_container "$seed"
 
 docker volume create "$vol16" >/dev/null
-docker run -d --name "$seed" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+docker run -d --name "$seed" -e POSTGRES_PASSWORD=mdb-throwaway-verify \
     -v "$vol16:/var/lib/postgresql/data" "$old_img" >/dev/null \
     || vfail "could not start PG 16 to seed"
 wait_ready 90 "PG 16 to accept connections" docker exec "$seed" pg_isready -U postgres
@@ -48,14 +48,14 @@ docker exec "$seed" psql -U postgres -d legacy -q -c "
 vinfo "seeded PG 16 with 250 rows"
 docker rm -f "$seed" >/dev/null 2>&1 || true
 
-CONFIRM=yes make upgrade ENGINE=pg FROM=16 TO=17 >/tmp/mmdb-upgrade.log 2>&1 \
-    || { tail -15 /tmp/mmdb-upgrade.log >&2; vfail "make upgrade failed"; }
+CONFIRM=yes make upgrade ENGINE=pg FROM=16 TO=17 >/tmp/mdb-upgrade.log 2>&1 \
+    || { tail -15 /tmp/mdb-upgrade.log >&2; vfail "make upgrade failed"; }
 vinfo "upgrade completed"
 
 # --- the data arrived on the new major --------------------------------------
-check17="mmdb-verify-upg-17-$$"
+check17="mdb-verify-upg-17-$$"
 track_container "$check17"
-docker run -d --name "$check17" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+docker run -d --name "$check17" -e POSTGRES_PASSWORD=mdb-throwaway-verify \
     -v "$vol17:/var/lib/postgresql/data" "$new_img" >/dev/null
 wait_ready 90 "PG 17 to accept connections" docker exec "$check17" pg_isready -U postgres
 
@@ -70,9 +70,9 @@ docker rm -f "$check17" >/dev/null 2>&1 || true
 # --- rollback is still possible ---------------------------------------------
 # The upgrade is only safe if the source is untouched. This is the assertion
 # that makes "just set the version back" true rather than hopeful.
-check16="mmdb-verify-upg-16-$$"
+check16="mdb-verify-upg-16-$$"
 track_container "$check16"
-docker run -d --name "$check16" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+docker run -d --name "$check16" -e POSTGRES_PASSWORD=mdb-throwaway-verify \
     -v "$vol16:/var/lib/postgresql/data" "$old_img" >/dev/null
 wait_ready 90 "PG 16 to accept connections again" docker exec "$check16" pg_isready -U postgres
 

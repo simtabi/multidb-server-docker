@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build the my-multidb-server images for this architecture.
+# Build the multidb-server images for this architecture.
 #
 # Bases come from images/bases.tsv, the single source of truth for what every
 # image is built FROM, so a digest is never written twice.
@@ -12,25 +12,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
-PREFIX="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
+PREFIX="${MDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
 # shellcheck source=engine-lib.sh
 . "$ROOT/scripts/engine-lib.sh"
 
-# The version for an engine is MMDB_<ENGINE>_VERSION from .env, defaulting to
+# The version for an engine is MDB_<ENGINE>_VERSION from .env, defaulting to
 # whatever the descriptor declares. No engine names appear here.
 version_for() {
     local engine="$1" upper v
     if [ "$engine" = "cli" ]; then printf 'dev'; return; fi
     upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
-    v="$(get "MMDB_${upper}_VERSION")"
+    v="$(get "MDB_${upper}_VERSION")"
     if [ -n "$v" ]; then printf '%s' "$v"; return; fi
-    ( engine_load "$engine" >/dev/null 2>&1 && printf '%s' "$MMDB_ENGINE_DEFAULT_VERSION" )
+    ( engine_load "$engine" >/dev/null 2>&1 && printf '%s' "$MDB_ENGINE_DEFAULT_VERSION" )
 }
 
 base_for() {
@@ -55,7 +55,7 @@ for engine in "${engines[@]}"; do
         || { printf 'images/%s/Dockerfile does not exist\n' "$engine" >&2; exit 1; }
 
     version="$(version_for "$engine")"
-    tag="$PREFIX/my-multidb-server-$engine:$version"
+    tag="$PREFIX/multidb-server-$engine:$version"
 
     # The build context is images/, not images/<engine>/, so the MySQL and
     # MariaDB images can share one set of init scripts (images/_shared).
@@ -76,7 +76,7 @@ done
 # ---------------------------------------------------------------------------
 # Derived images, built last because their base is one of ours.
 #
-# The Patroni image is FROM my-multidb-server-pg, so an HA node is the same PostgreSQL
+# The Patroni image is FROM multidb-server-pg, so an HA node is the same PostgreSQL
 # as a standalone one -- same extensions, same hardening. That also means it has
 # no entry in images/bases.tsv, which holds digest-pinned UPSTREAM references
 # and would be the wrong place to name an image we just built.
@@ -86,7 +86,7 @@ done
 # failure surfaces as that check timing out.
 derived=0
 if [[ -f "$ROOT/images/pgbouncer/Dockerfile" ]]; then
-    tag="$PREFIX/my-multidb-server-pgbouncer:dev"
+    tag="$PREFIX/multidb-server-pgbouncer:dev"
     printf 'building %s\n  from debian:12-slim + PGDG\n' "$tag"
     docker build -f "$ROOT/images/pgbouncer/Dockerfile" -t "$tag" "$ROOT/images"
     derived=$(( derived + 1 ))
@@ -94,8 +94,8 @@ fi
 
 if [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
     pg_version="$(version_for pg)"
-    tag="$PREFIX/my-multidb-server-patroni:$pg_version"
-    printf 'building %s\n  from %s/my-multidb-server-pg:%s\n' "$tag" "$PREFIX" "$pg_version"
+    tag="$PREFIX/multidb-server-patroni:$pg_version"
+    printf 'building %s\n  from %s/multidb-server-pg:%s\n' "$tag" "$PREFIX" "$pg_version"
     docker build \
         -f "$ROOT/images/patroni/Dockerfile" \
         --build-arg "ENGINE_VERSION=$pg_version" \

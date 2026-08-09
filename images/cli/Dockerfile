@@ -1,4 +1,4 @@
-# my-multidb-server-cli — every client tool, no server.
+# multidb-server-cli — every client tool, no server.
 #
 # SPEC decision 12: CLI tools are not daemons, so the one-process-per-container
 # rule does not apply to them. This is the one place a combined image is right,
@@ -14,11 +14,11 @@ FROM ${BASE_IMAGE}
 ARG PG_CLIENT_VERSION=17
 ARG RCLONE_VERSION=1.75.0
 
-LABEL org.opencontainers.image.title="my-multidb-server-cli" \
-      org.opencontainers.image.description="PostgreSQL, MySQL and MariaDB clients, dump/restore tools, and the my-multidb-server scripts" \
+LABEL org.opencontainers.image.title="multidb-server-cli" \
+      org.opencontainers.image.description="PostgreSQL, MySQL and MariaDB clients, dump/restore tools, and the multidb-server scripts" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/my-multidb-server"
+      org.opencontainers.image.source="https://github.com/simtabi/multidb-server"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -75,15 +75,15 @@ RUN set -eux; \
     rm -f /tmp/rclone.zip
 
 # The toolkit scripts, so backup/restore/new-project are available here too.
-COPY --chmod=0755 cli/entrypoint.sh /usr/local/bin/mmdb-entrypoint
+COPY --chmod=0755 cli/entrypoint.sh /usr/local/bin/mdb-entrypoint
 
 # No server runs here, so there is no engine user to drop to and nothing
 # listening. Running as a non-root user keeps a mounted host directory from
 # being written as root.
 RUN set -eux; \
-    useradd --create-home --uid 1000 --shell /bin/bash mmdb
-USER mmdb
+    useradd --create-home --uid 1000 --shell /bin/bash mdb
+USER mdb
 WORKDIR /work
 
-ENTRYPOINT ["/usr/local/bin/mmdb-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/mdb-entrypoint"]
 CMD ["bash"]

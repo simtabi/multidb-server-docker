@@ -8,14 +8,14 @@
 # two engines of the same family share one implementation.
 #
 # The caller provides: engine_exec, secret, compress_ext, and the loaded
-# MMDB_ENGINE_* descriptor values.
+# MDB_ENGINE_* descriptor values.
 
 # In the sidecar the engine is a remote host over TCP, which requires a
 # password. From the host we exec inside the container and reach it over the
 # socket, where peer auth applies and no credential is needed. Setting this
 # here rather than in the generic driver keeps engine specifics with the engine.
-if [ "${IN_CONTAINER:-0}" = "1" ] && [ -r "/run/secrets/${MMDB_ENGINE_ROOT_SECRET:-pg_superuser_password.txt}" ]; then
-    PGPASSWORD="$(tr -d '\n' < "/run/secrets/${MMDB_ENGINE_ROOT_SECRET:-pg_superuser_password.txt}")"
+if [ "${IN_CONTAINER:-0}" = "1" ] && [ -r "/run/secrets/${MDB_ENGINE_ROOT_SECRET:-pg_superuser_password.txt}" ]; then
+    PGPASSWORD="$(tr -d '\n' < "/run/secrets/${MDB_ENGINE_ROOT_SECRET:-pg_superuser_password.txt}")"
     export PGPASSWORD
 fi
 
@@ -23,13 +23,13 @@ fi
 # user databases", and a healthy fresh server has none, so using it as a
 # readiness probe waits forever on a container that is already up.
 hook_ping() {
-    engine_exec "$MMDB_ENGINE_NAME" pg_isready -U postgres >/dev/null 2>&1
+    engine_exec "$MDB_ENGINE_NAME" pg_isready -U postgres >/dev/null 2>&1
 }
 
 # Databases a backup should cover: everything connectable that is not a
 # template.
 hook_list_databases() {
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -tAc \
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -tAc \
         "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate" \
         | tr -d '\r' | grep -v '^$'
 }
@@ -37,10 +37,10 @@ hook_list_databases() {
 hook_dump_database() {
     local db="$1" out="$2"
     if [ -n "$(compress_ext)" ]; then
-        engine_exec "$MMDB_ENGINE_NAME" pg_dump -U postgres -Fc --no-password "$db" \
-            | zstd -q -T0 -"${MMDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+        engine_exec "$MDB_ENGINE_NAME" pg_dump -U postgres -Fc --no-password "$db" \
+            | zstd -q -T0 -"${MDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
     else
-        engine_exec "$MMDB_ENGINE_NAME" pg_dump -U postgres -Fc --no-password "$db" > "$out"
+        engine_exec "$MDB_ENGINE_NAME" pg_dump -U postgres -Fc --no-password "$db" > "$out"
     fi
 }
 
@@ -49,24 +49,24 @@ hook_dump_database() {
 hook_dump_globals() {
     local out="$1"
     if [ -n "$(compress_ext)" ]; then
-        engine_exec "$MMDB_ENGINE_NAME" pg_dumpall -U postgres --globals-only --no-password \
-            | zstd -q -T0 -"${MMDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+        engine_exec "$MDB_ENGINE_NAME" pg_dumpall -U postgres --globals-only --no-password \
+            | zstd -q -T0 -"${MDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
     else
-        engine_exec "$MMDB_ENGINE_NAME" pg_dumpall -U postgres --globals-only --no-password > "$out"
+        engine_exec "$MDB_ENGINE_NAME" pg_dumpall -U postgres --globals-only --no-password > "$out"
     fi
 }
 
 hook_recreate_database() {
     local db="$1"
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -q -c "DROP DATABASE IF EXISTS \"$db\";" >/dev/null
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -q -c "CREATE DATABASE \"$db\";" >/dev/null
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -q -c "DROP DATABASE IF EXISTS \"$db\";" >/dev/null
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -q -c "CREATE DATABASE \"$db\";" >/dev/null
 }
 
 # --no-owner keeps the restore working when roles differ between source and
 # target; globals are restored separately.
 hook_restore_database() {
     local db="$1"
-    engine_exec "$MMDB_ENGINE_NAME" pg_restore -U postgres -d "$db" --no-owner --clean --if-exists
+    engine_exec "$MDB_ENGINE_NAME" pg_restore -U postgres -d "$db" --no-owner --clean --if-exists
 }
 
 # Tables present, as distinct from rows. A database with no tables was empty
@@ -74,21 +74,21 @@ hook_restore_database() {
 # rows means the restore lost the data. Only the second is a failure.
 hook_object_count() {
     local db="$1"
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -d "$db" -tAc \
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -d "$db" -tAc \
         "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema')" \
         2>/dev/null | tr -d ' \r'
 }
 
 hook_row_count() {
     local db="$1"
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -d "$db" -tAc \
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -d "$db" -tAc \
         "SELECT COALESCE(SUM(n_live_tup), 0) FROM pg_stat_user_tables" 2>/dev/null | tr -d ' \r'
 }
 
 # Auth enforcement probe: a connection with a WRONG password must be refused.
 # Returns 0 when auth is properly enforced.
 hook_auth_enforced() {
-    if engine_exec "$MMDB_ENGINE_NAME" env PGPASSWORD=mmdb-throwaway-wrong-password \
+    if engine_exec "$MDB_ENGINE_NAME" env PGPASSWORD=mdb-throwaway-wrong-password \
         psql -h 127.0.0.1 -U postgres -tAc "SELECT 1" >/dev/null 2>&1; then
         return 1
     fi
@@ -103,8 +103,8 @@ hook_provision_project() {
     local db="$1" user="$2" pw="$3" extensions="${4:-}"
     local esc_pw="${pw//\'/\'\'}"
 
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -q -v ON_ERROR_STOP=1 <<SQL || return 1
-DO \$mmdb\$ BEGIN
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -q -v ON_ERROR_STOP=1 <<SQL || return 1
+DO \$mdb\$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${user}') THEN
         ALTER ROLE ${user} WITH LOGIN PASSWORD '${esc_pw}';
     ELSE
@@ -113,20 +113,20 @@ DO \$mmdb\$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${user}_readonly') THEN
         CREATE ROLE ${user}_readonly NOLOGIN;
     END IF;
-END \$mmdb\$;
+END \$mdb\$;
 SQL
 
     # CREATE DATABASE cannot run inside a transaction block, so it is separate
     # from the DO block above rather than folded into it.
-    if ! engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -tAc \
+    if ! engine_exec "$MDB_ENGINE_NAME" psql -U postgres -tAc \
             "SELECT 1 FROM pg_database WHERE datname='${db}'" 2>/dev/null | grep -q 1; then
-        engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -q \
+        engine_exec "$MDB_ENGINE_NAME" psql -U postgres -q \
             -c "CREATE DATABASE ${db} OWNER ${user};" || return 1
     fi
 
     # Isolation: revoke the implicit PUBLIC grant so another project's role
     # cannot connect here (SPEC section 18, "cross-access denied").
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -q -v ON_ERROR_STOP=1 <<SQL || return 1
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -q -v ON_ERROR_STOP=1 <<SQL || return 1
 REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
 GRANT CONNECT, TEMPORARY ON DATABASE ${db} TO ${user};
 GRANT CONNECT ON DATABASE ${db} TO ${user}_readonly;
@@ -138,14 +138,14 @@ SQL
         for ext in $extensions; do
             ext="${ext// /}"
             [ -z "$ext" ] && continue
-            engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -d "$db" -q \
+            engine_exec "$MDB_ENGINE_NAME" psql -U postgres -d "$db" -q \
                 -c "CREATE EXTENSION IF NOT EXISTS \"$ext\" CASCADE;" >/dev/null 2>&1 \
                 || printf '  WARNING: extension %s could not be created\n' "$ext" >&2
         done
         IFS="$old_ifs"
     fi
 
-    engine_exec "$MMDB_ENGINE_NAME" psql -U postgres -d "$db" -q <<SQL >/dev/null 2>&1 || true
+    engine_exec "$MDB_ENGINE_NAME" psql -U postgres -d "$db" -q <<SQL >/dev/null 2>&1 || true
 GRANT ALL ON SCHEMA public TO ${user};
 GRANT USAGE ON SCHEMA public TO ${user}_readonly;
 ALTER DEFAULT PRIVILEGES FOR ROLE ${user} IN SCHEMA public

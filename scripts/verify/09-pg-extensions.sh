@@ -13,7 +13,7 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-name="mmdb-verify-pg-ext-$$"
+name="mdb-verify-pg-ext-$$"
 track_container "$name"
 
 # pgaudit, pg_cron, and pg_net are background-worker or hook extensions: they
@@ -22,8 +22,8 @@ track_container "$name"
 # is correct usage, not an accommodation -- but it is also why the shipped
 # default in .env.example lists only pg_stat_statements: preloading costs
 # startup time and memory, so the others are opt-in.
-docker run -d --name "$name" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
-    -e MMDB_PG_SHARED_PRELOAD=pg_stat_statements,pg_cron,pgaudit,pg_net \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=mdb-throwaway-verify \
+    -e MDB_PG_SHARED_PRELOAD=pg_stat_statements,pg_cron,pgaudit,pg_net \
     --shm-size=256m "$img" >/dev/null || vfail "container failed to start"
 
 wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
@@ -53,6 +53,6 @@ vinfo "all ${#extensions[@]} extensions create cleanly"
 # plpython3u is untrusted and must stay off unless explicitly enabled.
 if docker exec "$name" psql -U postgres -tAc \
     "SELECT 1 FROM pg_language WHERE lanname='plpython3u'" 2>/dev/null | grep -q 1; then
-    vfail "plpython3u is enabled by default; SPEC section 5 requires it off (MMDB_PG_PLPYTHON)"
+    vfail "plpython3u is enabled by default; SPEC section 5 requires it off (MDB_PG_PLPYTHON)"
 fi
 vinfo "plpython3u correctly absent by default"

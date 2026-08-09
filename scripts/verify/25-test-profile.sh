@@ -6,14 +6,14 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 7: the test profile trades durability for speed, and "data loss
 # on stop is the point". This check asserts the trade was actually made -- a
 # test profile that quietly kept fsync=on would be slow for no reason, and one
 # that persisted data would leak state between test runs.
 
-need_file "$MMDB_ROOT/docker-compose.yml"
+need_file "$MDB_ROOT/docker-compose.yml"
 
 make test-profile >/dev/null 2>&1 || vfail "make test-profile failed"
 add_cleanup 'make down'

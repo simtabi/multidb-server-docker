@@ -6,14 +6,14 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$MMDB_ROOT" || exit 1
+cd "$MDB_ROOT" || exit 1
 
 # SPEC section 21.5. This is the only check that proves the HA stack does the
 # one thing it exists to do. Note section 21.2's warning: single-host compose
 # HA is a REHEARSAL topology -- it demonstrates election, it is not production
 # HA, and the docs must not pretend otherwise.
 
-need_file "$MMDB_ROOT/docker-compose.yml"
+need_file "$MDB_ROOT/docker-compose.yml"
 
 # A psql that does not depend on which other services happen to be running.
 #
@@ -25,17 +25,17 @@ need_file "$MMDB_ROOT/docker-compose.yml"
 psql_via_haproxy() {
     local port="$1" sql="$2" net pw
     # The exact compose network, not a substring search. Matching anything
-    # containing "mmdb" picked up a leftover throwaway network from another
-    # check (mmdb-verify-pool-net-NNNN), where no service resolves -- so every
+    # containing "mdb" picked up a leftover throwaway network from another
+    # check (mdb-verify-pool-net-NNNN), where no service resolves -- so every
     # probe failed with "could not translate host name", and the check reported
     # that the write port was not routing when it had never been reached.
-    net="${COMPOSE_PROJECT_NAME:-mmdb}_net"
+    net="${COMPOSE_PROJECT_NAME:-mdb}_net"
     # The superuser password, not an anonymous connection. pg_hba is
     # scram-sha-256 for every host rule -- check 30 fails the build if it ever
     # is not -- so a passwordless attempt is refused, and the check then reads
     # as "the write port does not route to a primary" when the routing was
     # fine all along.
-    pw="$(tr -d '\n' < "$MMDB_ROOT/secrets/pg_superuser_password.txt" 2>/dev/null)"
+    pw="$(tr -d '\n' < "$MDB_ROOT/secrets/pg_superuser_password.txt" 2>/dev/null)"
     docker run --rm --network "$net" \
         -e PGPASSWORD="$pw" \
         --entrypoint psql "$(image_name pg)" \
@@ -43,7 +43,7 @@ psql_via_haproxy() {
         -tAc "$sql" 2>/dev/null | tr -d ' \r' || true
 }
 
-budget="$(env_get MMDB_HA_FAILOVER_BUDGET 30)"
+budget="$(env_get MDB_HA_FAILOVER_BUDGET 30)"
 
 # PROFILES=ha, not pg,ha.
 #
@@ -67,14 +67,14 @@ make down >/dev/null 2>&1 || true
 # recovery, sit at "waiting for WAL to become available", and report tens of
 # megabytes of lag that never closes -- which reads as a replication bug rather
 # than as leftovers from the previous run.
-_pgv="$(env_get MMDB_PG_VERSION 17)"
+_pgv="$(env_get MDB_PG_VERSION 17)"
 docker volume rm -f \
-    "${COMPOSE_PROJECT_NAME:-mmdb}_etcd1_data" \
-    "${COMPOSE_PROJECT_NAME:-mmdb}_etcd2_data" \
-    "${COMPOSE_PROJECT_NAME:-mmdb}_etcd3_data" \
-    "${COMPOSE_PROJECT_NAME:-mmdb}_patroni1_pg${_pgv}_data" \
-    "${COMPOSE_PROJECT_NAME:-mmdb}_patroni2_pg${_pgv}_data" \
-    "${COMPOSE_PROJECT_NAME:-mmdb}_patroni3_pg${_pgv}_data" >/dev/null 2>&1 || true
+    "${COMPOSE_PROJECT_NAME:-mdb}_etcd1_data" \
+    "${COMPOSE_PROJECT_NAME:-mdb}_etcd2_data" \
+    "${COMPOSE_PROJECT_NAME:-mdb}_etcd3_data" \
+    "${COMPOSE_PROJECT_NAME:-mdb}_patroni1_pg${_pgv}_data" \
+    "${COMPOSE_PROJECT_NAME:-mdb}_patroni2_pg${_pgv}_data" \
+    "${COMPOSE_PROJECT_NAME:-mdb}_patroni3_pg${_pgv}_data" >/dev/null 2>&1 || true
 
 make up PROFILES=ha >/dev/null 2>&1 || vfail "make up PROFILES=ha failed"
 add_cleanup 'make down'
@@ -170,7 +170,7 @@ vinfo "new leader $elected elected in ${elapsed}s (budget ${budget}s)"
 # subshell, which cannot see psql_via_haproxy defined above.
 writable=""
 for (( i = 0; i < budget; i++ )); do
-    writable="$(psql_via_haproxy "${MMDB_HAPROXY_WRITE_PORT:-5432}" \
+    writable="$(psql_via_haproxy "${MDB_HAPROXY_WRITE_PORT:-5432}" \
         "SELECT NOT pg_is_in_recovery()")"
     [[ "$writable" == "t" ]] && break
     sleep 2
@@ -188,7 +188,7 @@ vinfo "write port follows the new leader"
 # cluster.
 in_recovery=""
 for (( i = 0; i < budget; i++ )); do
-    in_recovery="$(psql_via_haproxy "${MMDB_HAPROXY_READ_PORT:-5433}" \
+    in_recovery="$(psql_via_haproxy "${MDB_HAPROXY_READ_PORT:-5433}" \
         "SELECT pg_is_in_recovery()")"
     [[ "$in_recovery" == "t" ]] && break
     sleep 2

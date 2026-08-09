@@ -1,4 +1,4 @@
-# my-multidb-server — the single entry point for humans and CI.
+# multidb-server — the single entry point for humans and CI.
 #
 # Targets marked "phase N" are scaffolded but not implemented yet. They fail
 # loudly rather than succeeding silently, so `make verify` stays honestly red
@@ -8,7 +8,7 @@ SHELL := bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := help
 
-COMPOSE_PROJECT_NAME ?= mmdb
+COMPOSE_PROJECT_NAME ?= mdb
 export COMPOSE_PROJECT_NAME
 
 ENV_FILE ?= .env
@@ -20,9 +20,9 @@ COMPOSE  := docker compose
 ENV_FILE_ARG := $(if $(filter-out .env,$(ENV_FILE)),$(ENV_FILE),)
 
 # Profile selection, in precedence order: PROFILES= on the command line for a
-# single run, then MMDB_PROFILES in .env permanently, then the documented
+# single run, then MDB_PROFILES in .env permanently, then the documented
 # default (SPEC section 7).
-env_profiles := $(shell grep -E '^MMDB_PROFILES=' $(ENV_FILE) 2>/dev/null | tail -1 | cut -d= -f2-)
+env_profiles := $(shell grep -E '^MDB_PROFILES=' $(ENV_FILE) 2>/dev/null | tail -1 | cut -d= -f2-)
 COMPOSE_PROFILES := $(shell scripts/profiles "$(or $(PROFILES),$(env_profiles),pg,ui)")
 export COMPOSE_PROFILES
 
@@ -40,7 +40,7 @@ endef
 
 .PHONY: help
 help: ## Show this help
-	@printf 'my-multidb-server — make targets\n\n'
+	@printf 'multidb-server — make targets\n\n'
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@printf '\nProfiles: make up PROFILES=pg,mysql,ui\n'
@@ -162,7 +162,7 @@ shell: ## Open the cli image (tools with no server required)
 		--network $(COMPOSE_PROJECT_NAME)_net \
 		-v "$(CURDIR)/certs:/certs:ro" \
 		-v "$(CURDIR)/backups:/work/backups" \
-		ghcr.io/simtabi/my-multidb-server-cli:dev
+		ghcr.io/simtabi/multidb-server-cli:dev
 
 .PHONY: new-project
 new-project: ## Provision DB + roles + extensions, print the Laravel .env block

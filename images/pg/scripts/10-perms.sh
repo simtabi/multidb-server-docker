@@ -6,19 +6,19 @@
 # a server key is group- or world-readable, so the order in the s6 dependency
 # graph is not cosmetic.
 
-MMDB_STAGE=mmdb-perms
-export MMDB_STAGE
+MDB_STAGE=mdb-perms
+export MDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=mmdb-lib.sh
-source /usr/local/lib/mmdb/mmdb-lib.sh
+# shellcheck source=mdb-lib.sh
+source /usr/local/lib/mdb/mdb-lib.sh
 
 stage "fixing ownership and permissions"
 
 install -d -o postgres -g postgres -m 0775 /var/run/postgresql
-install -d -o postgres -g postgres -m 0700 "$MMDB_CERT_DIR"
-install -d -m 0755 "$MMDB_CONF_DIR"
-install -d -m 0755 "$MMDB_INITDB_DIR"
+install -d -o postgres -g postgres -m 0700 "$MDB_CERT_DIR"
+install -d -m 0755 "$MDB_CONF_DIR"
+install -d -m 0755 "$MDB_INITDB_DIR"
 
 # The data directory itself is created and chmodded by the official entrypoint
 # on first run. On subsequent runs we only correct the parent, never PGDATA, so

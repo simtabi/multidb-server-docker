@@ -12,17 +12,17 @@ need_docker
 # Per-major volumes make the switch safe AND reversible, so this check asserts
 # both halves: the new major runs, and the old data still exists.
 
-prefix="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
-old_img="$prefix/my-multidb-server-pg:16"
-new_img="$prefix/my-multidb-server-pg:17"
+prefix="${MDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
+old_img="$prefix/multidb-server-pg:16"
+new_img="$prefix/multidb-server-pg:17"
 
 need_image "$old_img"
 need_image "$new_img"
 
-vol16="mmdb-verify-pg16-$$"
-vol17="mmdb-verify-pg17-$$"
-c16="mmdb-verify-sw16-$$"
-c17="mmdb-verify-sw17-$$"
+vol16="mdb-verify-pg16-$$"
+vol17="mdb-verify-pg17-$$"
+c16="mdb-verify-sw16-$$"
+c17="mdb-verify-sw17-$$"
 
 cleanup() {
     docker rm -f "$c16" "$c17" >/dev/null 2>&1 || true
@@ -34,7 +34,7 @@ docker volume create "$vol16" >/dev/null
 docker volume create "$vol17" >/dev/null
 
 # --- start on 16 and write a marker row --------------------------------------
-docker run -d --name "$c16" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+docker run -d --name "$c16" -e POSTGRES_PASSWORD=mdb-throwaway-verify \
     -v "$vol16:/var/lib/postgresql/data" "$old_img" >/dev/null \
     || vfail "PG 16 container failed to start"
 wait_ready 60 "PG 16 to accept connections" docker exec "$c16" pg_isready -U postgres
@@ -48,7 +48,7 @@ vinfo "PG 16 running (server_version_num prefix $major16), marker row written"
 docker stop -t 30 "$c16" >/dev/null
 
 # --- switch to 17, which must use a DIFFERENT volume -------------------------
-docker run -d --name "$c17" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+docker run -d --name "$c17" -e POSTGRES_PASSWORD=mdb-throwaway-verify \
     -v "$vol17:/var/lib/postgresql/data" "$new_img" >/dev/null \
     || vfail "PG 17 container failed to start on its own volume"
 wait_ready 60 "PG 17 to accept connections" docker exec "$c17" pg_isready -U postgres

@@ -1,4 +1,4 @@
-You are the senior database and DevOps engineer building my-multidb-server end to end.
+You are the senior database and DevOps engineer building multidb-server end to end.
 
 Ground rules, before anything else:
 1. Read docs/SPEC.md, docs/KIT.md, and CLAUDE.md completely. SPEC.md is the

@@ -20,7 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
 template="${1:-}"
@@ -29,7 +29,7 @@ output="${2:-}"
 [[ -n "$template" ]] || { printf 'usage: env-render <template> [output]\n' >&2; exit 1; }
 [[ -f "$template" ]] || { printf 'env-render: no such template: %s\n' "$template" >&2; exit 1; }
 
-# Load the environment file so templates can reference MMDB_* directly.
+# Load the environment file so templates can reference MDB_* directly.
 # `set -a` exports everything defined while it is active.
 set -a
 # shellcheck disable=SC1090  # path is chosen at runtime
@@ -39,8 +39,8 @@ set +a
 # -----------------------------------------------------------------------------
 # Refuse to interpolate a secret value.
 # -----------------------------------------------------------------------------
-# A template may reference ${MMDB_X_PASSWORD_FILE} (a path) but never
-# ${MMDB_X_PASSWORD} (a value). Catching it here means a rendered artefact can
+# A template may reference ${MDB_X_PASSWORD_FILE} (a path) but never
+# ${MDB_X_PASSWORD} (a value). Catching it here means a rendered artefact can
 # never become the place a credential leaks.
 while IFS= read -r var; do
     case "$var" in

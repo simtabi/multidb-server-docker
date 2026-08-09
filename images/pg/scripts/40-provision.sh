@@ -2,7 +2,7 @@
 #
 # Stage 4: multi-project provisioning.
 #
-# SPEC section 8 and the danielptv triplet format: MMDB_PG_DATABASES holds
+# SPEC section 8 and the danielptv triplet format: MDB_PG_DATABASES holds
 # `database:username:password` entries, comma-separated. The password may be
 # the literal __FILE__, which resolves to secrets/pg_<user>_password.txt mounted
 # at /run/secrets.
@@ -11,17 +11,17 @@
 # here, because the upstream entrypoint owns first-run initialisation and SPEC
 # section 6.1 is explicit that s6 wraps that contract rather than replacing it.
 
-MMDB_STAGE=mmdb-provision
-export MMDB_STAGE
+MDB_STAGE=mdb-provision
+export MDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=mmdb-lib.sh
-source /usr/local/lib/mmdb/mmdb-lib.sh
+# shellcheck source=mdb-lib.sh
+source /usr/local/lib/mdb/mdb-lib.sh
 
-triplets="${MMDB_PG_DATABASES:-}"
+triplets="${MDB_PG_DATABASES:-}"
 
 if [[ -z "$triplets" ]]; then
-    stage "no MMDB_PG_DATABASES set; nothing to provision"
+    stage "no MDB_PG_DATABASES set; nothing to provision"
     exit 0
 fi
 
@@ -30,8 +30,8 @@ if pgdata_initialised; then
     exit 0
 fi
 
-extensions="${MMDB_PG_INIT_EXTENSIONS:-}"
-sql="$MMDB_INITDB_DIR/50-mmdb-provision.sql"
+extensions="${MDB_PG_INIT_EXTENSIONS:-}"
+sql="$MDB_INITDB_DIR/50-mdb-provision.sql"
 
 : > "$sql"
 count=0

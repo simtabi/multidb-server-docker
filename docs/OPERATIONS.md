@@ -12,7 +12,7 @@ make up PROFILES=pg,pooler,backup,metrics,prod
 
 `prod` is not decoration. `check-env` refuses to start the stack if:
 
-- `MMDB_TLS_ENFORCE` is not `true`
+- `MDB_TLS_ENFORCE` is not `true`
 - an engine that requires a pooler does not have one
 - a UI route is exposed without basic auth
 
@@ -25,55 +25,55 @@ The default binds every engine to `127.0.0.1`. On a server, the question is not
 "which port do I open" but "should this port be reachable at all".
 
 **Preferred: do not expose the database.** Reach it over an SSH tunnel or a
-private network, and leave `MMDB_BIND_ADDR=127.0.0.1`.
+private network, and leave `MDB_BIND_ADDR=127.0.0.1`.
 
 ```bash
 ssh -L 5432:127.0.0.1:5432 you@server
 ```
 
-**If you must expose it**, set `MMDB_BIND_ADDR` to a specific private address —
+**If you must expose it**, set `MDB_BIND_ADDR` to a specific private address —
 never `0.0.0.0` — enforce TLS, and put a firewall in front. Docker publishes
 ports by writing DNAT rules that most firewall front-ends do not show you, so a
 `ufw` rule that looks like it blocks the port frequently does not.
 
 ```
-MMDB_BIND_ADDR=10.0.1.5
-MMDB_TLS_ENFORCE=true
-MMDB_MTLS=true
+MDB_BIND_ADDR=10.0.1.5
+MDB_TLS_ENFORCE=true
+MDB_MTLS=true
 ```
 
-`MMDB_MTLS=true` requires client certificates. On an exposed database it is
+`MDB_MTLS=true` requires client certificates. On an exposed database it is
 worth the setup.
 
-The UIs go behind Caddy with basic auth on `MMDB_CADDY_BIND_ADDR`, and the prod
+The UIs go behind Caddy with basic auth on `MDB_CADDY_BIND_ADDR`, and the prod
 profile will not start without the auth hash set.
 
 ## Tuning
 
 ```
-MMDB_MEM=16
-MMDB_CPUS=8
+MDB_MEM=16
+MDB_CPUS=8
 ```
 
 Engines derive their settings from these — shared buffers, work memory, the
 InnoDB buffer pool, WAL sizing. Set the budget, not thirty individual knobs.
 
 Give the *database's* share, not the machine's total. On a 32 GB server also
-running your application, `MMDB_MEM=16` is honest and `MMDB_MEM=32` will get
+running your application, `MDB_MEM=16` is honest and `MDB_MEM=32` will get
 something OOM-killed.
 
 Per-service hard ceilings:
 
 ```
-MMDB_PG_CPU_LIMIT=4
-MMDB_PG_MEM_LIMIT=16g
+MDB_PG_CPU_LIMIT=4
+MDB_PG_MEM_LIMIT=16g
 ```
 
 Cassandra sets its heap explicitly, because the JVM does not take a hint:
 
 ```
-MMDB_CASSANDRA_HEAP=8G
-MMDB_CASSANDRA_HEAP_NEW=800M
+MDB_CASSANDRA_HEAP=8G
+MDB_CASSANDRA_HEAP_NEW=800M
 ```
 
 ## Connection pooling
@@ -91,15 +91,15 @@ Point applications at **6432**.
 ## Backups
 
 ```
-MMDB_BACKUP_DIR=backups
-MMDB_BACKUP_SCHEDULE=0300
-MMDB_BACKUP_COMPRESSION=ZSTD
-MMDB_BACKUP_ENCRYPT=true
-MMDB_BACKUP_ENCRYPT_PASSPHRASE_FILE=secrets/backup_passphrase.txt
-MMDB_BACKUP_RETAIN_DAILY=7
-MMDB_BACKUP_RETAIN_WEEKLY=4
-MMDB_BACKUP_RETAIN_MONTHLY=6
-MMDB_BACKUP_NOTIFY_URL=https://...
+MDB_BACKUP_DIR=backups
+MDB_BACKUP_SCHEDULE=0300
+MDB_BACKUP_COMPRESSION=ZSTD
+MDB_BACKUP_ENCRYPT=true
+MDB_BACKUP_ENCRYPT_PASSPHRASE_FILE=secrets/backup_passphrase.txt
+MDB_BACKUP_RETAIN_DAILY=7
+MDB_BACKUP_RETAIN_WEEKLY=4
+MDB_BACKUP_RETAIN_MONTHLY=6
+MDB_BACKUP_NOTIFY_URL=https://...
 ```
 
 Two things that are not optional on a server:
@@ -109,12 +109,12 @@ backup. Set an S3-compatible destination and every dump is copied there after
 it is taken:
 
 ```
-MMDB_S3_BUCKET=my-backups
-MMDB_S3_HOST=s3.us-east-1.amazonaws.com
-MMDB_S3_REGION=us-east-1
-MMDB_S3_PROVIDER=AWS
-MMDB_S3_KEY_ID_FILE=secrets/s3_key_id.txt
-MMDB_S3_KEY_SECRET_FILE=secrets/s3_key_secret.txt
+MDB_S3_BUCKET=my-backups
+MDB_S3_HOST=s3.us-east-1.amazonaws.com
+MDB_S3_REGION=us-east-1
+MDB_S3_PROVIDER=AWS
+MDB_S3_KEY_ID_FILE=secrets/s3_key_id.txt
+MDB_S3_KEY_SECRET_FILE=secrets/s3_key_secret.txt
 ```
 
 Credentials go in `secrets/`, never in `.env`. A failed push **fails the
@@ -128,7 +128,7 @@ point in time survive losing the host.
 
 **Scheduled verification.** `make verify-backups` restores the latest set into
 throwaway containers and asserts the row counts. Put it on a schedule and alert
-on failure via `MMDB_BACKUP_NOTIFY_URL`. An unverified backup is a hypothesis,
+on failure via `MDB_BACKUP_NOTIFY_URL`. An unverified backup is a hypothesis,
 and the moment you need it is the worst possible time to test it.
 
 ## Monitoring
@@ -174,10 +174,10 @@ instant the archive covers — including the second before a `DELETE` with no
 `WHERE` clause.
 
 ```
-MMDB_PG_PITR=true
-MMDB_PGBACKREST_REPO_TYPE=s3
-MMDB_PGBACKREST_S3_BUCKET=my-pgbackrest
-MMDB_PGBACKREST_S3_ENDPOINT=s3.us-east-1.amazonaws.com
+MDB_PG_PITR=true
+MDB_PGBACKREST_REPO_TYPE=s3
+MDB_PGBACKREST_S3_BUCKET=my-pgbackrest
+MDB_PGBACKREST_S3_ENDPOINT=s3.us-east-1.amazonaws.com
 ```
 
 **Not a live toggle.** `archive_mode` cannot be reloaded, so enabling PITR takes
@@ -205,7 +205,7 @@ confirmation. If you are not certain of the target, restore into a copy first;
 MariaDB has point-in-time recovery through its binary log:
 
 ```
-MMDB_MARIADB_PITR=true
+MDB_MARIADB_PITR=true
 ```
 
 The log is written to its own volume, never inside the data directory, in ROW
@@ -252,10 +252,10 @@ PostgreSQL port and routes it to whichever node is currently leader, so asking
 for both binds 5432 twice — `check-env` refuses that combination outright.
 
 ```
-MMDB_HA_CLUSTER_NAME=mmdb-pg
-MMDB_HA_ETCD_HOSTS=etcd1:2379,etcd2:2379,etcd3:2379
-MMDB_HAPROXY_WRITE_PORT=5432
-MMDB_HAPROXY_READ_PORT=5433
+MDB_HA_CLUSTER_NAME=mdb-pg
+MDB_HA_ETCD_HOSTS=etcd1:2379,etcd2:2379,etcd3:2379
+MDB_HAPROXY_WRITE_PORT=5432
+MDB_HAPROXY_READ_PORT=5433
 ```
 
 **etcd needs at least three nodes.** A two-node etcd has *lower* availability
@@ -307,7 +307,7 @@ cluster stays leaderless and every node logs "I am not the healthiest node".
 That is Patroni working, not failing. Check replication lag with
 `make ha-status` before assuming a failover mechanism is broken.
 
-`MMDB_PG_SYNC_MODE=on` gives zero data loss on failover, at the cost of every
+`MDB_PG_SYNC_MODE=on` gives zero data loss on failover, at the cost of every
 commit waiting for a replica. That is a real latency cost, and the right answer
 depends on your data. Choose it deliberately.
 

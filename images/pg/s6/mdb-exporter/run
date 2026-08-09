@@ -1,0 +1,3 @@
+#!/command/execlineb -P
+with-contenv
+/usr/local/lib/mdb/run-exporter.sh

@@ -1,4 +1,4 @@
-# my-multidb-server web front door — DEV.
+# multidb-server web front door — DEV.
 #
 # Rendered by scripts/env-render; edit this template, not the rendered file.
 # The prod configuration is a separate template (Caddyfile.prod.tmpl) rather
@@ -17,7 +17,7 @@
 	admin off
 }
 
-(mmdb_ui) {
+(mdb_ui) {
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
@@ -26,17 +26,17 @@
 	}
 }
 
-adminer.${MMDB_UI_DOMAIN:-db.localhost} {
-	import mmdb_ui
+adminer.${MDB_UI_DOMAIN:-db.localhost} {
+	import mdb_ui
 	reverse_proxy adminer:8080
 }
 
-pma.${MMDB_UI_DOMAIN:-db.localhost} {
-	import mmdb_ui
+pma.${MDB_UI_DOMAIN:-db.localhost} {
+	import mdb_ui
 	reverse_proxy phpmyadmin:80
 }
 
-pgadmin.${MMDB_UI_DOMAIN:-db.localhost} {
-	import mmdb_ui
+pgadmin.${MDB_UI_DOMAIN:-db.localhost} {
+	import mdb_ui
 	reverse_proxy pgadmin:80
 }

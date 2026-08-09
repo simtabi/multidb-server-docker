@@ -10,7 +10,7 @@ filesystem**:
 
 ```bash
 cd ~                                  # /home/you, NOT /mnt/c/...
-git clone https://github.com/simtabi/my-multidb-server.git
+git clone https://github.com/simtabi/multidb-server.git
 ```
 
 This is the single most important thing on this page. A repository under
