@@ -250,17 +250,49 @@ port_in_use() {
     (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3<&-; return 0; } || return 1
 }
 
+# Ports come from COMPOSE, not from the env file.
+#
+# The file only carries the ones an operator has uncommented; every other
+# published port is a default baked into the compose files
+# (${MMDB_ADMINER_HOST_PORT:-8080}). Scanning the file therefore missed exactly
+# the collisions that actually happen -- Adminer on 8080 is the single most
+# contended port on a developer machine, and it slipped through because nobody
+# had written it down. `compose config` resolves every default and every
+# profile, which is the same thing `make up` is about to bind.
 taken=""
-while IFS= read -r line; do
-    key="${line%%=*}"; value="${line#*=}"
-    [[ -z "$value" ]] && continue
+resolved=""
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    resolved="$(cd "$ROOT" && MMDB_ENV_FILE="$ENV_FILE" docker compose config --format json 2>/dev/null \
+        | python3 -c '
+import json,sys
+try:
+    cfg = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for svc in (cfg.get("services") or {}).values():
+    for p in (svc.get("ports") or []):
+        pub = p.get("published")
+        if pub:
+            print(pub)
+' 2>/dev/null || true)"
+fi
+
+# Fall back to the env file when compose or python is unavailable: a partial
+# check beats none, and this path still catches every explicitly-set port.
+if [[ -z "$resolved" ]]; then
+    resolved="$(grep -E '^MMDB_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+fi
+
+while IFS= read -r value; do
     [[ "$value" =~ ^[0-9]+$ ]] || continue
-    port_is_active "$key" || continue
     case " $ours " in *" $value "*) continue ;; esac
     if port_in_use "$value"; then
-        taken="${taken}       $value ($key)"$'\n'
+        # Name the variable when one exists; the number alone is not actionable.
+        key="$(grep -E "^MMDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
+               | head -1 | cut -d= -f1)"
+        taken="${taken}       $value${key:+ ($key)}"$'\n'
     fi
-done < <(grep -E '^MMDB_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null || true)
+done <<< "$resolved"
 
 if [[ -n "$taken" ]]; then
     # An error when BOOTING -- binding is about to happen and Docker's own
