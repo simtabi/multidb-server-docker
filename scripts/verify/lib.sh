@@ -200,10 +200,10 @@ mdb_cleanup() {
         # reached 420 volumes and 34GB here -- which is disk pressure, which is
         # what makes Docker reclaim IMAGES mid-run. The harness was breaking
         # itself, one orphaned volume at a time.
-        [[ -n "$item" ]] && docker rm -f -v "$item" >/dev/null 2>&1 || true
+        if [[ -n "$item" ]]; then docker rm -f -v "$item" >/dev/null 2>&1 || true; fi
     done
     for item in ${CLEANUP_VOLUMES[@]+"${CLEANUP_VOLUMES[@]}"}; do
-        [[ -n "$item" ]] && docker volume rm -f "$item" >/dev/null 2>&1 || true
+        if [[ -n "$item" ]]; then docker volume rm -f "$item" >/dev/null 2>&1 || true; fi
     done
 }
 trap mdb_cleanup EXIT

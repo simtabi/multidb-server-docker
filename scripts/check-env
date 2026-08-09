@@ -272,7 +272,10 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 
     # ${a[@]+"${a[@]}"} because bash 3.2 with set -u errors on an empty array,
     # and macOS ships bash 3.2 -- the same idiom the rest of this repo uses.
-    resolved="$(cd "$ROOT" && docker compose ${prof_args[@]+"${prof_args[@]}"} config --format json 2>/dev/null \
+    # A subshell that cd's and then runs, rather than `cd && cmd`: the latter
+    # reads as if-then-else to shellcheck (SC2015) and the trailing || would
+    # fire on a cd failure too.
+    resolved="$( { cd "$ROOT" || exit 0; docker compose ${prof_args[@]+"${prof_args[@]}"} config --format json 2>/dev/null; } \
         | python3 -c '
 import json,sys
 try:
