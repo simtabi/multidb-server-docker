@@ -92,12 +92,24 @@ day.
 
 **`make: command not found` on Windows.** Use WSL2. See [WINDOWS.md](WINDOWS.md).
 
-**Port already in use.** Something native is on 5432 or 3306 — often a Homebrew
-PostgreSQL or a previous Docker stack. Either stop it, or move ours:
+**Port already in use.** `make up` refuses before starting anything and names
+the port and the setting:
+
+```
+check-env port(s) already in use on this machine:
+       8080 (DBTK_ADMINER_HOST_PORT)
+```
+
+Something native is usually on 5432, 3306 or 8080 — a Homebrew PostgreSQL,
+another project's Adminer. Either stop it, or move ours:
 
 ```bash
 DBTK_PG_HOST_PORT=5433 make up
 ```
+
+Find what holds a port with `lsof -nP -iTCP:8080 -sTCP:LISTEN` on macOS, or
+`ss -ltnp` on Linux. Ports your own stack already publishes are not flagged —
+`make up` on a running stack rebinds them.
 
 **A container starts and immediately exits.** Read the logs before anything
 else; every engine here logs why.

@@ -26,9 +26,27 @@ grep -q '^DBTK_TLS_ENFORCE=true' "$tmp/.env.prod" \
     || vfail "init-prod did not enforce TLS"
 vinfo "init-prod renders TLS enforced"
 
-DBTK_ENV_FILE="$tmp/.env.prod" scripts/check-env >/dev/null 2>&1 \
+# Validated the way init-prod validates it. Rendering and booting are different
+# questions: rendering produces a file, often on a machine that is not the one
+# that will run it, so a port held here or an S3 key not yet created is not a
+# defect in the file. Booting is when both must be real.
+DBTK_ENV_FILE="$tmp/.env.prod" DBTK_CHECK_RENDERING=1 scripts/check-env >/dev/null 2>&1 \
     || vfail "the rendered prod env does not pass check-env"
 vinfo "rendered prod env passes check-env"
+
+# ...and the other half: BOOTING that same file without the operator's
+# object-store credentials must be refused. Deferring the requirement is only
+# acceptable because something later enforces it -- otherwise a prod stack
+# starts with PITR configured, archiving to a repository it cannot reach, and
+# the only symptom is pg_wal growing while everything reports healthy.
+# DBTK_CHECK_RENDERING=0 asks the boot question explicitly: the filename would
+# otherwise default a non-.env file to rendering, which is right for init-prod
+# and wrong for this assertion.
+if DBTK_ENV_FILE="$tmp/.env.prod" DBTK_CHECK_RENDERING=0 scripts/check-env >/dev/null 2>&1; then
+    vfail "check-env allowed a prod BOOT with no pgBackRest S3 credentials;
+       the deferred requirement is never enforced"
+fi
+vinfo "a prod boot without object-store credentials is refused"
 
 # Pooling is not optional under prod (section 21.1).
 sed -i.bak 's/^DBTK_PGBOUNCER_POOL_MODE=.*/DBTK_PGBOUNCER_POOL_MODE=/' "$tmp/.env.prod"

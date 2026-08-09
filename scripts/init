@@ -131,6 +131,8 @@ if (( PROD )); then
         -e 's|^DBTK_MYSQL_SLOW_SECONDS=.*|DBTK_MYSQL_SLOW_SECONDS=0|' \
         -e 's|^DBTK_MARIADB_SLOW_SECONDS=.*|DBTK_MARIADB_SLOW_SECONDS=0|' \
         -e 's|^DBTK_BACKUP_ENCRYPT=.*|DBTK_BACKUP_ENCRYPT=true|' \
+        -e 's|^DBTK_PG_PITR=.*|DBTK_PG_PITR=true|' \
+        -e 's|^DBTK_PGBACKREST_REPO_TYPE=.*|DBTK_PGBACKREST_REPO_TYPE=s3|' \
         -e 's|^#DBTK_PG_HOST_PORT=.*|#DBTK_PG_HOST_PORT=|' \
         -e "s|^#*DBTK_UI_BASIC_AUTH_USER=.*|DBTK_UI_BASIC_AUTH_USER=admin|" \
         -e "s|^#*DBTK_UI_BASIC_AUTH_HASH=.*|DBTK_UI_BASIC_AUTH_HASH=${ui_hash//|/\\|}|" \
@@ -141,7 +143,12 @@ if (( PROD )); then
     printf '  UI login: admin / (see secrets/ui_password.txt)\n'
     printf '\n'
     # shellcheck disable=SC2016  # backticks are prose here, not substitution
-    printf '  STILL REQUIRED before `make up`: set DBTK_CADDY_ACME_EMAIL in %s.\n' "${TARGET#"$ROOT"/}"
+    printf '  STILL REQUIRED before `make up`:\n'
+    printf '    - DBTK_CADDY_ACME_EMAIL in %s\n' "${TARGET#"$ROOT"/}"
+    # PITR to an off-site repository is required in prod (SPEC section 18, 7b
+    # and 7c), and these are the only parts init cannot generate.
+    printf '    - DBTK_PGBACKREST_S3_BUCKET and _ENDPOINT in %s\n' "${TARGET#"$ROOT"/}"
+    printf '    - secrets/pgbackrest_s3_key.txt and secrets/pgbackrest_s3_secret.txt\n'
     printf '  Without it the prod Caddy config refuses to render, rather than\n'
     printf '  publishing a UI with no certificate.\n'
 fi
@@ -149,6 +156,6 @@ fi
 # -----------------------------------------------------------------------------
 # 5. Validate
 # -----------------------------------------------------------------------------
-DBTK_ENV_FILE="$TARGET" "$ROOT/scripts/check-env"
+DBTK_ENV_FILE="$TARGET" DBTK_CHECK_RENDERING="$PROD" "$ROOT/scripts/check-env"
 
 printf '\nNext: make up\n'

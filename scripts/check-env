@@ -180,6 +180,100 @@ if [[ ",${DBTK_CHECK_PROFILES:-$ha_profiles}," == *",ha,"* ]]; then
 fi
 
 # -----------------------------------------------------------------------------
+# 4c. Ports already taken on the HOST
+# -----------------------------------------------------------------------------
+# Section 4 compares ports against each other. It cannot see the rest of the
+# machine, so a port held by anything else -- another project's Adminer, a
+# native PostgreSQL, an unrelated container -- gets past it and fails much
+# later, as a Docker error at the end of an otherwise successful boot:
+#
+#   Bind for 127.0.0.1:8080 failed: port is already allocated
+#
+# That names neither the setting to change nor the process holding it. Catching
+# it here turns it into one line, before anything starts.
+#
+# Ports our OWN stack already publishes are fine: `make up` on a running stack
+# rebinds them, and erroring on that would make the command unrepeatable.
+# Validating the ACTIVE .env means a boot is imminent, so host state matters.
+# Validating .env.example or a freshly rendered .env.prod is a question about
+# the FILE: it binds nothing, and the machine holding a port here is often not
+# the machine that will run it. Deriving this from the filename means no caller
+# has to remember a flag -- check 06 validates the template, check 26 validates
+# a render, and both were failing on ports neither of them was about to bind.
+# The filename sets the DEFAULT; an explicit DBTK_CHECK_RENDERING still wins,
+# so a caller can ask "would this file boot?" of a file that is not .env --
+# which is exactly what check 26 does to prove the deferred credential
+# requirement is enforced somewhere rather than merely deferred.
+if [[ -z "${DBTK_CHECK_RENDERING:-}" ]]; then
+    case "$(basename "$ENV_FILE")" in
+        .env) DBTK_CHECK_RENDERING=0 ;;
+        *)    DBTK_CHECK_RENDERING=1 ;;
+    esac
+fi
+
+ours=""
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    # Space separated, not newline: the membership test below compares
+    # " $ours " against *" $value "*, and newlines make every match fail.
+    ours="$(docker ps --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-dbtk}" \
+             --format '{{.Ports}}' 2>/dev/null | grep -oE '[0-9]+->' | tr -d '>-' \
+             | sort -u | tr '\n' ' ' || true)"
+fi
+
+# Only ports that will actually be published. A port belonging to a profile
+# nobody selected is not a collision -- flagging HAProxy's 5433 when HA is off
+# would train people to ignore this check, which is worse than not having it.
+active_profiles=",${DBTK_CHECK_PROFILES:-$(get DBTK_PROFILES)},"
+port_is_active() {
+    case "$1" in
+        DBTK_HAPROXY_*)  [[ "$active_profiles" == *,ha,* ]] ;;
+        DBTK_CADDY_*|DBTK_ADMINER_*|DBTK_PGADMIN_*|DBTK_PMA_*|DBTK_UI_*)
+                         [[ "$active_profiles" == *,ui,* || "$active_profiles" == *,prod,* ]] ;;
+        DBTK_*_POOLER_HOST_PORT)
+                         [[ "$active_profiles" == *,pooler,* ]] ;;
+        DBTK_*_HOST_PORT)
+            local eng; eng="$(printf '%s' "$1" | sed -E 's/^DBTK_//; s/_HOST_PORT$//' \
+                              | tr '[:upper:]_' '[:lower:]-')"
+            [[ "$active_profiles" == *,"$eng",* ]] ;;
+        *) return 1 ;;
+    esac
+}
+
+port_in_use() {
+    # bash's /dev/tcp needs no external tool, which matters because this runs
+    # on macOS, Linux and inside containers with different utilities available.
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3<&-; return 0; } || return 1
+}
+
+taken=""
+while IFS= read -r line; do
+    key="${line%%=*}"; value="${line#*=}"
+    [[ -z "$value" ]] && continue
+    [[ "$value" =~ ^[0-9]+$ ]] || continue
+    port_is_active "$key" || continue
+    case " $ours " in *" $value "*) continue ;; esac
+    if port_in_use "$value"; then
+        taken="${taken}       $value ($key)"$'\n'
+    fi
+done < <(grep -E '^DBTK_[A-Z0-9_]*(HOST_)?PORT=' "$ENV_FILE" 2>/dev/null || true)
+
+if [[ -n "$taken" ]]; then
+    # An error when BOOTING -- binding is about to happen and Docker's own
+    # message names neither the setting nor the process. Only a note when
+    # RENDERING a prod file, which binds nothing: the machine that renders the
+    # config is often not the machine that runs it, and `make init-prod` must
+    # produce an env that passes check-env (SPEC section 18, criterion 2).
+    if [[ "${DBTK_CHECK_RENDERING:-0}" == "1" ]]; then
+        note "port(s) currently in use on THIS machine (fine if you deploy elsewhere):
+${taken%$'\n'}"
+    else
+        err "port(s) already in use on this machine:
+${taken}       Change the setting, or stop whatever holds the port. On macOS:
+       lsof -nP -iTCP:<port> -sTCP:LISTEN"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
 # 5. Prod-profile guards (SPEC sections 18 and 21.1)
 # -----------------------------------------------------------------------------
 profiles="$(get DBTK_PROFILES)"
@@ -211,13 +305,22 @@ if [[ ",${profiles}," == *",prod,"* ]]; then
        A posix repository lives on the machine it is backing up."
     fi
 
-    # These are the operator's own cloud credentials, so init cannot generate
-    # them. Failing here beats failing inside archive_command, where the only
-    # symptom is pg_wal growing while everything reports healthy.
+    # The operator's own cloud credentials, so init cannot generate them.
+    #
+    # A hard error at BOOT, because failing here beats failing inside
+    # archive_command where the only symptom is pg_wal growing while everything
+    # reports healthy. But only a note while RENDERING a prod file, because
+    # `make init-prod` must produce an env that passes check-env (SPEC section
+    # 18, criterion 2) and it cannot invent someone's S3 keys. Same contract as
+    # DBTK_CADDY_ACME_EMAIL, which init-prod also surfaces as still-required.
     for f in pgbackrest_s3_key.txt pgbackrest_s3_secret.txt; do
-        [[ -s "$ROOT/secrets/$f" ]] \
-            || err "DBTK_PGBACKREST_REPO_TYPE=s3 needs secrets/$f
+        [[ -s "$ROOT/secrets/$f" ]] && continue
+        if [[ "${DBTK_CHECK_RENDERING:-0}" == "1" ]]; then
+            note "still required before 'make up': secrets/$f (your object-store credentials)"
+        else
+            err "DBTK_PGBACKREST_REPO_TYPE=s3 needs secrets/$f
        (your object-store credentials; they are never written to .env)"
+        fi
     done
 
 fi
