@@ -2,7 +2,7 @@
 #
 # Scan built images for known vulnerabilities.
 #
-# The same scan CI runs, available before you push. It reads .trivyignore, so a
+# The same scan CI runs, available before you push. It reads .trivyignore.yaml, so a
 # finding waived there with a reason is waived here too -- a local scan that
 # disagreed with CI would just train people to ignore one of them.
 #
@@ -35,7 +35,7 @@ docker info >/dev/null 2>&1 || die "docker is not running"
 trivy() {
     docker run --rm \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        -v "$ROOT/.trivyignore:/.trivyignore:ro" \
+        -v "$ROOT/.trivyignore.yaml:/.trivyignore.yaml:ro" \
         -v "${HOME}/.cache/trivy:/root/.cache/trivy" \
         "aquasec/trivy:${TRIVY_VERSION}" "$@"
 }
@@ -72,7 +72,7 @@ for engine in "${targets[@]}"; do
     log "scanning $img"
     scanned=$(( scanned + 1 ))
     if ! trivy image --severity HIGH,CRITICAL --ignore-unfixed \
-            --ignorefile /.trivyignore --exit-code 1 --scanners vuln \
+            --ignorefile /.trivyignore.yaml --exit-code 1 --scanners vuln \
             --format table "$img"; then
         failed=$(( failed + 1 ))
     fi
@@ -84,7 +84,7 @@ if (( failed )); then
     printf '\n'
     die "$failed image(s) have fixable HIGH/CRITICAL findings.
        Repin the base digest in images/bases.tsv if a rebuild fixes it.
-       If it genuinely cannot be fixed, add it to .trivyignore WITH a reason
+       If it genuinely cannot be fixed, add it to .trivyignore.yaml WITH a reason
        and a revisit condition -- check 38 rejects a bare CVE id."
 fi
 

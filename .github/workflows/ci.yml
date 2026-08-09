@@ -121,7 +121,7 @@ jobs:
           trivy image \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
-            --ignorefile .trivyignore \
+            --ignorefile .trivyignore.yaml \
             --exit-code 1 \
             --format table \
             "ghcr.io/simtabi/multidb-server-${ENGINE}:${VERSION}"

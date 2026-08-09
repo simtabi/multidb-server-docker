@@ -42,7 +42,7 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | Every engine family can provision a project | `34-new-project-every-engine` |
 | PITR recovers to a point in time (PostgreSQL) | `37-pitr-recovers` |
 | PITR recovers to a point in time (MySQL and MariaDB) | `40-mysql-family-pitr` |
-| Vulnerability waivers carry a reason and a revisit condition | `38-trivy-waivers` |
+| Vulnerability waivers are package-scoped, justified, and expire | `38-trivy-waivers` |
 | The off-site push is wired, authenticated, and fails loudly | `39-offsite-backup` |
 | Configuration reproduces, data persists, recovery data outlives `destroy` | `41-state-survives` |
 | Every image is official, upstream, or justified | `42-image-provenance` |
@@ -73,7 +73,7 @@ existed. Recorded here so the harness's size is explained rather than assumed.
 | What | Why | Check |
 |---|---|---|
 | PITR for MySQL and MariaDB | The spec asks only for PostgreSQL. Leaving two engines recoverable only to the last dump, in a toolkit that advertises verified restores, would be a strange asymmetry. | `40` |
-| Vulnerability waivers must justify themselves | "trivy clean **or waived with notes**" — the notes half is what decays, and an ignore file is trivially abused to make a scanner green. | `38` |
+| Vulnerability waivers must justify themselves | "trivy clean **or waived with notes**" — the notes half is what decays, and an ignore file is trivially abused to make a scanner green. An expiry date makes the revisit mechanical rather than a promise (D-51). | `38` |
 | Image provenance | "Use official images" erodes one convenient third-party rebuild at a time, each defensible alone. | `42` |
 | State lifetimes | Configuration, data and recovery data have three different lifetimes and get confused with each other; each confusion has a distinct failure. | `41` |
 | Pooler credential handling | A pooler that holds every application password is a second place every credential lives. | `33`, `35` |

@@ -1,0 +1,287 @@
+# Trivy waivers.
+#
+# Every entry here is a finding the build will NOT fail on. That is a decision
+# each time, not a way to quiet the scanner, so the format makes the three
+# things that decay impossible to omit:
+#
+#   id           what is waived
+#   purls        WHERE it is waived -- so a waiver for one component cannot
+#                silently cover the same CVE somewhere it was never considered
+#   statement    why it cannot be fixed here
+#   expired_at   when the decision stops being valid
+#
+# expired_at is the point of this file. The flat .trivyignore this replaced
+# carried "revisit on base repin" in a comment, which is a promise rather than
+# a mechanism -- nothing read it, and nothing would ever have failed if it were
+# quietly ignored for two years. A date is enforced twice: trivy stops applying
+# the waiver once it passes, and check 38 fails the harness before that with a
+# message naming the entry. Waivers now expire whether or not anyone remembers.
+#
+# purls scope a waiver to a package. Without them this file is global, and
+# accepting a jackson CVE for Cassandra would also accept it in any image that
+# grows a jackson dependency later, silently and without anyone deciding to.
+# A wrong purl fails safe: the waiver does not match, and the build fails.
+#
+# Prefer fixing over waiving. Most findings come from base images, so repinning
+# a digest in images/bases.tsv resolves them outright -- check that first, and
+# only waive when there is demonstrably nothing to repin to.
+
+vulnerabilities:
+
+  # ---------------------------------------------------------------------------
+  # Apache Cassandra -- vendored Java dependencies
+  # ---------------------------------------------------------------------------
+  # Cassandra ships these JARs inside its own distribution, in lib/, at versions
+  # the Apache release process chose. Three facts make them waivers rather than
+  # fixes:
+  #
+  #   1. images/bases.tsv already pins 5.0.8 and 4.1.11, published 2026-08-05 and
+  #      the newest releases of either series. There is nothing to repin to.
+  #   2. Replacing a JAR inside lib/ is not a supported configuration; Cassandra
+  #      is tested against the versions it ships, and a swapped netty or jackson
+  #      is a node that fails in production rather than in CI.
+  #   3. The fixed versions exist upstream in the LIBRARY, not in a Cassandra
+  #      release. Only Apache can close these, by shipping a new Cassandra.
+  #
+  # What reduces the exposure meanwhile is the toolkit's own posture rather than
+  # anything about the CVEs: Cassandra is authenticated by default here (check
+  # 32 proves it) and publishes no host port under the default MDB_PUBLISH=none,
+  # so the native protocol is reachable only from the compose network.
+  #
+  # Revisit condition: the next Cassandra release on either series. These expire
+  # 2026-11-09 regardless -- if no release has landed by then the decision gets
+  # made again with whatever is true at that point, rather than inherited.
+
+  - id: GHSA-r7wm-3cxj-wff9
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-core"
+    statement: >-
+      Vendored by Apache Cassandra 5.0.8 and 4.1.11, both the newest releases of
+      their series, so there is no base image to repin to. Fixed only in the
+      library, not in any Cassandra release. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-54512
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+    statement: >-
+      jackson-databind arbitrary code execution via polymorphic deserialization,
+      vendored by Cassandra 5.0.8 and 4.1.11 with no newer release to repin to.
+      Replacing the JAR inside lib/ is an untested Cassandra configuration.
+      Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-54513
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+    statement: >-
+      jackson-databind security bypass, vendored by Cassandra 5.0.8 and 4.1.11
+      with no newer release to repin to. Fixed only in the library upstream.
+      Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-42583
+    purls:
+      - "pkg:maven/io.netty/netty-codec"
+    statement: >-
+      netty-codec compression flaw in the transport Cassandra's native protocol
+      uses, vendored at 4.1.130.Final by Cassandra 5.0.8 with no newer release to
+      repin to. The port is unpublished by default and the protocol is
+      authenticated. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-59901
+    purls:
+      - "pkg:maven/io.netty/netty-codec"
+    statement: >-
+      netty-codec, vendored at 4.1.130.Final by Cassandra 5.0.8 with no newer
+      Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-44249
+    purls:
+      - "pkg:maven/io.netty/netty-handler"
+    statement: >-
+      netty-handler, vendored at 4.1.130.Final by Cassandra 5.0.8 with no newer
+      Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-45416
+    purls:
+      - "pkg:maven/io.netty/netty-handler"
+    statement: >-
+      netty-handler, vendored at 4.1.130.Final by Cassandra 5.0.8 with no newer
+      Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-50010
+    purls:
+      - "pkg:maven/io.netty/netty-handler"
+    statement: >-
+      netty-handler, vendored at 4.1.130.Final by Cassandra 5.0.8 with no newer
+      Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-56820
+    purls:
+      - "pkg:maven/io.netty/netty-handler-ssl-ocsp"
+    statement: >-
+      netty-handler-ssl-ocsp, vendored at 4.1.130.Final by Cassandra 5.0.8. OCSP
+      stapling is not enabled by this toolkit's TLS configuration, and there is
+      no newer Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-56821
+    purls:
+      - "pkg:maven/io.netty/netty-handler-ssl-ocsp"
+    statement: >-
+      netty-handler-ssl-ocsp, vendored at 4.1.130.Final by Cassandra 5.0.8. OCSP
+      stapling is not enabled by this toolkit's TLS configuration, and there is
+      no newer Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2026-56822
+    purls:
+      - "pkg:maven/io.netty/netty-handler-ssl-ocsp"
+    statement: >-
+      netty-handler-ssl-ocsp, vendored at 4.1.130.Final by Cassandra 5.0.8. OCSP
+      stapling is not enabled by this toolkit's TLS configuration, and there is
+      no newer Cassandra release to repin to. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2023-6378
+    purls:
+      - "pkg:maven/ch.qos.logback/logback-classic"
+      - "pkg:maven/ch.qos.logback/logback-core"
+    statement: >-
+      logback deserialisation denial of service, reachable only through the
+      SocketReceiver/SocketAppender that Cassandra 4.1.11 does not configure and
+      this toolkit does not enable. Vendored at 1.2.9 with no newer 4.1 release
+      to repin to. Revisit at the next Cassandra 4.1 release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2022-1471
+    purls:
+      - "pkg:maven/org.yaml/snakeyaml"
+    statement: >-
+      SnakeYAML remote code execution through the unsafe default constructor.
+      Cassandra parses only cassandra.yaml with it, which is operator-supplied
+      and mounted by this toolkit -- an attacker able to change it already
+      controls the container. Vendored at 1.26 by Cassandra 4.1.11 with no newer
+      4.1 release to repin to. Revisit at the next Cassandra 4.1 release.
+    expired_at: 2026-11-09
+
+  - id: CVE-2022-25857
+    purls:
+      - "pkg:maven/org.yaml/snakeyaml"
+    statement: >-
+      SnakeYAML denial of service on deeply nested input, bounded by the same
+      trust argument as CVE-2022-1471: the only document parsed is the operator's
+      own cassandra.yaml. Vendored at 1.26 by Cassandra 4.1.11 with no newer 4.1
+      release to repin to. Revisit at the next Cassandra 4.1 release.
+    expired_at: 2026-11-09
+
+  # ---------------------------------------------------------------------------
+  # gosu -- Go standard library CVEs in a statically linked setuid helper
+  # ---------------------------------------------------------------------------
+  # gosu ships in the upstream postgres base image; we do not build it and cannot
+  # repin it independently. Every finding is in the Go standard library it was
+  # compiled against, in packages gosu does not reach: it drops privileges at
+  # container start and execs, parsing no untrusted input and opening no sockets.
+  # net/mail, mime and net/http parsing are not on any path it executes.
+  #
+  # These carry no purls deliberately. Trivy attributes them to the Go stdlib
+  # rather than to gosu, and a stdlib purl would be both wrong and broad. The
+  # scoping here is the statement plus the expiry.
+  #
+  # Revisit whenever images/bases.tsv is repinned -- a rebuilt base picks up a
+  # newer gosu and these should disappear rather than be re-waived.
+  - id: CVE-2025-61726
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2025-61729
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2025-68121
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-25679
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-27145
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-32280
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-32281
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-32283
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-33811
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-33814
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-39820
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-39836
+    statement: >-
+      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
+      untrusted input. Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-42499
+    statement: >-
+      gosu, Go stdlib net/mail. gosu parses no mail on any path it executes.
+      Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+  - id: CVE-2026-42504
+    statement: >-
+      gosu, Go stdlib mime. gosu parses no MIME on any path it executes.
+      Revisit on the next images/bases.tsv repin.
+    expired_at: 2026-11-09
+
+  # ---------------------------------------------------------------------------
+  # postgres_exporter -- Go toolchain CVEs, already on the newest release
+  # ---------------------------------------------------------------------------
+  # 0.20.1 (2026-07-07) is the latest upstream release, so there is nothing to
+  # repin to. Both findings are in the Go toolchain the release was built with,
+  # not in the exporter's own code. The exporter is off by default and, when on,
+  # is reachable only on the internal metrics network.
+  - id: CVE-2026-56852
+    statement: >-
+      postgres_exporter, golang.org/x/text, no newer upstream release exists to
+      repin to. Off by default and internal-only when enabled. Revisit at the
+      next postgres_exporter release.
+    expired_at: 2026-11-09
+  - id: CVE-2026-39822
+    statement: >-
+      postgres_exporter and gosu, Go stdlib os.Root, no newer upstream release
+      exists to repin to. Revisit at the next postgres_exporter release.
+    expired_at: 2026-11-09

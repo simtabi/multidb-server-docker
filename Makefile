@@ -154,7 +154,7 @@ cassandra: ## Cassandra shell (cqlsh, authenticated)
 		-p "$$(cat secrets/cassandra_root_password.txt)"
 
 .PHONY: scan
-scan: ## Scan built images for vulnerabilities (honours .trivyignore)
+scan: ## Scan built images for vulnerabilities (honours .trivyignore.yaml)
 	@scripts/scan $(ENGINE)
 
 .PHONY: shell
