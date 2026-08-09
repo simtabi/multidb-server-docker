@@ -55,19 +55,38 @@ it is necessity: PostgreSQL refuses to start against a foreign major, and a
 scheme that shared one volume would produce a container that will not boot and
 appears to have eaten your data. To actually migrate, see [Upgrade](UPGRADE.md).
 
-### Ports
+### Ports and exposure
 
 ```
+MDB_PUBLISH=none        # none | direct | proxy
+MDB_PORT_BASE=54000
 MDB_BIND_ADDR=127.0.0.1
-MDB_PG_HOST_PORT=5432
 ```
+
+Publishing a host port is the only thing here that can collide with software
+you already run, and a collision surfaces as a Docker error at the end of a
+boot. So it is a decision:
+
+| Mode | What binds | Use it when |
+|---|---|---|
+| `none` | nothing | Default. Applications join `mdb_net` and use service names. |
+| `direct` | one port per engine | A GUI client that cannot join a Docker network. |
+| `proxy` | one Caddy front door | You want a single process owning the host ports. |
+
+In `direct` and `proxy`, a port is `MDB_PORT_BASE + offset`, where the offset is
+declared per engine (PostgreSQL 0, MySQL 1, MariaDB 2, MongoDB 3, Cassandra 4,
+FerretDB 5). Move the base and every engine follows.
+
+The offsets are explicit rather than derived from each engine's own port,
+because MongoDB's 27017 plus a 54000 base is 81017 — past the end of the port
+range. Check 31 rejects a duplicate, missing, or out-of-range offset.
+
+`MDB_<ENGINE>_HOST_PORT` still overrides a single engine, but moving the base is
+almost always what you want.
 
 `MDB_BIND_ADDR` defaults to loopback. Changing it to `0.0.0.0` publishes every
 enabled engine to your network — do not do that as a convenience for a colleague
 on the same wifi. On a server, see [Operations](OPERATIONS.md).
-
-Per-engine port overrides exist for collisions with something already native on
-your machine.
 
 ### Projects
 

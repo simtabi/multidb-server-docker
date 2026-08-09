@@ -24,11 +24,16 @@ looks fine until it is on the internet.
 The default binds every engine to `127.0.0.1`. On a server, the question is not
 "which port do I open" but "should this port be reachable at all".
 
-**Preferred: do not expose the database.** Reach it over an SSH tunnel or a
-private network, and leave `MDB_BIND_ADDR=127.0.0.1`.
+**Preferred: do not expose the database.** `MDB_PUBLISH=none` is the default and
+binds nothing at all — applications join the `mdb_net` network and use service
+names. Nothing to firewall, nothing to collide.
+
+When you need host access, reach it over an SSH tunnel rather than a published
+port:
 
 ```bash
-ssh -L 5432:127.0.0.1:5432 you@server
+MDB_PUBLISH=direct     # PostgreSQL lands on MDB_PORT_BASE + 0
+ssh -L 5432:127.0.0.1:54000 you@server
 ```
 
 **If you must expose it**, set `MDB_BIND_ADDR` to a specific private address —
@@ -37,10 +42,17 @@ ports by writing DNAT rules that most firewall front-ends do not show you, so a
 `ufw` rule that looks like it blocks the port frequently does not.
 
 ```
+MDB_PUBLISH=proxy      # one process owns the ports, not six
 MDB_BIND_ADDR=10.0.1.5
 MDB_TLS_ENFORCE=true
 MDB_MTLS=true
 ```
+
+`proxy` mode is worth preferring here: one front door is one thing to firewall,
+one thing to audit, and one place a rule can be wrong. It uses Caddy with the
+layer4 module — see [image provenance](../IMAGE-PROVENANCE.md). That module is
+pre-1.0, so if you would rather not have it in the connection path, `direct`
+publishes the same ports without it.
 
 `MDB_MTLS=true` requires client certificates. On an exposed database it is
 worth the setup.

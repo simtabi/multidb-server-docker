@@ -54,9 +54,14 @@ For PostgreSQL and MySQL, 4 GB is fine.
 
 ## Connecting from Windows
 
+Nothing is published by default (`MDB_PUBLISH=none`), which is usually what you
+want — but a Windows-side GUI cannot join the Docker network, so set
+`MDB_PUBLISH=direct` and connect to `localhost:54000` for PostgreSQL
+(`MDB_PORT_BASE + 0`).
+
 Ports published to `127.0.0.1` inside WSL2 are reachable from Windows at
 `localhost`, so DBeaver, DataGrip, TablePlus and pgAdmin on the Windows side
-connect to `localhost:5432` with no extra configuration.
+need no configuration beyond the port.
 
 If that stops working after a reboot, it is usually Docker Desktop starting
 before WSL2 is ready. Restart Docker Desktop.

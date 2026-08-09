@@ -72,12 +72,39 @@ make mariadb
 These connect over the unix socket rather than TCP — faster, and it removes a
 network surface entirely.
 
-Or point any GUI at `127.0.0.1` on the engine's port. Ports bind to loopback
-only by default, which is deliberate: an engine that is reachable from the
-network the moment it starts is how development databases end up on the
-internet.
+### Nothing is published by default
 
-The browser UIs are on <http://localhost:8080> under the `ui` profile — Adminer
+`MDB_PUBLISH=none` is the default, so no host port is bound at all. That is the
+one setting that cannot conflict with software you already run, and it is how
+applications are meant to connect anyway — join the network and use the service
+name, exactly as the block above prints:
+
+```yaml
+networks:
+  default:
+    external: true
+    name: mdb_net
+```
+
+**For a GUI client that cannot join a Docker network**, publish:
+
+```
+MDB_PUBLISH=direct     # each engine gets its own host port
+MDB_PORT_BASE=54000    # PostgreSQL 54000, MySQL 54001, MariaDB 54002, ...
+```
+
+or put everything behind one front door:
+
+```
+MDB_PUBLISH=proxy      # Caddy owns the ports and forwards to the engines
+```
+
+Either way a port is `MDB_PORT_BASE + offset`, so if 54000 is taken you move
+one number and every engine follows. Ports bind to loopback only, which is
+deliberate: an engine reachable from the network the moment it starts is how
+development databases end up on the internet.
+
+The browser UIs are on <https://adminer.db.localhost> under the `ui` profile — Adminer
 for the SQL engines, plus per-engine consoles.
 
 ## 4. Isolation is real, and worth confirming

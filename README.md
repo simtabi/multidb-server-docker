@@ -18,7 +18,12 @@ make init
 make up
 ```
 
-PostgreSQL and Adminer are running. Add engines with profiles:
+PostgreSQL and Adminer are running, with **no host port published** — your
+application joins the `mdb_net` network and connects to `pg:5432`. Set
+`MDB_PUBLISH=direct` (or `proxy`) when a GUI client needs a host port; see
+[Configuration](docs/configuration.md).
+
+Add engines with profiles:
 
 ```bash
 make up PROFILES=pg,mysql,mongodb,ui
