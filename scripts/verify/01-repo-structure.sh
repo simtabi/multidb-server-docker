@@ -69,4 +69,40 @@ if [[ -n "$offenders" ]]; then
 fi
 vinfo "every explicit compose invocation includes the generated engines file"
 
+# -----------------------------------------------------------------------------
+# Every engine's overrides/ directory must be TRACKED, not merely present
+# -----------------------------------------------------------------------------
+# The generated compose file bind-mounts overrides/<engine>/ for each engine, and
+# git does not track directories -- only files. overrides/mongodb/ had no
+# .gitkeep where the other five did, so it existed on every machine that had
+# ever run the generator and on none that had only cloned. A fresh checkout got
+# an invalid compose file, `make up` failed, and the harness reported ten
+# failures whose messages pointed at pgAdmin returning 502 and images not being
+# built -- none of them at the missing directory.
+#
+# So this asserts what git knows, not what the filesystem has. Checking for the
+# directory would pass here for exactly the reason the bug survived: it is
+# sitting right there, untracked.
+# engine_list, not `ls engines/` -- that directory also holds _family (the
+# shared hook scripts) and alias entries like postgres, neither of which is an
+# engine with an overrides/ mount.
+# shellcheck source=../engine-lib.sh
+. "$MDB_ROOT/scripts/engine-lib.sh"
+
+missing_keep=""
+while IFS= read -r engine; do
+    [[ -z "$engine" ]] && continue
+    engine_load "$engine" || continue
+    git -C "$MDB_ROOT" ls-files --error-unmatch "overrides/$MDB_ENGINE_NAME/.gitkeep" >/dev/null 2>&1 \
+        || missing_keep+="$MDB_ENGINE_NAME "
+done < <(engine_list)
+
+if [[ -n "$missing_keep" ]]; then
+    vfail "overrides/ is untracked for: ${missing_keep% }
+       git stores no empty directories, so a fresh clone will not have them and
+       the generated compose file mounts a path that does not exist. Add
+       overrides/<engine>/.gitkeep for each."
+fi
+vinfo "every engine's overrides/ directory is tracked"
+
 vinfo "layout matches SPEC section 15"

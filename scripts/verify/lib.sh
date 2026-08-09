@@ -142,6 +142,41 @@ need_image() {
        the check alone will pass. Free disk space to run the full harness."
     fi
 
+    # Never built. Before repeating "run: make build", check whether that advice
+    # is even true -- for a NON-DEFAULT version it is not. `make build` builds
+    # each engine at the single version .env names, so a check that needs
+    # pg:16 while the default is 18 can never be satisfied by it: the suggested
+    # command rebuilds pg:18 and the check fails again, identically. Checks 14
+    # and 29 exist precisely to exercise a second major, and both failed this
+    # way on a runner that had run `make build` exactly as instructed.
+    #
+    # So build the version that was asked for, when the repo declares a base for
+    # it. Anything not in bases.tsv is a genuine "you forgot", and still says so.
+    local engine="${img##*/}"; engine="${engine%%:*}"; engine="${engine#multidb-server-}"
+    local want="${img##*:}"
+    if [[ -f "$MDB_ROOT/images/$engine/Dockerfile" ]] \
+       && awk -v e="$engine" -v v="$want" \
+              '$1==e && $2==v {f=1} END{exit !f}' "$MDB_ROOT/images/bases.tsv" 2>/dev/null; then
+        # Built here rather than through scripts/build, which resolves the
+        # version from .env and ignores the environment -- `MDB_PG_VERSION=16
+        # ./scripts/build pg` cheerfully produces pg:17. Passing the version as
+        # a build arg is the same thing build_image does, minus the .env lookup
+        # that is wrong here, and it cannot be raced by a parallel check the way
+        # rewriting .env could.
+        local base
+        printf '      %s is a declared version that make build does not cover; building it\n' "$img" >&2
+        base="$(awk -v e="$engine" -v v="$want" '$1==e && $2==v {print $3; exit}' \
+                "$MDB_ROOT/images/bases.tsv")"
+        if docker build -f "$MDB_ROOT/images/$engine/Dockerfile" \
+                --build-arg "BASE_IMAGE=$base" \
+                --build-arg "ENGINE_VERSION=$want" \
+                -t "$img" "$MDB_ROOT/images" >/dev/null 2>&1; then
+            image_exists "$img" && { printf '      built %s\n' "$img" >&2; return 0; }
+        fi
+        vfail "could not build $img, though images/bases.tsv declares
+       $base for $engine $want."
+    fi
+
     vfail "image not built yet: $img (run: make build)"
 }
 
