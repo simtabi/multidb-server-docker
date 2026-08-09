@@ -29,14 +29,23 @@ USER root
 # what a package manager can patch is what turns an ignore file into a dumping
 # ground.
 #
-# --exclude='mysql*' is the load-bearing part. Without it an update is free to
-# pull a newer mysql-community-server-minimal from the Oracle repo, and the
-# image stops being the digest it is pinned to -- a 8.0.46 pin quietly serving
-# some later 8.0. The assertion below is the proof: the server version must be
-# byte-identical across the update.
+# Scoping the update away from MySQL itself is the load-bearing part: otherwise
+# it is free to pull a newer mysql-community-server-minimal from Oracle's repo,
+# and the image stops being the digest it pins -- an 8.0.46 pin quietly serving
+# some later 8.0.
+#
+# That scoping is --disablerepo, NOT --exclude. microdnf has no --exclude at all
+# (rpm-software-management/microdnf#119, still open) and fails with "Unknown
+# option", the same way it does for dnf's --noautoremove above. It does have
+# --disablerepo, and the image keeps MySQL in its own repos -- mysqlN.N-server-
+# minimal and mysql-tools-community -- so disabling `mysql*` leaves the update
+# with only the Oracle Linux repos to draw from. Verified against 8.0.46:
+# glib2 moves 2.68.4-18.el9_7.1 to 2.68.4-19.el9_8.2 and mysqld does not move.
+#
+# The assertion is still here rather than trusting that reasoning.
 RUN set -eux; \
     before="$(mysqld --version)"; \
-    microdnf update -y --exclude='mysql*'; \
+    microdnf update -y --disablerepo='mysql*'; \
     microdnf clean all; \
     after="$(mysqld --version)"; \
     [ "$before" = "$after" ] || { \
