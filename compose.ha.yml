@@ -73,8 +73,19 @@ x-patroni: &patroni
     test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8008/health || exit 1"]
     interval: 5s
     timeout: 3s
-    retries: 24
-    start_period: 60s
+    # The window is generous because /health answers 503 until the node is a
+    # running member, and a replica is not one until it has finished cloning the
+    # leader with pg_basebackup. On a two-core CI runner bootstrapping three
+    # PostgreSQL nodes at once, the LAST of them regularly needed longer than
+    # the old 60s start_period -- which showed up as "container mdb-patroni3 is
+    # unhealthy" while etcd1-3 and haproxy all reported healthy, an outcome that
+    # reads like a broken node rather than a slow one.
+    #
+    # This widens how long the node is allowed to take. It does not change what
+    # has to become true: the REST API must still answer, and check 27 still
+    # requires a real leader election after the leader is killed.
+    retries: 60
+    start_period: 120s
 
 services:
   etcd1:
