@@ -223,7 +223,12 @@ fi
 # Only ports that will actually be published. A port belonging to a profile
 # nobody selected is not a collision -- flagging HAProxy's 5433 when HA is off
 # would train people to ignore this check, which is worse than not having it.
-active_profiles=",${DBTK_CHECK_PROFILES:-$(get DBTK_PROFILES)},"
+# COMPOSE_PROFILES first: the Makefile has already resolved PROFILES= from the
+# command line, DBTK_PROFILES from the file, and the default. Reading the file
+# directly ignores `make up PROFILES=pg` and judges ports for services that run
+# that are not about to start -- which failed nine checks with "make up failed":
+# because another project held 443 and `pg` does not publish 443.
+active_profiles=",${COMPOSE_PROFILES:-${DBTK_CHECK_PROFILES:-$(get DBTK_PROFILES)}},"
 port_is_active() {
     case "$1" in
         DBTK_HAPROXY_*)  [[ "$active_profiles" == *,ha,* ]] ;;

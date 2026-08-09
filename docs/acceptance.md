@@ -18,7 +18,7 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | 6a | Two projects per engine, isolated roles, cross-access denied | `13-triplet-isolation`, `28-new-project`, `34-new-project-every-engine` | Covered |
 | 6b | PG RLS demo passes | `36-rls-demo` | Covered |
 | 7a | Fresh VPS path ends TLS-only, unpublished or firewalled, no UI exposed | `20-tls-enforced-prod`, `26-prod-profile-guards` | Covered |
-| 7b | Nightly S3 backups | `39-offsite-backup`, `check-env` prod guard | Covered |
+| 7b | Nightly S3 backups | `39-offsite-backup`, `check-env` prod guard | Covered — dumps via rclone, WAL via pgBackRest's S3 repo |
 | 7c | PITR active for PG | `37-pitr-recovers` | Covered |
 | 7c+ | PITR for MySQL and MariaDB (beyond spec) | `40-mysql-family-pitr` | Covered |
 | 8 | Restore drill with row-count verification; `backup-all` produces per-database dumps plus PG globals; `verify-backups` restores the latest set green | `21-backup-restore-roundtrip`, `22-backup-all-and-verify` | Covered |
@@ -40,6 +40,13 @@ so a green `make verify` is the criteria being met rather than a proxy for it.
 | The pooler multiplexes and holds no application password (PostgreSQL) | `33-pooler-works` |
 | The pooler holds verifiers, not passwords (MySQL family) | `35-proxysql-verifiers` |
 | Every engine family can provision a project | `34-new-project-every-engine` |
+| PITR recovers to a point in time (PostgreSQL) | `37-pitr-recovers` |
+| PITR recovers to a point in time (MySQL and MariaDB) | `40-mysql-family-pitr` |
+| Vulnerability waivers carry a reason and a revisit condition | `38-trivy-waivers` |
+| The off-site push is wired, authenticated, and fails loudly | `39-offsite-backup` |
+| Configuration reproduces, data persists, recovery data outlives `destroy` | `41-state-survives` |
+| Every image is official, upstream, or justified | `42-image-provenance` |
+| The RLS kit isolates tenants, including from the table owner | `36-rls-demo` |
 
 ## What is not proven
 
@@ -57,6 +64,19 @@ image (it found seventeen real findings, now waived with reasons). Calling that
 
 This is the one criterion that cannot be closed from here: it needs a push to
 GitHub, which is the user's to make.
+
+## Beyond the specification
+
+Work the spec did not ask for, done because the gaps were real once the rest
+existed. Recorded here so the harness's size is explained rather than assumed.
+
+| What | Why | Check |
+|---|---|---|
+| PITR for MySQL and MariaDB | The spec asks only for PostgreSQL. Leaving two engines recoverable only to the last dump, in a toolkit that advertises verified restores, would be a strange asymmetry. | `40` |
+| Vulnerability waivers must justify themselves | "trivy clean **or waived with notes**" — the notes half is what decays, and an ignore file is trivially abused to make a scanner green. | `38` |
+| Image provenance | "Use official images" erodes one convenient third-party rebuild at a time, each defensible alone. | `42` |
+| State lifetimes | Configuration, data and recovery data have three different lifetimes and get confused with each other; each confusion has a distinct failure. | `41` |
+| Pooler credential handling | A pooler that holds every application password is a second place every credential lives. | `33`, `35` |
 
 ## A note on running the harness
 
