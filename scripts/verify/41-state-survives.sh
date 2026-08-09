@@ -81,4 +81,20 @@ grep -q 'Refusing to overwrite it' "$MDB_ROOT/scripts/init" \
        orphan every password already in use"
 vinfo "init refuses to overwrite an existing environment file"
 
+# 6. The harness must not leak volumes.
+#
+# `docker rm -f` without -v leaves a container's ANONYMOUS volumes behind, and
+# every throwaway engine container has one because the images declare VOLUME
+# for their data directory. Unchecked, that reached 420 volumes and 34GB on
+# the development machine -- which is disk pressure, which is what makes Docker
+# reclaim IMAGES mid-run. The harness was breaking itself, and the symptom
+# appeared as unrelated checks failing to find images they had just built.
+leaky="$(grep -rn 'docker rm -f -v "' "$MDB_ROOT/scripts" 2>/dev/null | grep -v -- '-f -v' || true)"
+if [[ -n "$leaky" ]]; then
+    printf '      %s\n' "$leaky" >&2
+    vfail "a container is removed without -v; its anonymous volumes would leak.
+       Enough of those become disk pressure, and disk pressure evicts images."
+fi
+vinfo "containers are removed with their anonymous volumes"
+
 vinfo "configuration reproduces, data persists, recovery data outlives destroy"

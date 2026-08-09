@@ -46,7 +46,7 @@ docker exec "$seed" psql -U postgres -d legacy -q -c "
     INSERT INTO t SELECT 'row-' || g FROM generate_series(1,250) g;" >/dev/null 2>&1 \
     || vfail "could not seed rows"
 vinfo "seeded PG 16 with 250 rows"
-docker rm -f "$seed" >/dev/null 2>&1 || true
+docker rm -f -v "$seed" >/dev/null 2>&1 || true
 
 CONFIRM=yes make upgrade ENGINE=pg FROM=16 TO=17 >/tmp/mdb-upgrade.log 2>&1 \
     || { tail -15 /tmp/mdb-upgrade.log >&2; vfail "make upgrade failed"; }
@@ -65,7 +65,7 @@ ver="$(docker exec "$check17" psql -U postgres -tAc "SHOW server_version_num" | 
 rows="$(docker exec "$check17" psql -U postgres -d legacy -tAc "SELECT count(*) FROM t" 2>/dev/null | tr -d ' \r')"
 [[ "$rows" == "250" ]] || vfail "PG 17 has $rows rows after upgrade, expected 250"
 vinfo "PG 17 has all 250 rows"
-docker rm -f "$check17" >/dev/null 2>&1 || true
+docker rm -f -v "$check17" >/dev/null 2>&1 || true
 
 # --- rollback is still possible ---------------------------------------------
 # The upgrade is only safe if the source is untouched. This is the assertion

@@ -117,6 +117,24 @@ need_image() {
 
     if [[ -n "${MDB_IMAGE_SNAPSHOT:-}" ]] && [[ -f "$MDB_IMAGE_SNAPSHOT" ]] \
        && grep -qxF "$img" "$MDB_IMAGE_SNAPSHOT" 2>/dev/null; then
+
+        # It was here and is gone, so REBUILD it rather than failing a check
+        # whose subject is not the image. Volume leaks were the main cause of
+        # the disk pressure behind this and are fixed, but a shared machine can
+        # still reclaim under someone else's load, and a forty-minute run
+        # should not be lost to that.
+        #
+        # Deliberately only for the reclaimed case: an image that was never
+        # built is a different problem with a different fix, and rebuilding
+        # silently there would hide "you forgot to run make build".
+        local engine="${img##*/}"; engine="${engine%%:*}"; engine="${engine#multidb-server-}"
+        if [[ -f "$MDB_ROOT/images/$engine/Dockerfile" ]]; then
+            printf '      image %s was reclaimed mid-run; rebuilding\n' "$img" >&2
+            if ( cd "$MDB_ROOT" && ./scripts/build "$engine" >/dev/null 2>&1 ); then
+                image_exists "$img" && { printf '      rebuilt %s\n' "$img" >&2; return 0; }
+            fi
+        fi
+
         vfail "image RECLAIMED mid-run: $img
        It existed when this run started and has since been removed, which
        Docker does to unused images under disk pressure. This is an
@@ -173,7 +191,16 @@ mdb_cleanup() {
         eval "$item" >/dev/null 2>&1 || true
     done
     for item in ${CLEANUP_CONTAINERS[@]+"${CLEANUP_CONTAINERS[@]}"}; do
-        [[ -n "$item" ]] && docker rm -f "$item" >/dev/null 2>&1 || true
+        # -v removes the container's ANONYMOUS volumes with it.
+        #
+        # Without it every throwaway container leaks one: the engine images
+        # declare VOLUME for their data directory, so a `docker run` with no
+        # -v gets an anonymous volume that outlives `docker rm -f`. A full
+        # harness run starts dozens of such containers, and the leak had
+        # reached 420 volumes and 34GB here -- which is disk pressure, which is
+        # what makes Docker reclaim IMAGES mid-run. The harness was breaking
+        # itself, one orphaned volume at a time.
+        [[ -n "$item" ]] && docker rm -f -v "$item" >/dev/null 2>&1 || true
     done
     for item in ${CLEANUP_VOLUMES[@]+"${CLEANUP_VOLUMES[@]}"}; do
         [[ -n "$item" ]] && docker volume rm -f "$item" >/dev/null 2>&1 || true

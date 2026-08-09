@@ -25,7 +25,7 @@ c16="mdb-verify-sw16-$$"
 c17="mdb-verify-sw17-$$"
 
 cleanup() {
-    docker rm -f "$c16" "$c17" >/dev/null 2>&1 || true
+    docker rm -f -v "$c16" "$c17" >/dev/null 2>&1 || true
     docker volume rm -f "$vol16" "$vol17" >/dev/null 2>&1 || true
 }
 add_cleanup cleanup

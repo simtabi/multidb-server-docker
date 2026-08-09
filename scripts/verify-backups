@@ -27,7 +27,7 @@ CONTAINERS=()
 cleanup() {
     local c
     for c in ${CONTAINERS[@]+"${CONTAINERS[@]}"}; do
-        docker rm -f "$c" >/dev/null 2>&1 || true
+        docker rm -f -v "$c" >/dev/null 2>&1 || true
     done
 }
 trap cleanup EXIT
@@ -131,7 +131,7 @@ for engine in $(engine_list); do
         empty=$(( empty + 1 ))
     fi
 
-    docker rm -f "$c" >/dev/null 2>&1 || true
+    docker rm -f -v "$c" >/dev/null 2>&1 || true
 done
 
 printf '\n'

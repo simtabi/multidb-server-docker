@@ -158,7 +158,7 @@ for engine in $(engine_list); do
         vfail "$engine ACCEPTS UNAUTHENTICATED CONNECTIONS. SPEC section 22.3 forbids it."
     fi
 
-    docker rm -f "$name" >/dev/null 2>&1 || true
+    docker rm -f -v "$name" >/dev/null 2>&1 || true
     checked=$(( checked + 1 ))
 done
 

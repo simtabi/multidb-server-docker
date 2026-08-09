@@ -70,7 +70,7 @@ printf '%s' "$shutdown_logs" | grep -qi 'shutting down' \
     || vfail "no clean shutdown message; PostgreSQL was likely killed"
 
 # --- the proof: next boot must not perform crash recovery ---------------------
-docker rm -f "$name" >/dev/null 2>&1 || true
+docker rm -f -v "$name" >/dev/null 2>&1 || true
 name2="mdb-verify-s6-restart-$$"
 track_container "$name2"
 

@@ -156,6 +156,6 @@ vinfo "$engine PITR is active and recovers to a point in time"
 
     # Each engine gets a clean slate; the next iteration must not inherit this
     # one's container, volume or cleanup entries.
-    docker rm -f "$name" >/dev/null 2>&1 || true
+    docker rm -f -v "$name" >/dev/null 2>&1 || true
     docker volume rm -f "$vol" >/dev/null 2>&1 || true
 done
