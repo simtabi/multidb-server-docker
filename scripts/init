@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Initialise a db-toolkit checkout: environment file, generated secrets, and the
+# Initialise a my-multidb-server checkout: environment file, generated secrets, and the
 # TLS certificates PostgreSQL needs in order to start at all (SPEC section 13).
 #
 # Idempotent, and refuses to overwrite an existing environment file without
@@ -67,10 +67,10 @@ printf 'generating secrets\n'
 . "$ROOT/scripts/engine-lib.sh"
 for engine in $(engine_list); do
     engine_load "$engine" || continue
-    gen_secret "$DBTK_ENGINE_ROOT_SECRET"
+    gen_secret "$MMDB_ENGINE_ROOT_SECRET"
 done
 
-# HA roles. Generated unconditionally rather than only when DBTK_HA_ENABLE is
+# HA roles. Generated unconditionally rather than only when MMDB_HA_ENABLE is
 # true: enabling HA later must not require re-running an init that refuses to
 # run twice.
 gen_secret pg_replication_password.txt
@@ -100,7 +100,7 @@ gen_secret pgadmin_password.txt
 # stack cannot boot. Generating them here is what makes `make init && make up`
 # actually two commands.
 printf 'generating certificates\n'
-DBTK_ENV_FILE="$TARGET" "$ROOT/scripts/certs"
+MMDB_ENV_FILE="$TARGET" "$ROOT/scripts/certs"
 
 # -----------------------------------------------------------------------------
 # 4. Prod hardening
@@ -119,23 +119,23 @@ if (( PROD )); then
     ui_hash="$(docker run --rm "$caddy_image" caddy hash-password --plaintext "$ui_password" 2>/dev/null || true)"
     if [[ -z "$ui_hash" ]]; then
         printf '  could not compute the UI password hash (is docker running?)\n' >&2
-        printf '  set DBTK_UI_BASIC_AUTH_HASH manually: caddy hash-password\n' >&2
+        printf '  set MMDB_UI_BASIC_AUTH_HASH manually: caddy hash-password\n' >&2
         exit 1
     fi
 
     # BSD and GNU sed disagree about -i, so edit through a temporary file.
     tmp="$(mktemp)"
-    sed -e 's|^DBTK_TLS_ENFORCE=.*|DBTK_TLS_ENFORCE=true|' \
-        -e 's|^DBTK_PROFILES=.*|DBTK_PROFILES=pg,prod,backup|' \
-        -e 's|^DBTK_PG_SLOW_MS=.*|DBTK_PG_SLOW_MS=0|' \
-        -e 's|^DBTK_MYSQL_SLOW_SECONDS=.*|DBTK_MYSQL_SLOW_SECONDS=0|' \
-        -e 's|^DBTK_MARIADB_SLOW_SECONDS=.*|DBTK_MARIADB_SLOW_SECONDS=0|' \
-        -e 's|^DBTK_BACKUP_ENCRYPT=.*|DBTK_BACKUP_ENCRYPT=true|' \
-        -e 's|^DBTK_PG_PITR=.*|DBTK_PG_PITR=true|' \
-        -e 's|^DBTK_PGBACKREST_REPO_TYPE=.*|DBTK_PGBACKREST_REPO_TYPE=s3|' \
-        -e 's|^#DBTK_PG_HOST_PORT=.*|#DBTK_PG_HOST_PORT=|' \
-        -e "s|^#*DBTK_UI_BASIC_AUTH_USER=.*|DBTK_UI_BASIC_AUTH_USER=admin|" \
-        -e "s|^#*DBTK_UI_BASIC_AUTH_HASH=.*|DBTK_UI_BASIC_AUTH_HASH=${ui_hash//|/\\|}|" \
+    sed -e 's|^MMDB_TLS_ENFORCE=.*|MMDB_TLS_ENFORCE=true|' \
+        -e 's|^MMDB_PROFILES=.*|MMDB_PROFILES=pg,prod,backup|' \
+        -e 's|^MMDB_PG_SLOW_MS=.*|MMDB_PG_SLOW_MS=0|' \
+        -e 's|^MMDB_MYSQL_SLOW_SECONDS=.*|MMDB_MYSQL_SLOW_SECONDS=0|' \
+        -e 's|^MMDB_MARIADB_SLOW_SECONDS=.*|MMDB_MARIADB_SLOW_SECONDS=0|' \
+        -e 's|^MMDB_BACKUP_ENCRYPT=.*|MMDB_BACKUP_ENCRYPT=true|' \
+        -e 's|^MMDB_PG_PITR=.*|MMDB_PG_PITR=true|' \
+        -e 's|^MMDB_PGBACKREST_REPO_TYPE=.*|MMDB_PGBACKREST_REPO_TYPE=s3|' \
+        -e 's|^#MMDB_PG_HOST_PORT=.*|#MMDB_PG_HOST_PORT=|' \
+        -e "s|^#*MMDB_UI_BASIC_AUTH_USER=.*|MMDB_UI_BASIC_AUTH_USER=admin|" \
+        -e "s|^#*MMDB_UI_BASIC_AUTH_HASH=.*|MMDB_UI_BASIC_AUTH_HASH=${ui_hash//|/\\|}|" \
         "$TARGET" > "$tmp"
     mv "$tmp" "$TARGET"
 
@@ -144,10 +144,10 @@ if (( PROD )); then
     printf '\n'
     # shellcheck disable=SC2016  # backticks are prose here, not substitution
     printf '  STILL REQUIRED before `make up`:\n'
-    printf '    - DBTK_CADDY_ACME_EMAIL in %s\n' "${TARGET#"$ROOT"/}"
+    printf '    - MMDB_CADDY_ACME_EMAIL in %s\n' "${TARGET#"$ROOT"/}"
     # PITR to an off-site repository is required in prod (SPEC section 18, 7b
     # and 7c), and these are the only parts init cannot generate.
-    printf '    - DBTK_PGBACKREST_S3_BUCKET and _ENDPOINT in %s\n' "${TARGET#"$ROOT"/}"
+    printf '    - MMDB_PGBACKREST_S3_BUCKET and _ENDPOINT in %s\n' "${TARGET#"$ROOT"/}"
     printf '    - secrets/pgbackrest_s3_key.txt and secrets/pgbackrest_s3_secret.txt\n'
     printf '  Without it the prod Caddy config refuses to render, rather than\n'
     printf '  publishing a UI with no certificate.\n'
@@ -156,6 +156,6 @@ fi
 # -----------------------------------------------------------------------------
 # 5. Validate
 # -----------------------------------------------------------------------------
-DBTK_ENV_FILE="$TARGET" DBTK_CHECK_RENDERING="$PROD" "$ROOT/scripts/check-env"
+MMDB_ENV_FILE="$TARGET" MMDB_CHECK_RENDERING="$PROD" "$ROOT/scripts/check-env"
 
 printf '\nNext: make up\n'

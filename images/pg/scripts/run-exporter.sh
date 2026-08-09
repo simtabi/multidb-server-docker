@@ -7,15 +7,15 @@
 # off under compose, which runs the exporter as its own service instead --
 # one concern per container, except where the container IS the whole stack.
 
-DBTK_STAGE=dbtk-exporter
-export DBTK_STAGE
+MMDB_STAGE=mmdb-exporter
+export MMDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+# shellcheck source=mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
-if ! is_true "${DBTK_PG_EMBED_EXPORTER:-false}"; then
-    stage "embedded exporter disabled (DBTK_PG_EMBED_EXPORTER); idling"
+if ! is_true "${MMDB_PG_EMBED_EXPORTER:-false}"; then
+    stage "embedded exporter disabled (MMDB_PG_EMBED_EXPORTER); idling"
     # s6 supervises longruns and restarts them when they exit, so a disabled
     # service cannot simply return -- that would be a restart loop. Blocking
     # forever costs one sleeping process and no CPU, and keeps the service

@@ -73,10 +73,10 @@ case "$verb" in
         printf '\n'
         printf 'This promotes a different node to leader. In-flight transactions on the\n'
         printf 'current leader will be terminated.\n\n'
-        printf 'Type the cluster name (%s) to continue: ' "$(grep -E '^DBTK_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2- || printf 'dbtk-pg')"
+        printf 'Type the cluster name (%s) to continue: ' "$(grep -E '^MMDB_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2- || printf 'mmdb-pg')"
         read -r answer
-        expected="$(grep -E '^DBTK_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2-)"
-        expected="${expected:-dbtk-pg}"
+        expected="$(grep -E '^MMDB_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2-)"
+        expected="${expected:-mmdb-pg}"
         [[ "$answer" == "$expected" ]] || die "confirmation did not match; nothing was changed"
 
         if [[ -n "$NODE" ]]; then
@@ -94,7 +94,7 @@ case "$verb" in
         printf 'Type %s to continue: ' "$NODE"
         read -r answer
         [[ "$answer" == "$NODE" ]] || die "confirmation did not match; nothing was changed"
-        patronictl reinit --force "$(grep -E '^DBTK_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2- || printf 'dbtk-pg')" "$NODE"
+        patronictl reinit --force "$(grep -E '^MMDB_HA_CLUSTER_NAME=' .env 2>/dev/null | cut -d= -f2- || printf 'mmdb-pg')" "$NODE"
         log "reinit requested; watch progress with: make ha-status"
         ;;
 

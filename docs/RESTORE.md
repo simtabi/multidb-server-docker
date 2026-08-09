@@ -76,7 +76,7 @@ Common causes, most likely first:
 
 **Disk full.** Free space, then start. Nothing is corrupted.
 
-**Version mismatch.** `DBTK_PG_VERSION` was changed and PostgreSQL is pointed at
+**Version mismatch.** `MMDB_PG_VERSION` was changed and PostgreSQL is pointed at
 a data directory from another major. Set the variable back to the version that
 wrote the data and it starts. Volumes are per major precisely so this is
 recoverable rather than destructive — see [Upgrade](UPGRADE.md) to migrate.
@@ -113,7 +113,7 @@ backups/pg/globals-<timestamp>.sql
 
 Retention, schedule, compression and encryption are in `.env` under Backup.
 
-The toolkit writes backups to `DBTK_BACKUP_DIR` and does not ship them
+The toolkit writes backups to `MMDB_BACKUP_DIR` and does not ship them
 anywhere — copying them off the machine is yours to arrange. If you have not
 done that yet, do it before you need this page again: a backup on the machine
 that failed is not a backup.

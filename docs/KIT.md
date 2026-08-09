@@ -1,20 +1,20 @@
-# db-toolkit execution kit
+# my-multidb-server execution kit
 
-How to take db-toolkit-design.md from spec to running, tested software with a self-healing build loop. The principle behind everything here: an agent can only self-heal what a check can catch, so every task ends in an executable check and nothing is "done" until its check passes.
+How to take my-multidb-server-design.md from spec to running, tested software with a self-healing build loop. The principle behind everything here: an agent can only self-heal what a check can catch, so every task ends in an executable check and nothing is "done" until its check passes.
 
 ## 0. What you need
 
 - Docker Desktop, OrbStack, or colima running locally
 - Claude Code (desktop app Code tab, or `npm install -g @anthropic-ai/claude-code` for the terminal)
-- The spec: db-toolkit-design.md
+- The spec: my-multidb-server-design.md
 - A GitHub repo (CI is the neutral judge for the cross-platform matrix your laptop can't run)
 
 ## 1. One-time setup
 
 ```
-mkdir db-toolkit && cd db-toolkit
+mkdir my-multidb-server && cd my-multidb-server
 git init
-mkdir docs && cp ~/Downloads/db-toolkit-design.md docs/SPEC.md
+mkdir docs && cp ~/Downloads/my-multidb-server-design.md docs/SPEC.md
 # create CLAUDE.md from section 2 below
 git add -A && git commit -m "spec + loop rules"
 claude
@@ -23,9 +23,9 @@ claude
 ## 2. CLAUDE.md (put this at the repo root, verbatim)
 
 ```markdown
-# db-toolkit build rules
+# my-multidb-server build rules
 
-You are building db-toolkit per docs/SPEC.md. That file is the contract. Read it before any work.
+You are building my-multidb-server per docs/SPEC.md. That file is the contract. Read it before any work.
 
 ## The loop (applies to every task, no exceptions)
 1. PLAN: restate the task and name its executable check before writing code.

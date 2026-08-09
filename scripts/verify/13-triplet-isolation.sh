@@ -14,12 +14,12 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-name="dbtk-verify-triplet-$$"
+name="mmdb-verify-triplet-$$"
 track_container "$name"
 
 docker run -d --name "$name" \
-    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
-    -e DBTK_PG_DATABASES="alpha:alpha_user:dbtk-throwaway-alpha,beta:beta_user:dbtk-throwaway-beta" \
+    -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+    -e MMDB_PG_DATABASES="alpha:alpha_user:mmdb-throwaway-alpha,beta:beta_user:mmdb-throwaway-beta" \
     "$img" >/dev/null || vfail "container failed to start with triplet provisioning"
 
 wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
@@ -38,13 +38,13 @@ done
 vinfo "both databases and both roles provisioned"
 
 # Owner must be able to work in its own database.
-docker exec -e PGPASSWORD=dbtk-throwaway-alpha "$name" \
+docker exec -e PGPASSWORD=mmdb-throwaway-alpha "$name" \
     psql -U alpha_user -d alpha -tAc "CREATE TABLE t(i int); DROP TABLE t;" >/dev/null 2>&1 \
     || vfail "alpha_user cannot create a table in its own database"
 vinfo "alpha_user owns its own database"
 
 # The isolation assertion: alpha_user must NOT reach beta.
-if docker exec -e PGPASSWORD=dbtk-throwaway-alpha "$name" \
+if docker exec -e PGPASSWORD=mmdb-throwaway-alpha "$name" \
     psql -U alpha_user -d beta -tAc "SELECT 1" >/dev/null 2>&1; then
     vfail "alpha_user connected to database beta; projects are not isolated"
 fi

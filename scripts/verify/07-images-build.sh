@@ -17,14 +17,14 @@ built=0
 missing=()
 
 for engine in pg mysql mariadb cli; do
-    dockerfile="$DBTK_ROOT/images/$engine/Dockerfile"
+    dockerfile="$MMDB_ROOT/images/$engine/Dockerfile"
     if [[ ! -f "$dockerfile" ]]; then
         missing+=("images/$engine/Dockerfile")
         continue
     fi
 
     img="$(image_name "$engine")"
-    log="/tmp/dbtk-build-$engine.log"
+    log="/tmp/mmdb-build-$engine.log"
     vinfo "building $img"
 
     if ! build_image "$engine" "$img" >"$log" 2>&1; then

@@ -20,8 +20,8 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-name="dbtk-verify-harden-$$"
-vol="dbtk-verify-harden-vol-$$"
+name="mmdb-verify-harden-$$"
+vol="mmdb-verify-harden-vol-$$"
 track_container "$name"
 track_volume "$vol"
 
@@ -43,7 +43,7 @@ docker volume create "$vol" >/dev/null
 # "Permission denied" and exit 126, which reads like a file-ownership problem
 # and is not one.
 docker run -d --name "$name" \
-    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
+    -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
     --read-only \
     --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
     --cap-add DAC_OVERRIDE --cap-add FOWNER \

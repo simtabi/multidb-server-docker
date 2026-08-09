@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (mandatory pooling, UI basic auth, 3-node etcd quorum).
 - CI workflows for static analysis and the amd64/arm64 verify matrix.
 
-- `db-toolkit-pg`: PostgreSQL 15–18 with the full extension suite (vector,
+- `my-multidb-server-pg`: PostgreSQL 15–18 with the full extension suite (vector,
   PostGIS, pg_cron, pgaudit, pg_repack, pg_partman, pgtap, http, hypopg,
   pg_graphql, pg_net, pgsodium, pgjwt), supervised by s6-overlay v3.
 - Ordered s6 init: permissions, configuration, certificates, provisioning, then
@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-project triplet provisioning with cross-project access denied.
 - `make init`, `certs`, `build`, `up`, `down`, `status`, `logs`, `psql`.
 - `docker-compose.yml` with the `pg` and `ui` profiles and per-major volumes.
-- `db-toolkit-mysql` (8.0/8.4/9.7) and `db-toolkit-mariadb` (10.11/11.4/11.8),
+- `my-multidb-server-mysql` (8.0/8.4/9.7) and `my-multidb-server-mariadb` (10.11/11.4/11.8),
   both s6-supervised with baked utf8mb4 / `utf8mb4_unicode_ci` / explicit
   `sql_mode`, triplet provisioning, and the same tool suite.
 - phpMyAdmin serving both MySQL-family servers from one instance via
@@ -43,4 +43,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pg_graphql`'s packaged symlinks are flattened, which also protects against
   the PG 18 volume mount shadowing them (D-26).
 
-[Unreleased]: https://github.com/simtabi/db-toolkit-docker/commits/main
+[Unreleased]: https://github.com/simtabi/my-multidb-server/commits/main

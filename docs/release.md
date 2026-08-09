@@ -1,6 +1,6 @@
 # Release
 
-How a version of db-toolkit ships, and what a consumer gets.
+How a version of my-multidb-server ships, and what a consumer gets.
 
 > **Status:** the repository has `ci.yml` and `lint.yml`. The release workflow
 > described below is **not yet in `.github/workflows/`** — it is KIT phase 6, and
@@ -15,8 +15,8 @@ A release is one git tag, `vX.Y.Z`, that produces:
 
 | Artefact | Where |
 |---|---|
-| Engine images, one per engine per supported major | `ghcr.io/simtabi/db-toolkit-<engine>` |
-| The `cli` image | `ghcr.io/simtabi/db-toolkit-cli` |
+| Engine images, one per engine per supported major | `ghcr.io/simtabi/my-multidb-server-<engine>` |
+| The `cli` image | `ghcr.io/simtabi/my-multidb-server-cli` |
 | Source tarball | GitHub release |
 | SBOM per image | attached to the image |
 | Build provenance attestation | attached to the image |
@@ -36,7 +36,7 @@ Semantic versioning, applied to *the toolkit*, not to the databases inside it.
 
 | Change | Bump |
 |---|---|
-| A `DBTK_` variable is removed or changes meaning | major |
+| A `MMDB_` variable is removed or changes meaning | major |
 | A `make` target is removed or its arguments change | major |
 | A default changes in a way that alters running behaviour | major |
 | An engine or engine version is added | minor |

@@ -5,7 +5,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 # SPEC section 18: "repo/image-history grep finds no credential".
 # Passwords travel by the _FILE convention only, so an assignment with a
@@ -13,19 +13,19 @@ cd "$DBTK_ROOT" || exit 1
 #
 # Two refinements, both learned by this check firing on itself in phase 1:
 #
-#  1. The key must END with a secret-ish word. DBTK_MYSQL_NATIVE_PASSWORD_COMPAT
+#  1. The key must END with a secret-ish word. MMDB_MYSQL_NATIVE_PASSWORD_COMPAT
 #     is a boolean toggle, not a credential, and matching "contains PASSWORD"
 #     flagged it.
 #
 #  2. The harness needs throwaway passwords for containers that live for
-#     seconds. Those carry the mandatory `dbtk-throwaway-` prefix, which is
+#     seconds. Those carry the mandatory `mmdb-throwaway-` prefix, which is
 #     exempt HERE ONLY. Deliberately a value convention rather than a path
 #     exemption: exempting scripts/verify/ wholesale would create somewhere a
 #     real credential could hide, whereas a real credential will never carry
 #     this prefix.
 #
 #  3. The value may name WHERE the secret lives rather than being one, which is
-#     the whole point of the _FILE convention. `DBTK_ENGINE_ROOT_SECRET` holds
+#     the whole point of the _FILE convention. `MMDB_ENGINE_ROOT_SECRET` holds
 #     a secret's filename and `SECRET=/run/secrets/...` holds its path. Both are
 #     indirection, the same class as ${...} and $(...) below.
 #
@@ -71,7 +71,7 @@ for f in "${files[@]}"; do
         [[ -z "$value" ]] && continue
 
         case "$value" in
-            dbtk-throwaway-*) continue ;;              # harness fixtures, see above
+            mmdb-throwaway-*) continue ;;              # harness fixtures, see above
             *\$\{*|*\$\(*|__FILE__*|secrets/*) continue ;;  # indirection, not a literal
             # Names where the secret lives; see refinement 3 above.
             /*) continue ;;

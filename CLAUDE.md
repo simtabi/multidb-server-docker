@@ -1,6 +1,6 @@
-# db-toolkit build rules
+# my-multidb-server build rules
 
-You are building db-toolkit per docs/SPEC.md. That file is the contract. Read it before any work.
+You are building my-multidb-server per docs/SPEC.md. That file is the contract. Read it before any work.
 
 ## The loop (applies to every task, no exceptions)
 1. PLAN: restate the task and name its executable check before writing code.

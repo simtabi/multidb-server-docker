@@ -5,7 +5,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 # DESIGN.md D-05 is why this check exists rather than being a convention:
 # nfrastack/db-backup:latest currently publishes ONLY linux/arm64, so an amd64
@@ -48,7 +48,7 @@ for f in "${candidates[@]}"; do
             # published. The rule exists to pin what we consume, not what we
             # produce; their bases are pinned in images/bases.tsv, validated
             # below.
-            *ghcr.io/simtabi/db-toolkit-*) continue ;;
+            *ghcr.io/simtabi/my-multidb-server-*) continue ;;
         esac
         printf '      %s: not digest-pinned: %s\n' "${f#./}" "$line" >&2
         (( violations++ )) || true
@@ -59,7 +59,7 @@ done
 # major. That indirection is only legitimate if the thing it resolves to is
 # itself pinned, so images/bases.tsv is validated as the real source of truth
 # rather than treated as an exemption.
-bases="$DBTK_ROOT/images/bases.tsv"
+bases="$MMDB_ROOT/images/bases.tsv"
 if [[ -f "$bases" ]]; then
     entries=0
     while IFS= read -r line; do

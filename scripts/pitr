@@ -21,11 +21,11 @@ cd "$ROOT" || exit 1
 log() { printf '[pitr] %s\n' "$*"; }
 die() { printf '[pitr] ERROR: %s\n' "$*" >&2; exit 1; }
 
-ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
-stanza="$(get DBTK_PGBACKREST_STANZA)"; stanza="${stanza:-dbtk}"
+stanza="$(get MMDB_PGBACKREST_STANZA)"; stanza="${stanza:-mmdb}"
 ENGINE=pg
 
 verb="${1:-info}"
@@ -46,7 +46,7 @@ upper="$(printf '%s' "$ENGINE" | tr '[:lower:]-' '[:upper:]_')"
 svc="$ENGINE"
 
 pitr_enabled() {
-    local v; v="$(get "DBTK_${upper}_PITR")"
+    local v; v="$(get "MMDB_${upper}_PITR")"
     case "$v" in true|TRUE|1|yes|on) return 0 ;; *) return 1 ;; esac
 }
 
@@ -61,12 +61,12 @@ mysql_client() { [ "$ENGINE" = mariadb ] && printf 'mariadb' || printf 'mysql'; 
 # all, which is why engines/mysql/engine.conf declares PITR_CAPABLE=false.
 binlog_tool() { [ "$ENGINE" = mariadb ] && printf 'mariadb-binlog' || printf 'mysqlbinlog'; }
 binlog_dir() {
-    local d; d="$(get DBTK_BINLOG_DIR)"
-    printf '%s' "${d:-/var/lib/dbtk-binlog}"
+    local d; d="$(get MMDB_BINLOG_DIR)"
+    printf '%s' "${d:-/var/lib/mmdb-binlog}"
 }
 root_pw() { tr -d '\n' < "$ROOT/secrets/${ENGINE}_root_password.txt"; }
 
-pitr_enabled || die "PITR is off for $ENGINE. Set DBTK_${upper}_PITR=true and restart:
+pitr_enabled || die "PITR is off for $ENGINE. Set MMDB_${upper}_PITR=true and restart:
        neither archive_mode nor log_bin can be enabled without one, so this is
        not a live toggle."
 
@@ -183,13 +183,13 @@ if is_mysql_family; then
             log "replaying:$logs"
             # shellcheck disable=SC2086  # $logs is a deliberate argument list
             docker compose exec -T "$svc" "$tool" ${stop_args[@]+"${stop_args[@]}"} $logs \
-                > /tmp/dbtk-replay.$$.sql 2>/dev/null \
-                || { rm -f "/tmp/dbtk-replay.$$.sql"; die "reading the binary log failed"; }
+                > /tmp/mmdb-replay.$$.sql 2>/dev/null \
+                || { rm -f "/tmp/mmdb-replay.$$.sql"; die "reading the binary log failed"; }
 
             docker compose exec -T "$svc" "$client" --protocol=socket -uroot -p"$(root_pw)" \
-                < "/tmp/dbtk-replay.$$.sql" \
-                || { rm -f "/tmp/dbtk-replay.$$.sql"; die "applying the binary log failed"; }
-            rm -f "/tmp/dbtk-replay.$$.sql"
+                < "/tmp/mmdb-replay.$$.sql" \
+                || { rm -f "/tmp/mmdb-replay.$$.sql"; die "applying the binary log failed"; }
+            rm -f "/tmp/mmdb-replay.$$.sql"
 
             log "replay complete; the database is at $TARGET"
             ;;

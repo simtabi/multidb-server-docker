@@ -1,4 +1,4 @@
-# db-toolkit PROD overlay.
+# my-multidb-server PROD overlay.
 #
 # Three things change from dev, and each is a deliberate default rather than a
 # suggestion (SPEC section 7):
@@ -21,36 +21,36 @@ services:
     # merging with it. A merge would keep the dev binding.
     ports: !override []
     environment:
-      DBTK_TLS_ENFORCE: "true"
+      MMDB_TLS_ENFORCE: "true"
       # Slow-query logging is dev-on / prod-off (SPEC section 12).
-      DBTK_PG_SLOW_MS: "0"
+      MMDB_PG_SLOW_MS: "0"
     deploy:
       resources:
         limits:
-          cpus: "${DBTK_PG_CPU_LIMIT:-2}"
-          memory: ${DBTK_PG_MEM_LIMIT:-4g}
+          cpus: "${MMDB_PG_CPU_LIMIT:-2}"
+          memory: ${MMDB_PG_MEM_LIMIT:-4g}
 
   mysql:
     ports: !override []
     environment:
-      DBTK_TLS_ENFORCE: "true"
-      DBTK_MYSQL_SLOW_SECONDS: "0"
+      MMDB_TLS_ENFORCE: "true"
+      MMDB_MYSQL_SLOW_SECONDS: "0"
     deploy:
       resources:
         limits:
-          cpus: "${DBTK_MYSQL_CPU_LIMIT:-2}"
-          memory: ${DBTK_MYSQL_MEM_LIMIT:-2g}
+          cpus: "${MMDB_MYSQL_CPU_LIMIT:-2}"
+          memory: ${MMDB_MYSQL_MEM_LIMIT:-2g}
 
   mariadb:
     ports: !override []
     environment:
-      DBTK_TLS_ENFORCE: "true"
-      DBTK_MARIADB_SLOW_SECONDS: "0"
+      MMDB_TLS_ENFORCE: "true"
+      MMDB_MARIADB_SLOW_SECONDS: "0"
     deploy:
       resources:
         limits:
-          cpus: "${DBTK_MARIADB_CPU_LIMIT:-2}"
-          memory: ${DBTK_MARIADB_MEM_LIMIT:-2g}
+          cpus: "${MMDB_MARIADB_CPU_LIMIT:-2}"
+          memory: ${MMDB_MARIADB_MEM_LIMIT:-2g}
 
   # The UIs stay on the internal network with no published port of their own.
   # They are reachable only through Caddy, which is where basic auth lives.
@@ -65,8 +65,8 @@ services:
   # real certificates and requires basic auth on every UI route.
   caddy:
     ports: !override
-      - "${DBTK_CADDY_BIND_ADDR:-0.0.0.0}:${DBTK_CADDY_HTTP_PORT:-80}:80"
-      - "${DBTK_CADDY_BIND_ADDR:-0.0.0.0}:${DBTK_CADDY_HTTPS_PORT:-443}:443"
+      - "${MMDB_CADDY_BIND_ADDR:-0.0.0.0}:${MMDB_CADDY_HTTP_PORT:-80}:80"
+      - "${MMDB_CADDY_BIND_ADDR:-0.0.0.0}:${MMDB_CADDY_HTTPS_PORT:-443}:443"
 
   # Connection pooling is MANDATORY under prod, not optional (SPEC section
   # 21.1): roughly 10 MB per direct PostgreSQL connection means ~500
@@ -76,7 +76,7 @@ services:
     profiles: [prod, ha]
     # The official pgbouncer image is amd64-only and stuck at 1.15.0; this one
     # is multi-arch and current (DESIGN.md D-10).
-    image: ghcr.io/simtabi/db-toolkit-pgbouncer:dev
+    image: ghcr.io/simtabi/my-multidb-server-pgbouncer:dev
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -85,15 +85,15 @@ services:
     environment:
       DB_HOST: pg
       DB_PORT: "5432"
-      POOL_MODE: ${DBTK_PGBOUNCER_POOL_MODE:-transaction}
-      DEFAULT_POOL_SIZE: ${DBTK_PGBOUNCER_DEFAULT_POOL_SIZE:-25}
-      MAX_CLIENT_CONN: ${DBTK_PGBOUNCER_MAX_CLIENT_CONN:-1000}
+      POOL_MODE: ${MMDB_PGBOUNCER_POOL_MODE:-transaction}
+      DEFAULT_POOL_SIZE: ${MMDB_PGBOUNCER_DEFAULT_POOL_SIZE:-25}
+      MAX_CLIENT_CONN: ${MMDB_PGBOUNCER_MAX_CLIENT_CONN:-1000}
       AUTH_TYPE: scram-sha-256
     volumes:
       - ./secrets:/run/secrets:ro
-    networks: [dbtk]
+    networks: [mmdb]
     logging:
       driver: json-file
       options:
-        max-size: ${DBTK_LOG_MAX_SIZE:-10m}
-        max-file: "${DBTK_LOG_MAX_FILE:-3}"
+        max-size: ${MMDB_LOG_MAX_SIZE:-10m}
+        max-file: "${MMDB_LOG_MAX_FILE:-3}"

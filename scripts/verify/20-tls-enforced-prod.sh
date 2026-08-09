@@ -18,39 +18,39 @@ check_family() {
     img="$(image_name "$engine")"
     need_image "$img"
 
-    name="dbtk-verify-tlsenf-$engine-$$"
-    sockvol="dbtk-verify-tlsenf-sock-$engine-$$"
+    name="mmdb-verify-tlsenf-$engine-$$"
+    sockvol="mmdb-verify-tlsenf-sock-$engine-$$"
     track_container "$name"
     docker volume create "$sockvol" >/dev/null
 
     docker run -d --name "$name" \
-        -e "$pw_env=dbtk-throwaway-verify" \
-        -e DBTK_TLS_ENFORCE=true \
-        -e DBTK_SOCKETS=true \
-        -v "$DBTK_ROOT/certs:/certs:ro" \
+        -e "$pw_env=mmdb-throwaway-verify" \
+        -e MMDB_TLS_ENFORCE=true \
+        -e MMDB_SOCKETS=true \
+        -v "$MMDB_ROOT/certs:/certs:ro" \
         -v "$sockvol:/var/run/mysqld" \
-        "$img" >/dev/null || vfail "$engine failed to start with DBTK_TLS_ENFORCE=true"
+        "$img" >/dev/null || vfail "$engine failed to start with MMDB_TLS_ENFORCE=true"
 
     wait_ready 90 "$engine to accept connections" \
-        docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -e "SELECT 1"
+        docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify --protocol=socket -e "SELECT 1"
 
     # require_secure_transport must actually be ON.
     local rst
-    rst="$(docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -N -B \
+    rst="$(docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify --protocol=socket -N -B \
         -e "SELECT @@require_secure_transport" 2>/dev/null | tr -d ' \r')"
     [[ "$rst" == "1" || "$rst" == "ON" ]] \
         || vfail "$engine require_secure_transport is '$rst', expected ON"
     vinfo "$engine require_secure_transport=ON"
 
     # A plaintext TCP connection must be REFUSED BY THE SERVER.
-    if docker run --rm --network "container:$name" -e MYSQL_PWD=dbtk-throwaway-verify "$img" \
+    if docker run --rm --network "container:$name" -e MYSQL_PWD=mmdb-throwaway-verify "$img" \
         "$client" -h 127.0.0.1 -uroot --ssl-mode=DISABLED -e "SELECT 1" >/dev/null 2>&1; then
         vfail "$engine accepted a plaintext TCP connection under TLS enforcement"
     fi
     vinfo "$engine refused plaintext TCP"
 
     # ...but the socket must still work (SPEC section 9.1).
-    docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify --protocol=socket -e "SELECT 1" >/dev/null 2>&1 \
+    docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify --protocol=socket -e "SELECT 1" >/dev/null 2>&1 \
         || vfail "$engine broke socket connections under TLS enforcement; sockets are a secure transport"
     vinfo "$engine socket connections still work"
 
@@ -63,11 +63,11 @@ check_family mariadb MARIADB_ROOT_PASSWORD mariadb
 # PostgreSQL: pg_hba must be hostssl-only under enforcement.
 img="$(image_name pg)"
 need_image "$img"
-name="dbtk-verify-tlsenf-pg-$$"
+name="mmdb-verify-tlsenf-pg-$$"
 track_container "$name"
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify -e DBTK_TLS_ENFORCE=true \
-    -v "$DBTK_ROOT/certs:/certs:ro" "$img" >/dev/null \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=mmdb-throwaway-verify -e MMDB_TLS_ENFORCE=true \
+    -v "$MMDB_ROOT/certs:/certs:ro" "$img" >/dev/null \
     || vfail "PG failed to start with TLS enforcement"
 wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 

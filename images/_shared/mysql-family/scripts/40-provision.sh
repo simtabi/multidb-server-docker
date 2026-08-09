@@ -3,15 +3,15 @@
 # Stage 4: multi-project provisioning.
 #
 # Same triplet contract as PostgreSQL (SPEC section 6):
-# DBTK_MYSQL_DATABASES / DBTK_MARIADB_DATABASES = "db:user:password,...".
+# MMDB_MYSQL_DATABASES / MMDB_MARIADB_DATABASES = "db:user:password,...".
 #
 # Emitted into /docker-entrypoint-initdb.d rather than executed here, because
 # the upstream entrypoint owns first-run initialisation.
 
-DBTK_STAGE=dbtk-provision
-export DBTK_STAGE
-# shellcheck source=dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+MMDB_STAGE=mmdb-provision
+export MMDB_STAGE
+# shellcheck source=mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
 triplets="$(engine_env DATABASES '')"
 
@@ -25,7 +25,7 @@ if datadir_initialised; then
     exit 0
 fi
 
-sql="$DBTK_INITDB_DIR/50-dbtk-provision.sql"
+sql="$MMDB_INITDB_DIR/50-mmdb-provision.sql"
 : > "$sql"
 count=0
 
@@ -41,7 +41,7 @@ for entry in "${entries[@]}"; do
     [[ -n "$db" && -n "$user" ]] || die "malformed triplet (want db:user:password): $entry"
 
     if [[ "$pass" == "__FILE__" ]]; then
-        secret_file="/run/secrets/${DBTK_ENGINE}_${user}_password.txt"
+        secret_file="/run/secrets/${MMDB_ENGINE}_${user}_password.txt"
         [[ -r "$secret_file" ]] || die "triplet for '$db' uses __FILE__ but $secret_file is not readable"
         pass="$(tr -d '\n' < "$secret_file")"
     fi

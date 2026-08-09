@@ -35,8 +35,8 @@ both. Two things are not identical across architectures:
 ## Install
 
 ```bash
-git clone https://github.com/simtabi/db-toolkit-docker.git
-cd db-toolkit-docker
+git clone https://github.com/simtabi/my-multidb-server.git
+cd my-multidb-server
 make init
 ```
 
@@ -97,14 +97,14 @@ the port and the setting:
 
 ```
 check-env port(s) already in use on this machine:
-       8080 (DBTK_ADMINER_HOST_PORT)
+       8080 (MMDB_ADMINER_HOST_PORT)
 ```
 
 Something native is usually on 5432, 3306 or 8080 — a Homebrew PostgreSQL,
 another project's Adminer. Either stop it, or move ours:
 
 ```bash
-DBTK_PG_HOST_PORT=5433 make up
+MMDB_PG_HOST_PORT=5433 make up
 ```
 
 Find what holds a port with `lsof -nP -iTCP:8080 -sTCP:LISTEN` on macOS, or
@@ -120,10 +120,10 @@ docker compose logs pg --tail 50
 
 **MongoDB 8.x crash-loops on start.** That is a known upstream incompatibility
 with Linux kernel 6.19 and later (SERVER-121912), which includes current Docker
-Desktop VMs. Use `DBTK_MONGODB_VERSION=7.0`, which is why 7.0 is the default.
+Desktop VMs. Use `MMDB_MONGODB_VERSION=7.0`, which is why 7.0 is the default.
 
 **Cassandra never becomes healthy.** It is almost always memory. Cassandra needs
-about 2 GB to itself; give Docker 8 GB or raise `DBTK_CASSANDRA_HEAP`.
+about 2 GB to itself; give Docker 8 GB or raise `MMDB_CASSANDRA_HEAP`.
 
 **`make build` fails on a PostgreSQL extension.** Check whether it is one of the
 amd64-only extensions listed in `DESIGN.md`. If it is not, that is a bug worth

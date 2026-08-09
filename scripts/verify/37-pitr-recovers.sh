@@ -22,8 +22,8 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-name="dbtk-verify-pitr-$$"
-vol="dbtk-verify-pitr-repo-$$"
+name="mmdb-verify-pitr-$$"
+vol="mmdb-verify-pitr-repo-$$"
 track_container "$name"
 
 docker volume rm -f "$vol" >/dev/null 2>&1 || true
@@ -31,9 +31,9 @@ docker volume create "$vol" >/dev/null
 track_volume "$vol"
 
 docker run -d --name "$name" \
-    -e POSTGRES_PASSWORD=dbtk-throwaway-pitr \
-    -e DBTK_PG_PITR=true \
-    -e DBTK_PG_ARCHIVE_TIMEOUT=5 \
+    -e POSTGRES_PASSWORD=mmdb-throwaway-pitr \
+    -e MMDB_PG_PITR=true \
+    -e MMDB_PG_ARCHIVE_TIMEOUT=5 \
     -v "$vol:/var/lib/pgbackrest" \
     "$img" >/dev/null || vfail "container failed to start"
 
@@ -50,7 +50,7 @@ vinfo "archive_mode is on"
 
 wait_ready 180 "pgBackRest to finish its initial full backup" \
     docker exec -u postgres "$name" sh -c \
-    'pgbackrest --stanza=dbtk info 2>/dev/null | grep -q "full backup"'
+    'pgbackrest --stanza=mmdb info 2>/dev/null | grep -q "full backup"'
 vinfo "initial full backup present: recovery has a base to replay from"
 
 # Row A, then the target instant, then row B.
@@ -75,7 +75,7 @@ vinfo "wrote 'before', recorded the target, wrote 'after'"
 # the check would fail for a reason that has nothing to do with PITR.
 psql_pg -c "SELECT pg_switch_wal()" >/dev/null
 sleep 5
-docker exec -u postgres "$name" pgbackrest --stanza=dbtk check >/dev/null 2>&1 \
+docker exec -u postgres "$name" pgbackrest --stanza=mmdb check >/dev/null 2>&1 \
     || vfail "pgBackRest check failed: archiving is not working"
 vinfo "WAL archiving verified by pgbackrest check"
 
@@ -83,7 +83,7 @@ vinfo "WAL archiving verified by pgbackrest check"
 docker exec -u postgres "$name" pg_ctl -D /var/lib/postgresql/data -m fast -w stop >/dev/null 2>&1 \
     || vfail "could not stop PostgreSQL for recovery"
 
-docker exec -u postgres "$name" pgbackrest --stanza=dbtk --delta \
+docker exec -u postgres "$name" pgbackrest --stanza=mmdb --delta \
     --type=time --target="$target" --target-action=promote restore >/dev/null 2>&1 \
     || vfail "pgbackrest restore failed"
 

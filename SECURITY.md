@@ -12,7 +12,7 @@ disclosure.
 
 ## Supported versions
 
-The most recent minor release of db-toolkit is supported. Engine images track
+The most recent minor release of my-multidb-server is supported. Engine images track
 upstream PostgreSQL, MySQL, and MariaDB support windows; an engine major that
 upstream has ended support for is removed from the version menu at the next
 minor release, announced in `CHANGELOG.md`.
@@ -23,7 +23,7 @@ Every published image carries a build-provenance attestation and an SBOM
 generated in CI.
 
 ```bash
-gh attestation verify oci://ghcr.io/simtabi/db-toolkit-pg:17 --owner simtabi
+gh attestation verify oci://ghcr.io/simtabi/my-multidb-server-pg:17 --owner simtabi
 ```
 
 Images are pinned by digest throughout this repository. If a digest in

@@ -38,11 +38,11 @@ for engine in $(engine_list); do
     engine_load "$engine" || continue
     # Only engines that actually have a generated pooler; declaring an image is
     # not the same as having configured one (see scripts/gen-compose).
-    [[ "${DBTK_ENGINE_POOLING:-driver}" == "external" ]] || continue
-    [[ -f "$DBTK_ENGINE_DIR/compose-pooler.yml" ]] || continue
+    [[ "${MMDB_ENGINE_POOLING:-driver}" == "external" ]] || continue
+    [[ -f "$MMDB_ENGINE_DIR/compose-pooler.yml" ]] || continue
 
     case ",${input}," in
-        *",${DBTK_ENGINE_NAME},"*) out="${out:+$out,}${DBTK_ENGINE_NAME}-pooler" ;;
+        *",${MMDB_ENGINE_NAME},"*) out="${out:+$out,}${MMDB_ENGINE_NAME}-pooler" ;;
     esac
 done
 

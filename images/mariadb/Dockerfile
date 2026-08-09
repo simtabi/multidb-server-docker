@@ -1,4 +1,4 @@
-# db-toolkit-mariadb — MariaDB with baked configuration, supervised by s6.
+# my-multidb-server-mariadb — MariaDB with baked configuration, supervised by s6.
 #
 # Build context is images/, not images/mariadb/, so this shares the init
 # scripts and s6 tree with the MySQL image (see images/_shared/mysql-family).
@@ -12,11 +12,11 @@ ARG ENGINE_VERSION=11.4
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG RCLONE_VERSION=1.75.0
 
-LABEL org.opencontainers.image.title="db-toolkit-mariadb" \
-      org.opencontainers.image.description="MariaDB with db-toolkit configuration and tooling, supervised by s6-overlay" \
+LABEL org.opencontainers.image.title="my-multidb-server-mariadb" \
+      org.opencontainers.image.description="MariaDB with my-multidb-server configuration and tooling, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/simtabi/db-toolkit-docker"
+      org.opencontainers.image.source="https://github.com/simtabi/my-multidb-server"
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
@@ -57,13 +57,13 @@ RUN set -eux; \
 
 COPY _shared/mysql-family/s6/ /etc/s6-overlay/s6-rc.d/
 COPY _shared/mysql-family/user-bundles.d/ /etc/s6-overlay/user-bundles.d/
-COPY _shared/mysql-family/scripts/ /usr/local/lib/dbtk/
+COPY _shared/mysql-family/scripts/ /usr/local/lib/mmdb/
 
-ENV DBTK_ENGINE=mariadb
+ENV MMDB_ENGINE=mariadb
 
 RUN set -eux; \
-    chmod +x /usr/local/lib/dbtk/*.sh; \
-    chmod +x /etc/s6-overlay/s6-rc.d/dbtk-engine/run; \
+    chmod +x /usr/local/lib/mmdb/*.sh; \
+    chmod +x /etc/s6-overlay/s6-rc.d/mmdb-engine/run; \
     mkdir -p /etc/mysql/conf.d /var/run/mysqld; \
     chown -R mysql:mysql /var/run/mysqld
 

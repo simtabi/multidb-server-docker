@@ -30,7 +30,7 @@ wrong.
 3. starts the new major against a fresh volume
 4. restores
 5. compares object and row counts, and **fails loudly if they disagree**
-6. tells you to set `DBTK_PG_VERSION=17` — it does not edit `.env` for you
+6. tells you to set `MMDB_PG_VERSION=17` — it does not edit `.env` for you
 
 Step 6 is deliberate. The upgrade proving it worked and you deciding to switch
 are two different decisions, and collapsing them means a surprise the next time
@@ -39,7 +39,7 @@ anyone runs `make up`.
 ## Then switch
 
 ```
-DBTK_PG_VERSION=17
+MMDB_PG_VERSION=17
 ```
 
 ```bash
@@ -50,7 +50,7 @@ make psql -c '\l'
 ## Rolling back
 
 ```
-DBTK_PG_VERSION=16
+MMDB_PG_VERSION=16
 ```
 
 ```bash
@@ -87,7 +87,7 @@ Two version-specific traps, both of which bite after the upgrade rather than
 during it:
 
 **MySQL 8.4 removed `mysql_native_password`.** Clients too old to speak
-`caching_sha2_password` stop connecting. `DBTK_MYSQL_NATIVE_PASSWORD_COMPAT=true`
+`caching_sha2_password` stop connecting. `MMDB_MYSQL_NATIVE_PASSWORD_COMPAT=true`
 re-enables it as a transition, not a destination.
 
 **MariaDB and MySQL have diverged** far enough that they are not interchangeable
@@ -104,7 +104,7 @@ make upgrade ENGINE=mongodb FROM=7.0 TO=8.0
 7.0. Upgrading in place past a skipped major produces a server that will not
 start against the data files.
 
-Also note `DBTK_MONGODB_VERSION=7.0` is the default for a reason: 8.x crash-loops
+Also note `MMDB_MONGODB_VERSION=7.0` is the default for a reason: 8.x crash-loops
 on Linux kernel 6.19 and later (SERVER-121912), which includes current Docker
 Desktop VMs. Verify 8.x starts on your machine before you migrate to it.
 
@@ -119,8 +119,8 @@ Only once the new version has been running long enough that you would have
 noticed a problem. There is no hurry, and the disk is cheaper than the regret.
 
 ```bash
-docker volume ls | grep dbtk
-docker volume rm dbtk_pg16_data
+docker volume ls | grep mmdb
+docker volume rm mmdb_pg16_data
 ```
 
 ---

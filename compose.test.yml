@@ -1,4 +1,4 @@
-# db-toolkit TEST profile — speed over durability, for CI and test suites.
+# my-multidb-server TEST profile — speed over durability, for CI and test suites.
 #
 # **DATA LOSS ON STOP IS THE POINT.** The data directory is a tmpfs and every
 # durability guarantee is switched off. Never point this at anything you intend
@@ -14,7 +14,7 @@ services:
       # flush wait and full_page_writes=off removes torn-page protection, both
       # of which are pure overhead when the storage is RAM and the data is
       # disposable.
-      DBTK_PG_TEST_MODE: "true"
+      MMDB_PG_TEST_MODE: "true"
     tmpfs:
       # PostgreSQL refuses to start on a data directory with loose permissions,
       # so the mode is set explicitly. uid/gid 999 is the postgres user in the
@@ -29,7 +29,7 @@ services:
 
   mysql:
     environment:
-      DBTK_MYSQL_TEST_MODE: "true"
+      MMDB_MYSQL_TEST_MODE: "true"
     tmpfs:
       - /var/lib/mysql:rw,mode=0700,uid=999,gid=999,size=2g
     # !override replaces the base file's list instead of merging with it.
@@ -41,7 +41,7 @@ services:
 
   mariadb:
     environment:
-      DBTK_MARIADB_TEST_MODE: "true"
+      MMDB_MARIADB_TEST_MODE: "true"
     tmpfs:
       - /var/lib/mysql:rw,mode=0700,uid=999,gid=999,size=2g
     # !override replaces the base file's list instead of merging with it.

@@ -6,7 +6,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 # SPEC section 11: "A backup that has never been restored is a hope, not a
 # backup." This check is the difference between the two.
@@ -15,8 +15,8 @@ cd "$DBTK_ROOT" || exit 1
 # mysqldump omits routines and events unless asked, and a per-database pg_dump
 # omits roles and grants, which is why globals are dumped alongside.
 
-need_file "$DBTK_ROOT/scripts/backup"
-need_file "$DBTK_ROOT/scripts/restore"
+need_file "$MMDB_ROOT/scripts/backup"
+need_file "$MMDB_ROOT/scripts/restore"
 
 make up PROFILES=pg,mysql,mariadb >/dev/null 2>&1 || vfail "make up failed"
 add_cleanup 'make down'

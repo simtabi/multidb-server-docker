@@ -1,11 +1,11 @@
-# db-toolkit — a thin orchestrator. Selection and wiring only.
+# my-multidb-server — a thin orchestrator. Selection and wiring only.
 #
 # Everything that configures an engine lives in its image (SPEC decision 11), so
 # this file chooses which engines run and how they are exposed. Nothing here is
-# published to the host by default: apps join the dbtk network by service name.
+# published to the host by default: apps join the mmdb network by service name.
 #
 # Internal container ports are fixed and never change. Every host-side binding
-# is ${DBTK_*_HOST_PORT}-driven, so resolving a port collision on any machine is
+# is ${MMDB_*_HOST_PORT}-driven, so resolving a port collision on any machine is
 # a one-line .env change and never an edit to this file (SPEC section 7).
 #
 # ENGINE SERVICES ARE NOT HERE. They are generated into compose.engines.yml
@@ -13,13 +13,13 @@
 # up via COMPOSE_FILE in .env. This file holds the services there is exactly
 # one of: the UIs, Caddy, the exporters and the backup sidecars.
 
-name: ${COMPOSE_PROJECT_NAME:-dbtk}
+name: ${COMPOSE_PROJECT_NAME:-mmdb}
 
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: ${DBTK_LOG_MAX_SIZE:-10m}
-    max-file: "${DBTK_LOG_MAX_FILE:-3}"
+    max-size: ${MMDB_LOG_MAX_SIZE:-10m}
+    max-file: "${MMDB_LOG_MAX_FILE:-3}"
 
 x-hardening: &hardening
   security_opt:
@@ -36,12 +36,12 @@ services:
     environment:
       # A comma-separated list, which is what lets a single instance offer both
       # servers on the login screen (SPEC section 18).
-      PMA_HOSTS: ${DBTK_PMA_HOSTS:-mysql,mariadb}
-      PMA_PORTS: ${DBTK_PMA_PORTS:-3306,3306}
-      UPLOAD_LIMIT: ${DBTK_PMA_UPLOAD_LIMIT:-256M}
+      PMA_HOSTS: ${MMDB_PMA_HOSTS:-mysql,mariadb}
+      PMA_PORTS: ${MMDB_PMA_PORTS:-3306,3306}
+      UPLOAD_LIMIT: ${MMDB_PMA_UPLOAD_LIMIT:-256M}
     ports:
-      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_PMA_HOST_PORT:-8081}:80"
-    networks: [dbtk]
+      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_PMA_HOST_PORT:-8081}:80"
+    networks: [mmdb]
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -55,10 +55,10 @@ services:
     environment:
       # Pre-wired so the UI opens ready to log in rather than asking for a
       # hostname (SPEC section 7).
-      ADMINER_DEFAULT_SERVER: ${DBTK_ADMINER_DEFAULT_SERVER:-pg}
+      ADMINER_DEFAULT_SERVER: ${MMDB_ADMINER_DEFAULT_SERVER:-pg}
     ports:
-      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_ADMINER_HOST_PORT:-8080}:8080"
-    networks: [dbtk]
+      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_ADMINER_HOST_PORT:-8080}:8080"
+    networks: [mmdb]
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ services:
     image: dpage/pgadmin4:9.9@sha256:5d9624a93634d1c5e595619cc57b1d330758120d1baf445fa97300c0c1fc3c0a
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${DBTK_PGADMIN_EMAIL:-admin@db.localhost}
+      PGADMIN_DEFAULT_EMAIL: ${MMDB_PGADMIN_EMAIL:-admin@db.localhost}
       PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin_password.txt
       PGADMIN_LISTEN_PORT: "80"
       PGADMIN_CONFIG_SERVER_MODE: "False"
@@ -77,7 +77,7 @@ services:
       # domains, so the natural admin@db.localhost default makes it crash-loop
       # on first boot with "does not appear to be a valid email address".
       # This is the supported allowlist for exactly that case.
-      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['${DBTK_UI_DOMAIN:-db.localhost}','localhost']"
+      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['${MMDB_UI_DOMAIN:-db.localhost}','localhost']"
     volumes:
       # Rendered by scripts/env-render so the UI opens with the server already
       # listed rather than asking for a hostname (SPEC section 7).
@@ -85,8 +85,8 @@ services:
       - ./secrets:/run/secrets:ro
       - pgadmin_data:/var/lib/pgadmin
     ports:
-      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_PGADMIN_HOST_PORT:-8082}:80"
-    networks: [dbtk]
+      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_PGADMIN_HOST_PORT:-8082}:80"
+    networks: [mmdb]
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -110,9 +110,9 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     ports:
-      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_CADDY_HTTP_PORT:-80}:80"
-      - "${DBTK_BIND_ADDR:-127.0.0.1}:${DBTK_CADDY_HTTPS_PORT:-443}:443"
-    networks: [dbtk]
+      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_CADDY_HTTP_PORT:-80}:80"
+      - "${MMDB_BIND_ADDR:-127.0.0.1}:${MMDB_CADDY_HTTPS_PORT:-443}:443"
+    networks: [mmdb]
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -131,75 +131,75 @@ services:
   # ---------------------------------------------------------------------------
   backup-pg:
     profiles: [backup]
-    image: ghcr.io/simtabi/db-toolkit-pg:${DBTK_PG_VERSION:-17}
+    image: ghcr.io/simtabi/my-multidb-server-pg:${MMDB_PG_VERSION:-17}
     restart: unless-stopped
     <<: *hardening
-    entrypoint: ["/dbtk/scripts/backup", "--engine", "pg", "--schedule"]
+    entrypoint: ["/mmdb/scripts/backup", "--engine", "pg", "--schedule"]
     # The sidecar runs on the engine's image but is NOT the engine, so the
     # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
     # is not running here and reports the container unhealthy forever.
     healthcheck:
       disable: true
     environment:
-      DBTK_IN_CONTAINER: "1"
-      DBTK_BACKUP_DIR: /backups
+      MMDB_IN_CONTAINER: "1"
+      MMDB_BACKUP_DIR: /backups
       PGHOST: pg
       PGUSER: postgres
     volumes:
-      - ./scripts:/dbtk/scripts:ro
+      - ./scripts:/mmdb/scripts:ro
       - ./secrets:/run/secrets:ro
       - ./backups:/backups
-      - ./.env:/dbtk/.env:ro
-    working_dir: /dbtk
-    networks: [dbtk]
+      - ./.env:/mmdb/.env:ro
+    working_dir: /mmdb
+    networks: [mmdb]
     logging: *default-logging
 
   backup-mysql:
     profiles: [backup]
-    image: ghcr.io/simtabi/db-toolkit-mysql:${DBTK_MYSQL_VERSION:-8.4}
+    image: ghcr.io/simtabi/my-multidb-server-mysql:${MMDB_MYSQL_VERSION:-8.4}
     restart: unless-stopped
     <<: *hardening
-    entrypoint: ["/dbtk/scripts/backup", "--engine", "mysql", "--schedule"]
+    entrypoint: ["/mmdb/scripts/backup", "--engine", "mysql", "--schedule"]
     # The sidecar runs on the engine's image but is NOT the engine, so the
     # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
     # is not running here and reports the container unhealthy forever.
     healthcheck:
       disable: true
     environment:
-      DBTK_IN_CONTAINER: "1"
-      DBTK_BACKUP_DIR: /backups
+      MMDB_IN_CONTAINER: "1"
+      MMDB_BACKUP_DIR: /backups
       MYSQL_HOST: mysql
     volumes:
-      - ./scripts:/dbtk/scripts:ro
+      - ./scripts:/mmdb/scripts:ro
       - ./secrets:/run/secrets:ro
       - ./backups:/backups
-      - ./.env:/dbtk/.env:ro
-    working_dir: /dbtk
-    networks: [dbtk]
+      - ./.env:/mmdb/.env:ro
+    working_dir: /mmdb
+    networks: [mmdb]
     logging: *default-logging
 
   backup-mariadb:
     profiles: [backup]
-    image: ghcr.io/simtabi/db-toolkit-mariadb:${DBTK_MARIADB_VERSION:-11.4}
+    image: ghcr.io/simtabi/my-multidb-server-mariadb:${MMDB_MARIADB_VERSION:-11.4}
     restart: unless-stopped
     <<: *hardening
-    entrypoint: ["/dbtk/scripts/backup", "--engine", "mariadb", "--schedule"]
+    entrypoint: ["/mmdb/scripts/backup", "--engine", "mariadb", "--schedule"]
     # The sidecar runs on the engine's image but is NOT the engine, so the
     # inherited healthcheck (pg_isready / mysqladmin ping) probes a server that
     # is not running here and reports the container unhealthy forever.
     healthcheck:
       disable: true
     environment:
-      DBTK_IN_CONTAINER: "1"
-      DBTK_BACKUP_DIR: /backups
+      MMDB_IN_CONTAINER: "1"
+      MMDB_BACKUP_DIR: /backups
       MYSQL_HOST: mariadb
     volumes:
-      - ./scripts:/dbtk/scripts:ro
+      - ./scripts:/mmdb/scripts:ro
       - ./secrets:/run/secrets:ro
       - ./backups:/backups
-      - ./.env:/dbtk/.env:ro
-    working_dir: /dbtk
-    networks: [dbtk]
+      - ./.env:/mmdb/.env:ro
+    working_dir: /mmdb
+    networks: [mmdb]
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -207,7 +207,7 @@ services:
   #
   # Prometheus and Grafana are out of scope (SPEC section 12); these expose the
   # endpoints and it is up to your monitoring stack to scrape them over the
-  # dbtk network.
+  # mmdb network.
   # ---------------------------------------------------------------------------
   pg-exporter:
     profiles: [metrics]
@@ -217,12 +217,12 @@ services:
     environment:
       # The exporter reads the password from a file rather than taking it in
       # the connection string, so no credential appears in `docker inspect`.
-      DATA_SOURCE_URI: "pg:5432/${DBTK_PG_DEFAULT_DB:-postgres}?sslmode=disable"
+      DATA_SOURCE_URI: "pg:5432/${MMDB_PG_DEFAULT_DB:-postgres}?sslmode=disable"
       DATA_SOURCE_USER: postgres
       DATA_SOURCE_PASS_FILE: /run/secrets/pg_superuser_password.txt
     volumes:
       - ./secrets:/run/secrets:ro
-    networks: [dbtk]
+    networks: [mmdb]
     logging: *default-logging
 
   mysqld-exporter:
@@ -237,15 +237,15 @@ services:
       MYSQLD_EXPORTER_PASSWORD_FILE: /run/secrets/mysql_root_password.txt
     volumes:
       - ./secrets:/run/secrets:ro
-    networks: [dbtk]
+    networks: [mmdb]
     logging: *default-logging
 
 networks:
-  dbtk:
-    name: ${COMPOSE_PROJECT_NAME:-dbtk}_net
+  mmdb:
+    name: ${COMPOSE_PROJECT_NAME:-mmdb}_net
     ipam:
       config:
-        - subnet: ${DBTK_NETWORK_SUBNET:-172.28.0.0/16}
+        - subnet: ${MMDB_NETWORK_SUBNET:-172.28.0.0/16}
 
 volumes:
   # Per-engine, per-major volumes. Pointing a new PostgreSQL major at an old
@@ -253,8 +253,8 @@ volumes:
   # so the major is part of the volume name and versions coexist safely
   # (SPEC decision 2).
   pgadmin_data:
-    name: ${COMPOSE_PROJECT_NAME:-dbtk}_pgadmin_data
+    name: ${COMPOSE_PROJECT_NAME:-mmdb}_pgadmin_data
   caddy_data:
-    name: ${COMPOSE_PROJECT_NAME:-dbtk}_caddy_data
+    name: ${COMPOSE_PROJECT_NAME:-mmdb}_caddy_data
   caddy_config:
-    name: ${COMPOSE_PROJECT_NAME:-dbtk}_caddy_config
+    name: ${COMPOSE_PROJECT_NAME:-mmdb}_caddy_config

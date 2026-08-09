@@ -1,4 +1,4 @@
-# db-toolkit design
+# my-multidb-server design
 
 Step 1 output: research resolved, versions pinned, spec reconciled. **No implementation code exists yet and none will be written until this document is approved.**
 
@@ -8,12 +8,12 @@ Everything below was verified during this session against live registries, the G
 
 | Field | Value |
 |---|---|
-| Repository | `github.com/simtabi/db-toolkit-docker` |
-| Images | `ghcr.io/simtabi/db-toolkit-{pg,mysql,mariadb,cli}` |
-| Docs | `https://opensource.simtabi.com/documentation/simtabi/db-toolkit-docker/` |
-| Product page | `https://opensource.simtabi.com/products/simtabi/db-toolkit-docker` |
-| Env prefix | `DBTK_` |
-| Compose project | `dbtk` |
+| Repository | `github.com/simtabi/my-multidb-server` |
+| Images | `ghcr.io/simtabi/my-multidb-server-{pg,mysql,mariadb,cli}` |
+| Docs | `https://opensource.simtabi.com/documentation/simtabi/my-multidb-server/` |
+| Product page | `https://opensource.simtabi.com/products/simtabi/my-multidb-server` |
+| Env prefix | `MMDB_` |
+| Compose project | `mmdb` |
 | Registry visibility | private until explicitly flipped public (section 19 default) |
 
 Resolves the three-way conflict recorded in decision **D-02**.
@@ -22,21 +22,21 @@ Resolves the three-way conflict recorded in decision **D-02**.
 
 | Service | Image | Profile | Internal port | Host port env | Published by default |
 |---|---|---|---|---|---|
-| `pg` | `ghcr.io/simtabi/db-toolkit-pg:<ver>` | `pg` | 5432 | `DBTK_PG_HOST_PORT` | no |
-| `mysql` | `ghcr.io/simtabi/db-toolkit-mysql:<ver>` | `mysql` | 3306 | `DBTK_MYSQL_HOST_PORT` | no |
-| `mariadb` | `ghcr.io/simtabi/db-toolkit-mariadb:<ver>` | `mariadb` | 3306 | `DBTK_MARIADB_HOST_PORT` (3307) | no |
-| `adminer` | `adminer:5.4.1` | `ui` | 8080 | `DBTK_ADMINER_HOST_PORT` | no (via Caddy) |
-| `phpmyadmin` | `phpmyadmin:5.2.3` | `ui` | 80 | `DBTK_PMA_HOST_PORT` | no (via Caddy) |
-| `pgadmin` | `dpage/pgadmin4:9.9` | `ui` | 80 | `DBTK_PGADMIN_HOST_PORT` | no (via Caddy) |
-| `caddy` | `caddy:2.10.2` | `ui`, `prod` | 80/443 | `DBTK_CADDY_HTTP_PORT` / `_HTTPS_PORT` | yes (the only web surface) |
+| `pg` | `ghcr.io/simtabi/my-multidb-server-pg:<ver>` | `pg` | 5432 | `MMDB_PG_HOST_PORT` | no |
+| `mysql` | `ghcr.io/simtabi/my-multidb-server-mysql:<ver>` | `mysql` | 3306 | `MMDB_MYSQL_HOST_PORT` | no |
+| `mariadb` | `ghcr.io/simtabi/my-multidb-server-mariadb:<ver>` | `mariadb` | 3306 | `MMDB_MARIADB_HOST_PORT` (3307) | no |
+| `adminer` | `adminer:5.4.1` | `ui` | 8080 | `MMDB_ADMINER_HOST_PORT` | no (via Caddy) |
+| `phpmyadmin` | `phpmyadmin:5.2.3` | `ui` | 80 | `MMDB_PMA_HOST_PORT` | no (via Caddy) |
+| `pgadmin` | `dpage/pgadmin4:9.9` | `ui` | 80 | `MMDB_PGADMIN_HOST_PORT` | no (via Caddy) |
+| `caddy` | `caddy:2.10.2` | `ui`, `prod` | 80/443 | `MMDB_CADDY_HTTP_PORT` / `_HTTPS_PORT` | yes (the only web surface) |
 | `backup` | `nfrastack/db-backup:4.9.0` | `backup` | — | — | no |
-| `pgbackrest` | built into `db-toolkit-pg` | `prod`, `ha` | — | — | no |
+| `pgbackrest` | built into `my-multidb-server-pg` | `prod`, `ha` | — | — | no |
 | `pg-exporter` | `quay.io/prometheuscommunity/postgres-exporter:v0.19.0` | `metrics` | 9187 | — | no |
 | `mysqld-exporter` | `prom/mysqld-exporter:v0.18.0` | `metrics` | 9104 | — | no |
-| `pgbouncer` | `db-toolkit-pgbouncer` (built) | `prod` (required), `ha` | 6432 | `DBTK_PGBOUNCER_HOST_PORT` | no |
+| `pgbouncer` | `my-multidb-server-pgbouncer` (built) | `prod` (required), `ha` | 6432 | `MMDB_PGBOUNCER_HOST_PORT` | no |
 | `etcd` | `gcr.io/etcd-development/etcd:v3.6.6` | `ha` | 2379/2380 | — | no |
-| `haproxy` | `haproxy:3.2-alpine` | `ha` | 5432 w / 5433 r | `DBTK_HAPROXY_*_PORT` | no |
-| `cli` | `ghcr.io/simtabi/db-toolkit-cli:<ver>` | on demand | — | — | no |
+| `haproxy` | `haproxy:3.2-alpine` | `ha` | 5432 w / 5433 r | `MMDB_HAPROXY_*_PORT` | no |
+| `cli` | `ghcr.io/simtabi/my-multidb-server-cli:<ver>` | on demand | — | — | no |
 
 Profiles: engine selectors `pg` / `mysql` / `mariadb`; mode overlays `ui` / `backup` / `metrics` / `prod` / `test` / `ha`. Default `COMPOSE_PROFILES=pg,ui`.
 
@@ -60,7 +60,7 @@ All digests resolved from the live registry this session. **Every image below is
 | phpMyAdmin | `5.2.3` | `sha256:5e2289bcd500868ed4ac9261ddd7cbcc6e20036f83031ade72667b15dca31c60` | [phpmyadmin](https://hub.docker.com/_/phpmyadmin) |
 | pgAdmin | `9.9` | `sha256:5d9624a93634d1c5e595619cc57b1d330758120d1baf445fa97300c0c1fc3c0a` | [pgadmin4](https://www.pgadmin.org/docs/pgadmin4/latest/container_deployment.html) |
 | Caddy | `2.10.2` | `sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb` | [caddy](https://caddyserver.com/docs/) |
-| pgBouncer | `db-toolkit-pgbouncer` (built from `debian:12-slim` + PGDG) | n/a — built here | see **D-10**, superseded by **D-48** |
+| pgBouncer | `my-multidb-server-pgbouncer` (built from `debian:12-slim` + PGDG) | n/a — built here | see **D-10**, superseded by **D-48** |
 | postgres_exporter | `v0.19.0` | `sha256:e8a170b85eab07c75c2b0f3aa2806be5c2fe5bba46fd0336914e1f36572cde08` | prometheus-community |
 | mysqld_exporter | `v0.18.0` | `sha256:2598c0571f383708e19016d119bb45c06128a9ebc962c9f49483278ac5a94c41` | prometheus |
 | db-backup | `nfrastack/db-backup:4.9.0` | `sha256:80d3bc0524611d85fd82738b228f88a92077ad2d0a36ae32237d6a25a93e2439` | see **D-03** |
@@ -86,7 +86,7 @@ Verified by booting `pgvector/pgvector:0.8.6-pg17` **on arm64** and querying PGD
 | pgtap | PGDG `postgresql-17-pgtap` | 1.3.4 | apt |
 | http | PGDG `postgresql-17-http` | 1.7.2 | apt — **also fine on arm64** |
 | hypopg | PGDG `postgresql-17-hypopg` | 1.4.3 | apt (bonus) |
-| plpython3u | PGDG `postgresql-plpython3-17` | 17.10 | apt, behind `DBTK_PG_PLPYTHON` |
+| plpython3u | PGDG `postgresql-plpython3-17` | 17.10 | apt, behind `MMDB_PG_PLPYTHON` |
 | pg_stat_statements, pg_trgm, uuid-ossp, pgcrypto, citext, hstore | base image contrib | — | already present |
 | **pg_graphql** | official `.deb`, **pg14–18 × amd64+arm64** | 1.6.1 | download release asset |
 | **pg_net** | source build (C + libcurl) | 0.20.5 | builder stage |
@@ -99,7 +99,7 @@ Verified by booting `pgvector/pgvector:0.8.6-pg17` **on arm64** and querying PGD
 
 Reproduced from SPEC.md section 21.1 as the sizing contract:
 
-| Tier | DBTK_MEM | shared_buffers | max_connections | RAM on connections | pgBouncer pool | App connections |
+| Tier | MMDB_MEM | shared_buffers | max_connections | RAM on connections | pgBouncer pool | App connections |
 |---|---|---|---|---|---|---|
 | dev-small | 2 GB | 512 MB | 100 | ~1.0 GB | direct | 100 |
 | prod-small | 4 GB | 1 GB | 100 | ~1.0 GB | 25 | ~1000 |
@@ -114,78 +114,78 @@ Reproduced from SPEC.md section 21.1 as the sizing contract:
 ### Core
 | Variable | Default | Description | Profile |
 |---|---|---|---|
-| `COMPOSE_PROJECT_NAME` | `dbtk` | Stable container/network/volume names | all |
-| `DBTK_PROFILES` | `pg,ui` | Persistent profile selection | all |
-| `DBTK_TZ` | `UTC` | Timezone baked into every engine | all |
-| `DBTK_BIND_ADDR` | `127.0.0.1` | Host bind address for every published port | all |
-| `DBTK_MEM` | `4` | Memory budget (GB) driving PGTune-style presets | all |
-| `DBTK_CPUS` | `2` | CPU budget driving tuning presets | all |
-| `DBTK_STOP_GRACE` | `60s` | `stop_grace_period`; Docker's 10s kills mid-checkpoint | all |
-| `DBTK_SOCKETS` | `false` | Share a unix socket volume across containers | all |
-| `DBTK_NETWORK_SUBNET` | `172.28.0.0/16` | Internal network subnet | all |
-| `DBTK_LOG_MAX_SIZE` / `_MAX_FILE` | `10m` / `3` | json-file rotation caps | all |
+| `COMPOSE_PROJECT_NAME` | `mmdb` | Stable container/network/volume names | all |
+| `MMDB_PROFILES` | `pg,ui` | Persistent profile selection | all |
+| `MMDB_TZ` | `UTC` | Timezone baked into every engine | all |
+| `MMDB_BIND_ADDR` | `127.0.0.1` | Host bind address for every published port | all |
+| `MMDB_MEM` | `4` | Memory budget (GB) driving PGTune-style presets | all |
+| `MMDB_CPUS` | `2` | CPU budget driving tuning presets | all |
+| `MMDB_STOP_GRACE` | `60s` | `stop_grace_period`; Docker's 10s kills mid-checkpoint | all |
+| `MMDB_SOCKETS` | `false` | Share a unix socket volume across containers | all |
+| `MMDB_NETWORK_SUBNET` | `172.28.0.0/16` | Internal network subnet | all |
+| `MMDB_LOG_MAX_SIZE` / `_MAX_FILE` | `10m` / `3` | json-file rotation caps | all |
 
 ### PostgreSQL
 | Variable | Default | Description | Profile |
 |---|---|---|---|
-| `DBTK_PG_VERSION` | `17` | Selects image tag **and** data volume name | `pg` |
-| `DBTK_PG_HOST_PORT` | unset | Publish 5432 when set | `pg` |
-| `DBTK_PG_DATABASES` | unset | `db:user:__FILE__` triplets, comma-separated | `pg` |
-| `DBTK_PG_INIT_EXTENSIONS` | `vector,pg_stat_statements` | Per-database `CREATE EXTENSION` at provision | `pg` |
-| `DBTK_PG_SHARED_PRELOAD` | `pg_stat_statements` | Assembled into `shared_preload_libraries` | `pg` |
-| `DBTK_PG_SHM` | `256m` | `shm_size`; must be ≥ `maintenance_work_mem` for parallel HNSW | `pg` |
-| `DBTK_PG_PLPYTHON` | `false` | Enable untrusted plpython3u (superuser only) | `pg` |
-| `DBTK_PG_SLOW_MS` | `500` dev / `0` prod | `log_min_duration_statement` | `pg` |
-| `DBTK_PG_EMBED_EXPORTER` | `false` | Run exporter under s6 inside the engine container | standalone |
-| `DBTK_PG_EMBED_BACKUP` | `false` | Run scheduled dumps under s6 inside the container | standalone |
-| `DBTK_PG_SYNC_MODE` | `off` | Synchronous commit for zero-data-loss replication | `ha` |
+| `MMDB_PG_VERSION` | `17` | Selects image tag **and** data volume name | `pg` |
+| `MMDB_PG_HOST_PORT` | unset | Publish 5432 when set | `pg` |
+| `MMDB_PG_DATABASES` | unset | `db:user:__FILE__` triplets, comma-separated | `pg` |
+| `MMDB_PG_INIT_EXTENSIONS` | `vector,pg_stat_statements` | Per-database `CREATE EXTENSION` at provision | `pg` |
+| `MMDB_PG_SHARED_PRELOAD` | `pg_stat_statements` | Assembled into `shared_preload_libraries` | `pg` |
+| `MMDB_PG_SHM` | `256m` | `shm_size`; must be ≥ `maintenance_work_mem` for parallel HNSW | `pg` |
+| `MMDB_PG_PLPYTHON` | `false` | Enable untrusted plpython3u (superuser only) | `pg` |
+| `MMDB_PG_SLOW_MS` | `500` dev / `0` prod | `log_min_duration_statement` | `pg` |
+| `MMDB_PG_EMBED_EXPORTER` | `false` | Run exporter under s6 inside the engine container | standalone |
+| `MMDB_PG_EMBED_BACKUP` | `false` | Run scheduled dumps under s6 inside the container | standalone |
+| `MMDB_PG_SYNC_MODE` | `off` | Synchronous commit for zero-data-loss replication | `ha` |
 
 ### MySQL / MariaDB
 | Variable | Default | Description | Profile |
 |---|---|---|---|
-| `DBTK_MYSQL_VERSION` | `8.4` | Image tag + volume name | `mysql` |
-| `DBTK_MARIADB_VERSION` | `11.4` | Image tag + volume name | `mariadb` |
-| `DBTK_MYSQL_HOST_PORT` | unset | Publish 3306 when set | `mysql` |
-| `DBTK_MARIADB_HOST_PORT` | unset | Publish 3307 when set | `mariadb` |
-| `DBTK_MYSQL_DATABASES` / `DBTK_MARIADB_DATABASES` | unset | Same triplet contract as PG | resp. |
-| `DBTK_MYSQL_NATIVE_PASSWORD_COMPAT` | `false` | Re-enable `mysql_native_password` (8.4 dropped it) | `mysql` |
-| `DBTK_MYSQL_SLOW_SECONDS` / `DBTK_MARIADB_SLOW_SECONDS` | `1` dev / off prod | Slow query log threshold | resp. |
-| `DBTK_MYSQL_NOFILE` / `DBTK_MARIADB_NOFILE` | `10240` | nofile ulimit | resp. |
+| `MMDB_MYSQL_VERSION` | `8.4` | Image tag + volume name | `mysql` |
+| `MMDB_MARIADB_VERSION` | `11.4` | Image tag + volume name | `mariadb` |
+| `MMDB_MYSQL_HOST_PORT` | unset | Publish 3306 when set | `mysql` |
+| `MMDB_MARIADB_HOST_PORT` | unset | Publish 3307 when set | `mariadb` |
+| `MMDB_MYSQL_DATABASES` / `MMDB_MARIADB_DATABASES` | unset | Same triplet contract as PG | resp. |
+| `MMDB_MYSQL_NATIVE_PASSWORD_COMPAT` | `false` | Re-enable `mysql_native_password` (8.4 dropped it) | `mysql` |
+| `MMDB_MYSQL_SLOW_SECONDS` / `MMDB_MARIADB_SLOW_SECONDS` | `1` dev / off prod | Slow query log threshold | resp. |
+| `MMDB_MYSQL_NOFILE` / `MMDB_MARIADB_NOFILE` | `10240` | nofile ulimit | resp. |
 
 ### TLS and secrets
 | Variable | Default | Description | Profile |
 |---|---|---|---|
-| `DBTK_TLS_ENFORCE` | `false` dev / `true` prod | `require_secure_transport` + hostssl-only pg_hba | all |
-| `DBTK_EXTRA_SANS` | unset | Extra SANs on generated server certs | all |
-| `DBTK_MTLS` | `false` | Client certificate enforcement | all |
-| `DBTK_CERT_DAYS` | `825` | Server certificate lifetime | all |
-| `DBTK_*_PASSWORD_FILE` | `secrets/*.txt` | `_FILE` convention; never a plain value | all |
+| `MMDB_TLS_ENFORCE` | `false` dev / `true` prod | `require_secure_transport` + hostssl-only pg_hba | all |
+| `MMDB_EXTRA_SANS` | unset | Extra SANs on generated server certs | all |
+| `MMDB_MTLS` | `false` | Client certificate enforcement | all |
+| `MMDB_CERT_DAYS` | `825` | Server certificate lifetime | all |
+| `MMDB_*_PASSWORD_FILE` | `secrets/*.txt` | `_FILE` convention; never a plain value | all |
 
 ### Backup
 | Variable | Default | Description | Profile |
 |---|---|---|---|
-| `DBTK_BACKUP_SCHEDULE` | `0300` | Nightly start (HHMM) | `backup` |
-| `DBTK_BACKUP_COMPRESSION` | `ZSTD` | Maps to `DBnn_COMPRESSION` | `backup` |
-| `DBTK_BACKUP_ENCRYPT` | `false` dev / `true` prod | Maps to `DBnn_ENCRYPT` | `backup` |
-| `DBTK_BACKUP_RETAIN_DAILY/WEEKLY/MONTHLY` | `7` / `4` / `6` | GFS retention tiers | `backup` |
-| `DBTK_S3_*` (`BUCKET`, `KEY_ID`, `KEY_SECRET`, `REGION`, `HOST`) | unset | S3-compatible target; wiring present, disabled until set | `backup` |
-| `DBTK_BACKUP_NOTIFY_URL` | unset | Failure webhook so backups never fail silently | `backup` |
+| `MMDB_BACKUP_SCHEDULE` | `0300` | Nightly start (HHMM) | `backup` |
+| `MMDB_BACKUP_COMPRESSION` | `ZSTD` | Maps to `DBnn_COMPRESSION` | `backup` |
+| `MMDB_BACKUP_ENCRYPT` | `false` dev / `true` prod | Maps to `DBnn_ENCRYPT` | `backup` |
+| `MMDB_BACKUP_RETAIN_DAILY/WEEKLY/MONTHLY` | `7` / `4` / `6` | GFS retention tiers | `backup` |
+| `MMDB_S3_*` (`BUCKET`, `KEY_ID`, `KEY_SECRET`, `REGION`, `HOST`) | unset | S3-compatible target; wiring present, disabled until set | `backup` |
+| `MMDB_BACKUP_NOTIFY_URL` | unset | Failure webhook so backups never fail silently | `backup` |
 
 ### UI, proxy, HA
 | Variable | Default | Description | Profile |
 |---|---|---|---|
-| `DBTK_CADDY_HTTP_PORT` / `_HTTPS_PORT` | `80` / `443` | Caddy published ports | `ui`, `prod` |
-| `DBTK_UI_DOMAIN` | `db.localhost` | Hostname suffix for UI routes | `ui` |
-| `DBTK_UI_BASIC_AUTH_USER` / `_HASH` | unset / unset | Required under `prod` | `prod` |
-| `DBTK_PGADMIN_EMAIL` / `_PASSWORD_FILE` | — | pgAdmin login | `ui` |
-| `DBTK_PGBOUNCER_POOL_MODE` | `transaction` | Pool mode | `prod`, `ha` |
-| `DBTK_PGBOUNCER_DEFAULT_POOL_SIZE` | from tier | Per capacity table | `prod`, `ha` |
-| `DBTK_HA_ENABLE` | `false` | Master HA switch | `ha` |
-| `DBTK_HA_CLUSTER_NAME` | `dbtk-pg` | Patroni scope | `ha` |
-| `DBTK_HA_NODE_NAME` | hostname | Patroni node identity | `ha` |
-| `DBTK_HA_ETCD_HOSTS` | `etcd1:2379,...` | etcd endpoints (3-node quorum) | `ha` |
-| `DBTK_HAPROXY_WRITE_PORT` / `_READ_PORT` | `5432` / `5433` | Leader / replica routing | `ha` |
-| `DBTK_HA_FAILOVER_BUDGET` | `30` | Seconds allowed for election in the CI assertion | `ha` |
+| `MMDB_CADDY_HTTP_PORT` / `_HTTPS_PORT` | `80` / `443` | Caddy published ports | `ui`, `prod` |
+| `MMDB_UI_DOMAIN` | `db.localhost` | Hostname suffix for UI routes | `ui` |
+| `MMDB_UI_BASIC_AUTH_USER` / `_HASH` | unset / unset | Required under `prod` | `prod` |
+| `MMDB_PGADMIN_EMAIL` / `_PASSWORD_FILE` | — | pgAdmin login | `ui` |
+| `MMDB_PGBOUNCER_POOL_MODE` | `transaction` | Pool mode | `prod`, `ha` |
+| `MMDB_PGBOUNCER_DEFAULT_POOL_SIZE` | from tier | Per capacity table | `prod`, `ha` |
+| `MMDB_HA_ENABLE` | `false` | Master HA switch | `ha` |
+| `MMDB_HA_CLUSTER_NAME` | `mmdb-pg` | Patroni scope | `ha` |
+| `MMDB_HA_NODE_NAME` | hostname | Patroni node identity | `ha` |
+| `MMDB_HA_ETCD_HOSTS` | `etcd1:2379,...` | etcd endpoints (3-node quorum) | `ha` |
+| `MMDB_HAPROXY_WRITE_PORT` / `_READ_PORT` | `5432` / `5433` | Leader / replica routing | `ha` |
+| `MMDB_HA_FAILOVER_BUDGET` | `30` | Seconds allowed for election in the CI assertion | `ha` |
 
 ## 7. Decision log
 
@@ -193,12 +193,12 @@ Every spec issue found, and how it was resolved. Entries marked **[needs your ca
 
 **D-01 — SPEC.md had no section 21.** The kickoff prompt required reconciling "section 21 (scale, HA, sync)" and producing its capacity truth table; the design doc ended at section 20. *Resolution:* authored section 21 from the verified HA research baseline and appended it to SPEC.md as an approved amendment (you approved this before I wrote it). Its requirements are folded into services, env, commands, CI, and acceptance above.
 
-**D-02 — Three-way identity conflict.** SPEC line 5 says "repo laranail/db-toolkit"; section 16 publishes to `ghcr.io/simtabi/`; the actual checkout is `simtabi/db-toolkit-docker`. *Resolution:* `simtabi/db-toolkit-docker` + `ghcr.io/simtabi/*`, per your call.
+**D-02 — Three-way identity conflict.** SPEC line 5 says "repo laranail/my-multidb-server"; section 16 publishes to `ghcr.io/simtabi/`; the actual checkout is `simtabi/my-multidb-server`. *Resolution:* `simtabi/my-multidb-server` + `ghcr.io/simtabi/*`, per your call.
 
 **D-03 — The backup sidecar moved namespace and the spec's reference is stale.** `tiredofit/docker-db-backup` is now published as **`nfrastack/db-backup`**. `tiredofit/db-backup` last published `4.1.100` on 2026-03-13; `nfrastack/db-backup` is at `4.9.0` (2026-07-30). *Resolution:* pin `nfrastack/db-backup:4.9.0` by digest; SPEC references updated in docs during phase 4.
 
 **D-04 — [needs your call] The free tier caps backup jobs at 3, which is exactly our engine count.** The project moved to a sponsorware model: "*To unlock advanced features, one must provide a code…*" and "*A limit of 3 can be created when not in advanced mode.*" I verified by parsing every table in the README that **no environment variable is actually `Adv.`-gated** — S3, encryption, checksums, `EXTRA_BACKUP_OPTS` and `BACKUP_GLOBALS` are all free. The only real constraint is the **3-job ceiling**, and pg + mysql + mariadb is exactly 3, leaving zero headroom for a fourth job (a second PG major during a migration window, or an HA replica). *Resolution offered, your pick:*
-  - **(a) Recommended — write our own sidecar.** SPEC section 11 already mandates "one dump helper, two callers", and section 6.1 already bakes `rclone` and `zstd` into every engine image. A thin cron container on `db-toolkit-cli` driving that same script removes a third-party dependency, the sponsorware risk, and the job ceiling, at the cost of writing retention/notification logic ourselves (~150 lines).
+  - **(a) Recommended — write our own sidecar.** SPEC section 11 already mandates "one dump helper, two callers", and section 6.1 already bakes `rclone` and `zstd` into every engine image. A thin cron container on `my-multidb-server-cli` driving that same script removes a third-party dependency, the sponsorware risk, and the job ceiling, at the cost of writing retention/notification logic ourselves (~150 lines).
   - **(b) Keep `nfrastack/db-backup:4.9.0`** and accept a hard 3-job ceiling, documenting that a 4th engine or migration-window job requires a sponsor code.
   I will implement (a) unless you say otherwise, and either way the shared dump helper is the single source of dump flags.
 
@@ -214,7 +214,7 @@ Every spec issue found, and how it was resolved. Entries marked **[needs your ca
 
 **D-10 — The official pgBouncer image is amd64-only and years stale.** `pgbouncer/pgbouncer:latest` is a single-arch (amd64) manifest at version **1.15.0**, while upstream pgBouncer is at **1.25.2**. It would break the arm64 half of the matrix and ship a very old pooler. *Resolution:* use **`edoburu/pgbouncer:v1.25.2-p0`** (multi-arch amd64+arm64, current upstream version).
 
-**D-11 — Patroni publishes no production image.** The Patroni project ships only a Dockerfile and compose explicitly marked development-only. Spilo (`ghcr.io/zalando/spilo-NN`) is multi-arch and production-grade, **but it bundles its own PostgreSQL**, which would replace `db-toolkit-pg` entirely and discard our extension suite, baked config, and certs — directly contradicting the spec's core premise. *Resolution:* layer **Patroni 4.1.4 (pip)** onto our own `db-toolkit-pg` image as an s6 service, gated by the `ha` profile. Keeps one PG image across dev, prod, and HA. Costs us the Patroni bootstrap wiring that Spilo would have given free; that work lands in phase 7.
+**D-11 — Patroni publishes no production image.** The Patroni project ships only a Dockerfile and compose explicitly marked development-only. Spilo (`ghcr.io/zalando/spilo-NN`) is multi-arch and production-grade, **but it bundles its own PostgreSQL**, which would replace `my-multidb-server-pg` entirely and discard our extension suite, baked config, and certs — directly contradicting the spec's core premise. *Resolution:* layer **Patroni 4.1.4 (pip)** onto our own `my-multidb-server-pg` image as an s6 service, gated by the `ha` profile. Keeps one PG image across dev, prod, and HA. Costs us the Patroni bootstrap wiring that Spilo would have given free; that work lands in phase 7.
 
 **D-12 — etcd pinned at `v3.6.6`**, multi-arch confirmed. Section 21 states the 3-node minimum explicitly, because a 2-node etcd has *lower* availability than a single node.
 
@@ -249,27 +249,27 @@ Every spec issue found, and how it was resolved. Entries marked **[needs your ca
 **D-28 — Read-only rootfs needed two non-obvious fixes.** SPEC section 9 asks for `read_only` where the engine tolerates it, and D-18 promised an explicit tmpfs list. Two failures had to be fixed to get there, neither of which announces itself clearly:
   - **Docker mounts `--tmpfs` `noexec` by default.** s6 executes `/run/s6/basedir/bin/init`, so the container died at stage 0 with `Permission denied` and exit 126 — a signature that reads like file ownership and is not. `/run` and `/docker-entrypoint-initdb.d` need `exec`.
   - **The user bundle must live in `/etc/s6-overlay/user-bundles.d`, not `/etc/s6-overlay/s6-rc.d/user`.** The legacy location makes s6 *write* a `type` file under `/etc` during boot, which a read-only filesystem refuses. s6 had been printing a deprecation warning about exactly this from the first build.
-  Generated state (conf, certificates) also moved to `/run/dbtk/`, so the writable set is `/run`, `/tmp`, `/var/run/postgresql`, `/docker-entrypoint-initdb.d`, plus the data volume — and nothing under `/etc` or `/usr`.
+  Generated state (conf, certificates) also moved to `/run/mmdb/`, so the writable set is `/run`, `/tmp`, `/var/run/postgresql`, `/docker-entrypoint-initdb.d`, plus the data volume — and nothing under `/etc` or `/usr`.
 
-**D-29 — D-17 was right about the divergence and wrong about what it costs.** I recorded in D-17 that MySQL (Oracle Linux 9) and MariaDB (Ubuntu 24.04) cannot share a tooling layer, and concluded the two images would need separate recipes. Probing them directly showed the divergence is narrower than that: the package manager differs (`microdnf` vs `apt-get`), the client binaries differ (`mysql`/`mysqladmin` vs `mariadb`/`mariadb-admin`), and the missing tools differ (MySQL lacks `procps`/`unzip`, MariaDB lacks `curl`) — but **both include `/etc/mysql/conf.d`, and MariaDB includes it last**, so one generated file dropped there configures either engine and still loses to a user override. *Resolution:* one shared set of init scripts and one shared s6 tree in `images/_shared/mysql-family/`, selected by a `DBTK_ENGINE` baked at build time; only the two Dockerfiles differ. This required moving every image's build context from `images/<engine>/` to `images/`, which is why the PG Dockerfile's COPY paths changed too. Recorded because the original entry would have led a later phase to duplicate the whole script set.
+**D-29 — D-17 was right about the divergence and wrong about what it costs.** I recorded in D-17 that MySQL (Oracle Linux 9) and MariaDB (Ubuntu 24.04) cannot share a tooling layer, and concluded the two images would need separate recipes. Probing them directly showed the divergence is narrower than that: the package manager differs (`microdnf` vs `apt-get`), the client binaries differ (`mysql`/`mysqladmin` vs `mariadb`/`mariadb-admin`), and the missing tools differ (MySQL lacks `procps`/`unzip`, MariaDB lacks `curl`) — but **both include `/etc/mysql/conf.d`, and MariaDB includes it last**, so one generated file dropped there configures either engine and still loses to a user override. *Resolution:* one shared set of init scripts and one shared s6 tree in `images/_shared/mysql-family/`, selected by a `MMDB_ENGINE` baked at build time; only the two Dockerfiles differ. This required moving every image's build context from `images/<engine>/` to `images/`, which is why the PG Dockerfile's COPY paths changed too. Recorded because the original entry would have led a later phase to duplicate the whole script set.
 
 **D-30 — The engine descriptor, and why the refactor came before the engines.** Adding MongoDB and Cassandra to a codebase with three hardcoded engines would have meant editing compose, backup, restore, new-project, check-env and a dozen checks per engine — six places to forget one. Engines are now declared in `engines/<name>/engine.conf` and read by generic machinery; family hooks in `engines/_family/<family>.sh` carry the few operations that genuinely need code. Descriptors were written for the three EXISTING engines first, deliberately: if they had not fitted, the abstraction was wrong, and that is far cheaper to learn before two more are built on it. They fitted. See SPEC section 22 and `docs/architecture.md`.
 
 **D-31 — Pooling is a capability, not a service every engine gets.** The request was "connection pooling for all database types". Researching it properly showed a uniform abstraction would be a lie: PostgreSQL *needs* pgBouncer (one OS process per connection, ~10 MB each), MySQL merely benefits from ProxySQL (thread-per-connection is far cheaper), and **MongoDB and Cassandra drivers pool natively** — an external proxy in front of either is an anti-pattern that breaks topology discovery and retryable writes for Mongo, and token-aware routing for Cassandra. The descriptor therefore declares `external` or `driver`, and where it says `driver` the answer is documentation (reuse one client per process), not infrastructure. Check 31 forces every engine to commit to one and explain it.
 
-**D-32 — We publish only OSI-licensed artefacts; MongoDB is referenced, not derived.** My first recommendation was to publish an SSPL-derived MongoDB image with clear labelling, which is what most Docker toolkits do. The better rule: every artefact this project publishes is OSI-licensed, so a downstream user never has to reason about our supply chain. `DBTK_ENGINE_PUBLISH=reference` means the upstream image is used directly and configured at runtime — MongoDB stays fully supported, and the licence obligation stays with MongoDB. It generalises: any engine that changes licence moves by flipping one field, with no artefact to withdraw. **FerretDB** was added as the OSI-licensed document alternative (Apache 2.0, MongoDB wire protocol, PostgreSQL storage), with its real gaps recorded in the descriptor rather than discovered later.
+**D-32 — We publish only OSI-licensed artefacts; MongoDB is referenced, not derived.** My first recommendation was to publish an SSPL-derived MongoDB image with clear labelling, which is what most Docker toolkits do. The better rule: every artefact this project publishes is OSI-licensed, so a downstream user never has to reason about our supply chain. `MMDB_ENGINE_PUBLISH=reference` means the upstream image is used directly and configured at runtime — MongoDB stays fully supported, and the licence obligation stays with MongoDB. It generalises: any engine that changes licence moves by flipping one field, with no artefact to withdraw. **FerretDB** was added as the OSI-licensed document alternative (Apache 2.0, MongoDB wire protocol, PostgreSQL storage), with its real gaps recorded in the descriptor rather than discovered later.
 
 **D-33 — MongoDB defaults to 7.0, not the newest, because 8.x cannot start on modern kernels.** MongoDB 8.x refuses to start on Linux kernel 6.19+ ([SERVER-121912](https://jira.mongodb.org/browse/SERVER-121912)). Verified here on kernel 7.0.14: **8.3.7 crash-loops, 7.0.39 runs**. That kernel is not exotic — OrbStack and current distributions ship it — so defaulting to 8.x would have handed a crash loop to a large share of users on first boot. 8.0 and 8.3 remain on the menu.
 
 **D-34 — Both new engines ship insecure, and correcting that is the main value.** MongoDB runs with **no authentication** unless root credentials are supplied. Cassandra ships `AllowAllAuthenticator` **and** `AllowAllAuthorizer` — not weak auth, none, and no authorization either. Worse, merely enabling `PasswordAuthenticator` leaves a superuser named `cassandra` whose password is also `cassandra`: auth that is on with a publicly known credential is barely better than auth that is off. The Cassandra image now flips both settings, refuses to start if it cannot verify them, and rotates that default credential to the generated secret. Check 32 asserts across **every** engine that unauthenticated connections are refused, so a new engine inherits the guarantee by existing.
 
-**D-35 — The pooler stores no application password; it resolves them with `auth_query`.** The obvious pgBouncer setup gives it a userlist of every user and password, making the pooler a second place every credential lives. Instead it has one login role of its own and looks verifiers up through a `SECURITY DEFINER` function, `pgbouncer.get_auth`, which returns a single row and **excludes superusers** — so compromising the pooler yields one credential rather than all of them, and never the superuser's. Its `search_path` is pinned to `pg_catalog`, because a `SECURITY DEFINER` function resolving unqualified names through the caller's path is the CVE-2018-1058 shape. The function is created by a new `dbtk-converge` stage that runs on **every** start rather than only at first init, so enabling the pooler on an existing volume does not require destroying the data. Check 33 asserts the behaviour: eight clients collapse onto a pool of two, the userlist contains no application password, and a wrong password is still refused.
+**D-35 — The pooler stores no application password; it resolves them with `auth_query`.** The obvious pgBouncer setup gives it a userlist of every user and password, making the pooler a second place every credential lives. Instead it has one login role of its own and looks verifiers up through a `SECURITY DEFINER` function, `pgbouncer.get_auth`, which returns a single row and **excludes superusers** — so compromising the pooler yields one credential rather than all of them, and never the superuser's. Its `search_path` is pinned to `pg_catalog`, because a `SECURITY DEFINER` function resolving unqualified names through the caller's path is the CVE-2018-1058 shape. The function is created by a new `mmdb-converge` stage that runs on **every** start rather than only at first init, so enabling the pooler on an existing volume does not require destroying the data. Check 33 asserts the behaviour: eight clients collapse onto a pool of two, the userlist contains no application password, and a wrong password is still refused.
 
 **D-36 — Cassandra rate-limits password changes, so provisioning tests the credential instead of resetting it.** The natural idempotent pattern — `CREATE ROLE IF NOT EXISTS ... WITH PASSWORD`, then `ALTER ROLE ... WITH PASSWORD` — fails **every** time on Cassandra, not intermittently: passwords may only be changed once per 5000 ms per role, and the server reports the refusal as `code=1001 [Coordinator node overloaded]`, which names neither the role nor the real cause. The hook therefore only alters a password when it is genuinely wrong, tested by logging in with it, and retries around the limiter when it must. Two other Cassandra-specific traps were found the same way and are recorded in the hook: `cqlsh -e` splits its argument on `;`, so a statement string beginning with a newline produces an empty leading statement and exits non-zero **after** running everything else; and `_cass_set_password` avoids a trailing `[ ] && sleep` list, which returns 1 on its last iteration and trips `set -e` in any caller that has not already neutralised it.
 
-**D-37 — HA is a rehearsal topology, and the profile is the only switch.** Every node runs on one host, so the host is a single point of failure that Patroni cannot fix; what the stack gives you is a genuine election to practise on before you need one. Two design points came out of building it. First, `PROFILES=ha` is the *only* switch: a separate `DBTK_HA_ENABLE` flag existed alongside it and gated nothing but a validation, so `PROFILES=ha` with the flag left false ran HA with no quorum check at all. Second, **HA replaces the `pg` profile rather than joining it** — HAProxy owns the PostgreSQL port and routes it to the current leader, so running both binds 5432 twice; `check-env` now compares *effective* ports, defaults included, because a default that collides is still a collision.
+**D-37 — HA is a rehearsal topology, and the profile is the only switch.** Every node runs on one host, so the host is a single point of failure that Patroni cannot fix; what the stack gives you is a genuine election to practise on before you need one. Two design points came out of building it. First, `PROFILES=ha` is the *only* switch: a separate `MMDB_HA_ENABLE` flag existed alongside it and gated nothing but a validation, so `PROFILES=ha` with the flag left false ran HA with no quorum check at all. Second, **HA replaces the `pg` profile rather than joining it** — HAProxy owns the PostgreSQL port and routes it to the current leader, so running both binds 5432 twice; `check-env` now compares *effective* ports, defaults included, because a default that collides is still a collision.
 
-**D-38 — Four failures in the Patroni image, each reported as something else.** Worth recording because all four are silent in the same way. (1) The etcd host list written into `patroni.yml` as a comma-separated scalar is a YAML parse error at the first comma: Patroni exits before contacting etcd and the container merely looks unhealthy. (2) Dropping `dbtk-postgres` from the s6 bundle is not enough, because s6 starts anything a remaining service *depends* on and `dbtk-exporter` depends on it — the upstream entrypoint then ran alongside Patroni against the same data directory and died on a missing `POSTGRES_PASSWORD`. (3) The data volume must be mounted one level *above* the data directory: Patroni renames that directory when bootstrapping a replica, and a mount point cannot be renamed ("Device or resource busy", while the leader looks fine). (4) `s6-setuidgid` changes the uid but not the environment, so `HOME` stayed `/root`; libpq could not read `/root/.postgresql/`, treated that as a failed TLS start, and **retried unencrypted**, which the `hostssl` replication rule correctly refused — the only visible error named the pg_hba rule.
+**D-38 — Four failures in the Patroni image, each reported as something else.** Worth recording because all four are silent in the same way. (1) The etcd host list written into `patroni.yml` as a comma-separated scalar is a YAML parse error at the first comma: Patroni exits before contacting etcd and the container merely looks unhealthy. (2) Dropping `mmdb-postgres` from the s6 bundle is not enough, because s6 starts anything a remaining service *depends* on and `mmdb-exporter` depends on it — the upstream entrypoint then ran alongside Patroni against the same data directory and died on a missing `POSTGRES_PASSWORD`. (3) The data volume must be mounted one level *above* the data directory: Patroni renames that directory when bootstrapping a replica, and a mount point cannot be renamed ("Device or resource busy", while the leader looks fine). (4) `s6-setuidgid` changes the uid but not the environment, so `HOME` stayed `/root`; libpq could not read `/root/.postgresql/`, treated that as a failed TLS start, and **retried unencrypted**, which the `hostssl` replication rule correctly refused — the only visible error named the pg_hba rule.
 
 **D-39 — A failover budget at or below Patroni's `ttl` is unreachable by construction.** The check budgeted 30s against Patroni's default `ttl` of 30s: the leader lock does not expire until the ttl elapses, so no election can *begin* inside the budget however healthy the cluster is. Retuned to `ttl 20 / loop_wait 5 / retry_timeout 5` (Patroni requires `ttl >= loop_wait + 2 × retry_timeout`) with a 60s budget; real failovers now complete in ~20s. Lower is not automatically better — a short ttl makes a brief stall look like a dead leader, and demoting a healthy primary costs more than a few seconds of failover. Relatedly, Patroni will not promote a replica lagging more than `maximum_lag_on_failover`, so **if every replica is behind there is no election at all** and every node logs "I am not the healthiest node". That is correct behaviour, and the check now waits for genuine catch-up before killing the leader rather than reporting it as a broken failover mechanism.
 
@@ -281,7 +281,7 @@ Every spec issue found, and how it was resolved. Entries marked **[needs your ca
 
 **D-43 — The vulnerability scanner is a pinned binary, not the trivy action.** In March 2026 an attacker force-pushed 75 of `aquasecurity/trivy-action`'s 76 version tags to steal CI secrets. Referencing it by tag is exactly the supply-chain risk a scanner exists to reduce, so CI downloads the trivy binary at a pinned version and verifies it against the release checksums — the same reasoning that pins every base image by digest, applied to the thing doing the scanning. Scanning fails the build only on HIGH/CRITICAL **with a known fix**: unfixed findings are reported but tolerated, because a scanner that cannot be made green stops being read. Waivers must justify themselves — check 38 rejects a bare CVE ID, a stub reason, or a waiver with no revisit condition, and also fails if CI stops scanning or stops honouring the ignore file, which is the pairing that rots.
 
-**D-44 — An off-site setting that silently does nothing is worse than none.** `DBTK_S3_BUCKET` and its credential files were documented in `.env.example` and `push_s3` read none of them: it ran `rclone copy :s3:` with no configuration, failed, and the failure was swallowed by a log line while `backup-all` reported success. That is the worst shape a backup bug can take, because everything looks configured. rclone is now given credentials from the `_FILE` secrets, and a failed push **aborts the backup** rather than being logged. Check 39 asserts the wiring rather than needing an object store: every documented setting is read, credentials are exported, and no tolerated-failure form remains.
+**D-44 — An off-site setting that silently does nothing is worse than none.** `MMDB_S3_BUCKET` and its credential files were documented in `.env.example` and `push_s3` read none of them: it ran `rclone copy :s3:` with no configuration, failed, and the failure was swallowed by a log line while `backup-all` reported success. That is the worst shape a backup bug can take, because everything looks configured. rclone is now given credentials from the `_FILE` secrets, and a failed push **aborts the backup** rather than being logged. Check 39 asserts the wiring rather than needing an object store: every documented setting is read, credentials are exported, and no tolerated-failure form remains.
 
 **D-45 — Point-in-time recovery targets a binary-log COORDINATE, not a timestamp.** The obvious interface is `--to '2026-08-09 12:00:00'`, and it is quietly broken: `mariadb-binlog` given several files and `--stop-datetime` **exits after the first file and silently skips the rest** ([MDEV-35528](https://jira.mariadb.org/browse/MDEV-35528)). A time-bounded replay therefore recovers almost nothing while reporting success — in testing it emitted 41 lines and no `CREATE DATABASE`, cutting events whose timestamps were demonstrably earlier than the target. Positions have no such bug, no second-granularity ambiguity, and no timezone interpretation, and `--stop-position` applies to the **last file named**, which is exactly the semantics recovery needs: every earlier file replays in full and the final one stops at a byte offset. So `make pitr-restore ENGINE=mariadb TO=binlog.000002:873`, with `make pitr-info` printing the current coordinate and dumps recording theirs. Check 40 proves it end to end.
 

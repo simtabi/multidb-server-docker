@@ -6,7 +6,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 # SPEC section 22.4, for the MySQL family.
 #
@@ -29,7 +29,7 @@ engine=mysql
 img="$(image_name "$engine")"
 need_image "$img"
 
-secret_dir="$DBTK_ROOT/secrets"
+secret_dir="$MMDB_ROOT/secrets"
 need_file "$secret_dir/proxysql_admin_password.txt"
 
 proj="px$$"
@@ -59,7 +59,7 @@ proxy_admin() {
 }
 
 # 1. Through the pooler, as the application user.
-got="$(docker run --rm --network "${COMPOSE_PROJECT_NAME:-dbtk}_net" \
+got="$(docker run --rm --network "${COMPOSE_PROJECT_NAME:-mmdb}_net" \
     -e MYSQL_PWD="$app_pw" --entrypoint mysql "$img" \
     -h "${engine}-pooler" -P 6033 -u "${proj}_user" --protocol=TCP -N -B \
     -e "SELECT 42" "$proj" 2>/dev/null | tr -d ' \r')"
@@ -87,8 +87,8 @@ super="$(docker compose exec -T "$engine" sh -c \
 vinfo "pooler account holds no superuser privilege"
 
 # 4. A wrong password is still refused.
-if docker run --rm --network "${COMPOSE_PROJECT_NAME:-dbtk}_net" \
-    -e MYSQL_PWD=dbtk-throwaway-wrong-password --entrypoint mysql "$img" \
+if docker run --rm --network "${COMPOSE_PROJECT_NAME:-mmdb}_net" \
+    -e MYSQL_PWD=mmdb-throwaway-wrong-password --entrypoint mysql "$img" \
     -h "${engine}-pooler" -P 6033 -u "${proj}_user" --protocol=TCP -N -B \
     -e "SELECT 1" "$proj" >/dev/null 2>&1; then
     vfail "ProxySQL accepted a wrong password"

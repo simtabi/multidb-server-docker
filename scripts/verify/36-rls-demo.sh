@@ -25,12 +25,12 @@ need_docker
 
 img="$(image_name pg)"
 need_image "$img"
-need_file "$DBTK_ROOT/rls/rls-template.sql"
+need_file "$MMDB_ROOT/rls/rls-template.sql"
 
-name="dbtk-verify-rls-$$"
+name="mmdb-verify-rls-$$"
 track_container "$name"
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-rls "$img" >/dev/null \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=mmdb-throwaway-rls "$img" >/dev/null \
     || vfail "container failed to start"
 wait_ready 120 "postgres to accept connections" \
     docker exec -u postgres "$name" pg_isready -U postgres
@@ -40,18 +40,18 @@ wait_ready 120 "postgres to accept connections" \
 # the check would pass on a policy that does not work.
 docker exec -i -u postgres "$name" psql -qtAX -v ON_ERROR_STOP=1 -d postgres >/dev/null 2>&1 <<'SQL' \
     || vfail "could not create the tenant-app role"
-CREATE ROLE rlsapp LOGIN PASSWORD 'dbtk-throwaway-rlsapp';
+CREATE ROLE rlsapp LOGIN PASSWORD 'mmdb-throwaway-rlsapp';
 CREATE DATABASE rlsdemo OWNER rlsapp;
 SQL
 
 # PGPASSWORD is required even over the unix socket: pg_hba reserves peer auth
 # for the postgres superuser and demands scram-sha-256 for everyone else, which
 # check 30 exists to keep that way.
-app_pw=dbtk-throwaway-rlsapp
+app_pw=mmdb-throwaway-rlsapp
 
 # As the OWNER of the table, which is the case FORCE exists for.
 docker exec -i -u postgres -e PGPASSWORD="$app_pw" "$name" psql -qtAX -v ON_ERROR_STOP=1 \
-    -d rlsdemo -U rlsapp -h /var/run/postgresql < "$DBTK_ROOT/rls/rls-template.sql" >/dev/null 2>&1 \
+    -d rlsdemo -U rlsapp -h /var/run/postgresql < "$MMDB_ROOT/rls/rls-template.sql" >/dev/null 2>&1 \
     || vfail "rls/rls-template.sql failed to apply"
 vinfo "rls-template.sql applied as the table owner"
 

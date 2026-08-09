@@ -8,15 +8,15 @@
 # environment equivalent. So the config is written here, from the same values
 # the rest of the toolkit uses, rather than duplicated into compose.
 
-DBTK_STAGE=dbtk-patroni
-export DBTK_STAGE
+MMDB_STAGE=mmdb-patroni
+export MMDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=../../pg/scripts/dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+# shellcheck source=../../pg/scripts/mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
 name="${PATRONI_NAME:?PATRONI_NAME is required}"
-scope="${PATRONI_SCOPE:-dbtk-pg}"
+scope="${PATRONI_SCOPE:-mmdb-pg}"
 etcd_hosts="${PATRONI_ETCD3_HOSTS:?PATRONI_ETCD3_HOSTS is required}"
 
 # Accept the comma-separated form compose passes and emit YAML list items.
@@ -35,17 +35,17 @@ read_secret() {
     tr -d '\n' < "$f"
 }
 
-super_pw="$(read_secret "${DBTK_PG_SUPERUSER_SECRET:-pg_superuser_password.txt}")"
+super_pw="$(read_secret "${MMDB_PG_SUPERUSER_SECRET:-pg_superuser_password.txt}")"
 
 # Replication gets a credential of its own rather than reusing the superuser's.
 # A replica only needs REPLICATION, and handing every standby the superuser
 # password makes each one a full compromise of the primary.
-repl_pw="$(read_secret "${DBTK_REPLICATION_SECRET:-pg_replication_password.txt}")"
+repl_pw="$(read_secret "${MMDB_REPLICATION_SECRET:-pg_replication_password.txt}")"
 
 # Patroni's own REST API is what HAProxy trusts to decide where writes go, so
 # its write endpoints are authenticated. Reads (/primary, /replica) stay open:
 # HAProxy polls them constantly and they disclose only role, not data.
-rest_pw="$(read_secret "${DBTK_PATRONI_REST_SECRET:-patroni_rest_password.txt}")"
+rest_pw="$(read_secret "${MMDB_PATRONI_REST_SECRET:-patroni_rest_password.txt}")"
 
 stage "writing $conf for node $name in scope $scope"
 
@@ -55,7 +55,7 @@ stage "writing $conf for node $name in scope $scope"
 cat > "$conf" <<YAML
 scope: ${scope}
 name: ${name}
-namespace: /db-toolkit/
+namespace: /my-multidb-server/
 
 restapi:
   listen: 0.0.0.0:8008
@@ -94,7 +94,7 @@ bootstrap:
     # exactly current -- availability traded for durability, which is a choice
     # to make deliberately rather than inherit.
     maximum_lag_on_failover: 1048576
-    synchronous_mode: ${DBTK_PG_SYNC_MODE:-false}
+    synchronous_mode: ${MMDB_PG_SYNC_MODE:-false}
     postgresql:
       use_pg_rewind: true
       use_slots: true
@@ -142,7 +142,7 @@ postgresql:
       username: replicator
       password: '${repl_pw}'
   parameters:
-    shared_buffers: ${DBTK_PG_SHARED_BUFFERS:-256MB}
+    shared_buffers: ${MMDB_PG_SHARED_BUFFERS:-256MB}
 
 tags:
   nofailover: false

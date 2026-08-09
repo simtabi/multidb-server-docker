@@ -72,7 +72,7 @@ jobs:
           upper="$(printf '%s' "$ENGINE" | tr '[:lower:]-' '[:upper:]_')"
           # The version is chosen the same way `make build` chooses it, through
           # .env, rather than by a second mechanism that could disagree.
-          sed -i "s/^DBTK_${upper}_VERSION=.*/DBTK_${upper}_VERSION=${VERSION}/" .env
+          sed -i "s/^MMDB_${upper}_VERSION=.*/MMDB_${upper}_VERSION=${VERSION}/" .env
           scripts/build "$ENGINE"
 
       # ---------------------------------------------------------------------
@@ -119,7 +119,7 @@ jobs:
             --ignorefile .trivyignore \
             --exit-code 1 \
             --format table \
-            "ghcr.io/simtabi/db-toolkit-${ENGINE}:${VERSION}"
+            "ghcr.io/simtabi/my-multidb-server-${ENGINE}:${VERSION}"
 
       - name: Report unfixed findings (never fails)
         if: always()
@@ -128,7 +128,7 @@ jobs:
           VERSION: ${{ matrix.entry.version }}
         run: |
           trivy image --severity HIGH,CRITICAL --exit-code 0 --format table \
-            "ghcr.io/simtabi/db-toolkit-${ENGINE}:${VERSION}" || true
+            "ghcr.io/simtabi/my-multidb-server-${ENGINE}:${VERSION}" || true
 
   # ---------------------------------------------------------------------------
   # The acceptance harness, on default versions, on both architectures.

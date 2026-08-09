@@ -2,19 +2,19 @@
 #
 # Stage 1: ownership and permissions.
 
-DBTK_STAGE=dbtk-perms
-export DBTK_STAGE
+MMDB_STAGE=mmdb-perms
+export MMDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+# shellcheck source=mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
-stage "fixing ownership and permissions ($DBTK_ENGINE)"
+stage "fixing ownership and permissions ($MMDB_ENGINE)"
 
 install -d -o mysql -g mysql -m 0755 /var/run/mysqld
-install -d -o mysql -g mysql -m 0700 "$DBTK_CERT_DIR"
-install -d -m 0755 "$DBTK_CONF_DIR"
-install -d -m 0755 "$DBTK_INITDB_DIR"
+install -d -o mysql -g mysql -m 0700 "$MMDB_CERT_DIR"
+install -d -m 0755 "$MMDB_CONF_DIR"
+install -d -m 0755 "$MMDB_INITDB_DIR"
 
 # The binary log directory, when PITR is on.
 #
@@ -24,11 +24,11 @@ install -d -m 0755 "$DBTK_INITDB_DIR"
 # every scenario it exists for. 0700 because the binlog contains every row
 # written, so it is as sensitive as the data itself.
 if is_true "$(engine_env PITR false)"; then
-    install -d -o mysql -g mysql -m 0700 "$(dirname "${DBTK_BINLOG_BASENAME:-/var/lib/dbtk-binlog/binlog}")"
+    install -d -o mysql -g mysql -m 0700 "$(dirname "${MMDB_BINLOG_BASENAME:-/var/lib/mmdb-binlog/binlog}")"
 fi
 
 if datadir_initialised; then
-    stage "existing data directory detected at $DBTK_DATA_DIR"
+    stage "existing data directory detected at $MMDB_DATA_DIR"
 else
     stage "no data directory yet; the official entrypoint will initialise it"
 fi

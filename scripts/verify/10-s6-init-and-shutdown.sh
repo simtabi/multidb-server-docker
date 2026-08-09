@@ -23,14 +23,14 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-name="dbtk-verify-s6-$$"
-vol="dbtk-verify-s6-vol-$$"
+name="mmdb-verify-s6-$$"
+vol="mmdb-verify-s6-vol-$$"
 track_container "$name"
 track_volume "$vol"
 
 docker volume create "$vol" >/dev/null
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
     -v "$vol:/var/lib/postgresql/data" "$img" >/dev/null \
     || vfail "container failed to start"
 
@@ -38,14 +38,14 @@ wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U
 
 # --- init stage ordering ------------------------------------------------------
 logs="$(docker logs "$name" 2>&1)"
-stage_order=$(printf '%s' "$logs" | grep -oE 'dbtk-(perms|conf|certs|provision|postgres)' | awk '!seen[$0]++' | paste -sd, -)
+stage_order=$(printf '%s' "$logs" | grep -oE 'mmdb-(perms|conf|certs|provision|postgres)' | awk '!seen[$0]++' | paste -sd, -)
 vinfo "s6 stage order: ${stage_order:-<none observed>}"
 
-[[ -n "$stage_order" ]] || vfail "no dbtk s6 init stages observed in the logs"
+[[ -n "$stage_order" ]] || vfail "no mmdb s6 init stages observed in the logs"
 
 # Permissions must be fixed before certificates are placed, and certificates
 # before the engine starts, or PostgreSQL refuses to start on key permissions.
-expected='dbtk-perms,dbtk-conf,dbtk-certs,dbtk-provision,dbtk-postgres'
+expected='mmdb-perms,mmdb-conf,mmdb-certs,mmdb-provision,mmdb-postgres'
 [[ "$stage_order" == "$expected" ]] \
     || vfail "s6 init ran in order '$stage_order', expected '$expected'"
 
@@ -71,10 +71,10 @@ printf '%s' "$shutdown_logs" | grep -qi 'shutting down' \
 
 # --- the proof: next boot must not perform crash recovery ---------------------
 docker rm -f "$name" >/dev/null 2>&1 || true
-name2="dbtk-verify-s6-restart-$$"
+name2="mmdb-verify-s6-restart-$$"
 track_container "$name2"
 
-docker run -d --name "$name2" -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
+docker run -d --name "$name2" -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
     -v "$vol:/var/lib/postgresql/data" "$img" >/dev/null
 
 wait_ready 60 "postgres to accept connections after restart" docker exec "$name2" pg_isready -U postgres

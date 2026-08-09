@@ -13,24 +13,24 @@ need_docker
 # verify-full is the only mode that actually validates the hostname, so it is
 # the only mode worth asserting; sslmode=require proves nothing about identity.
 
-need_dir "$DBTK_ROOT/certs"
+need_dir "$MMDB_ROOT/certs"
 for f in ca.crt pg/server.crt pg/server.key; do
-    need_file "$DBTK_ROOT/certs/$f"
+    need_file "$MMDB_ROOT/certs/$f"
 done
 
 img="$(image_name pg)"
 need_image "$img"
 
-net="dbtk-verify-tls-net-$$"
-name="dbtk-verify-tls-$$"
+net="mmdb-verify-tls-net-$$"
+name="mmdb-verify-tls-$$"
 track_container "$name"
 add_cleanup "docker network rm '$net'"
 
 docker network create "$net" >/dev/null
 
 docker run -d --name "$name" --network "$net" --network-alias pg \
-    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
-    -v "$DBTK_ROOT/certs:/certs:ro" \
+    -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+    -v "$MMDB_ROOT/certs:/certs:ro" \
     "$img" >/dev/null || vfail "container failed to start with certs mounted"
 
 wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
@@ -47,8 +47,8 @@ vinfo "local session TLS version: ${cipher:-none}"
 
 # verify-full from a separate container, trusting only the toolkit CA.
 out="$(docker run --rm --network "$net" \
-    -v "$DBTK_ROOT/certs/ca.crt:/ca.crt:ro" \
-    -e PGPASSWORD=dbtk-throwaway-verify \
+    -v "$MMDB_ROOT/certs/ca.crt:/ca.crt:ro" \
+    -e PGPASSWORD=mmdb-throwaway-verify \
     "$img" \
     psql "host=pg user=postgres dbname=postgres sslmode=verify-full sslrootcert=/ca.crt" \
     -tAc "SELECT 'verify-full-ok'" 2>&1 || true)"

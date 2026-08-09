@@ -30,10 +30,10 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-name="dbtk-verify-notrust-$$"
+name="mmdb-verify-notrust-$$"
 track_container "$name"
 
-docker run -d --name "$name" -e POSTGRES_PASSWORD=dbtk-throwaway-verify "$img" >/dev/null \
+docker run -d --name "$name" -e POSTGRES_PASSWORD=mmdb-throwaway-verify "$img" >/dev/null \
     || vfail "container failed to start"
 wait_ready 90 "postgres to accept connections" \
     docker exec -u postgres "$name" pg_isready -U postgres
@@ -57,7 +57,7 @@ vinfo "no cleartext password auth"
 
 # The behavioural assertion, not just the file contents: a loopback TCP
 # connection with a WRONG password must be refused.
-if docker exec -u postgres -e PGPASSWORD=dbtk-throwaway-wrong-password "$name" \
+if docker exec -u postgres -e PGPASSWORD=mmdb-throwaway-wrong-password "$name" \
     psql -h 127.0.0.1 -U postgres -tAc "SELECT 1" >/dev/null 2>&1; then
     vfail "a loopback TCP connection succeeded with the wrong password; auth is not being enforced"
 fi
@@ -65,7 +65,7 @@ vinfo "loopback TCP refuses a wrong password"
 
 # ...while the right one still works, so the rule is enforcing rather than
 # simply breaking connectivity.
-docker exec -u postgres -e PGPASSWORD=dbtk-throwaway-verify "$name" \
+docker exec -u postgres -e PGPASSWORD=mmdb-throwaway-verify "$name" \
     psql -h 127.0.0.1 -U postgres -tAc "SELECT 1" >/dev/null 2>&1 \
     || vfail "loopback TCP refused the CORRECT password; auth is broken, not hardened"
 vinfo "loopback TCP accepts the correct password"

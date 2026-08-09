@@ -5,7 +5,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 # SPEC section 18, criterion 11b: "trivy clean or waived with notes".
 #
@@ -19,21 +19,21 @@ cd "$DBTK_ROOT" || exit 1
 # harness is the discipline around the waivers, which is checkable offline and
 # in a second.
 
-need_file "$DBTK_ROOT/.trivyignore"
+need_file "$MMDB_ROOT/.trivyignore"
 
 # CI must actually scan. A waiver file is meaningless if nothing enforces it,
 # and this is exactly the pairing that rots -- the scan step gets removed to
 # unblock something and the ignore file stays, looking like coverage.
-grep -q 'trivy image' "$DBTK_ROOT/.github/workflows/ci.yml" \
+grep -q 'trivy image' "$MMDB_ROOT/.github/workflows/ci.yml" \
     || vfail "no 'trivy image' scan in .github/workflows/ci.yml; the waiver file implies a scan that does not run"
-grep -q 'ignorefile .trivyignore' "$DBTK_ROOT/.github/workflows/ci.yml" \
+grep -q 'ignorefile .trivyignore' "$MMDB_ROOT/.github/workflows/ci.yml" \
     || vfail "the CI scan does not pass --ignorefile .trivyignore; waivers would be ignored"
 vinfo "CI scans images and honours the waiver file"
 
 # The action was compromised in March 2026: 75 of its 76 version tags were
 # force-pushed to steal CI secrets. Referencing it by tag is the exact
 # supply-chain risk a scanner exists to reduce.
-if grep -q 'aquasecurity/trivy-action@v' "$DBTK_ROOT/.github/workflows/ci.yml"; then
+if grep -q 'aquasecurity/trivy-action@v' "$MMDB_ROOT/.github/workflows/ci.yml"; then
     vfail "ci.yml uses aquasecurity/trivy-action by tag; that action's tags were
        force-pushed in a 2026 supply-chain attack. Install the pinned binary
        and verify it against the release checksums instead."
@@ -74,7 +74,7 @@ while IFS= read -r line; do
             bad=$(( bad + 1 ))
             ;;
     esac
-done < "$DBTK_ROOT/.trivyignore"
+done < "$MMDB_ROOT/.trivyignore"
 
 (( bad == 0 )) || vfail "$bad waiver(s) lack a reason or a revisit condition"
 

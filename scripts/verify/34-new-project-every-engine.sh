@@ -18,7 +18,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # block needs, and the hook is idempotent.
 
 # shellcheck source=../engine-lib.sh
-. "$DBTK_ROOT/scripts/engine-lib.sh"
+. "$MMDB_ROOT/scripts/engine-lib.sh"
 
 missing=0
 checked=0
@@ -35,7 +35,7 @@ while IFS= read -r engine; do
         declare -F hook_provision_project >/dev/null 2>&1 || exit 1
     ); then
         printf '      %s (%s): no hook_provision_project\n' \
-            "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_FAMILY" >&2
+            "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_FAMILY" >&2
         missing=$(( missing + 1 ))
         continue
     fi
@@ -44,15 +44,15 @@ while IFS= read -r engine; do
     # must carry what it needs. Without these new-project prints an empty
     # DB_CONNECTION or DB_PORT, which looks like a copy-paste error at the far
     # end rather than a missing field here.
-    [[ -n "${DBTK_ENGINE_DRIVER:-}" ]] \
-        || vfail "engines/$engine/engine.conf declares no DBTK_ENGINE_DRIVER"
-    [[ -n "${DBTK_ENGINE_PORT:-}" ]] \
-        || vfail "engines/$engine/engine.conf declares no DBTK_ENGINE_PORT"
+    [[ -n "${MMDB_ENGINE_DRIVER:-}" ]] \
+        || vfail "engines/$engine/engine.conf declares no MMDB_ENGINE_DRIVER"
+    [[ -n "${MMDB_ENGINE_PORT:-}" ]] \
+        || vfail "engines/$engine/engine.conf declares no MMDB_ENGINE_PORT"
 
     checked=$(( checked + 1 ))
     vinfo "$(printf '%-10s family=%-10s driver=%-10s port=%s' \
-        "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_FAMILY" \
-        "$DBTK_ENGINE_DRIVER" "$DBTK_ENGINE_PORT")"
+        "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_FAMILY" \
+        "$MMDB_ENGINE_DRIVER" "$MMDB_ENGINE_PORT")"
 done < <(engine_list)
 
 (( missing == 0 )) \
@@ -62,7 +62,7 @@ done < <(engine_list)
 
 # new-project must not have grown a per-engine branch back. The whole point of
 # the hooks is that this file contains no engine names.
-if grep -qE '^\s*(pg|mysql|mariadb|mongodb|cassandra|ferretdb)\)' "$DBTK_ROOT/scripts/new-project"; then
+if grep -qE '^\s*(pg|mysql|mariadb|mongodb|cassandra|ferretdb)\)' "$MMDB_ROOT/scripts/new-project"; then
     vfail "scripts/new-project branches on an engine name again; that belongs in a family hook"
 fi
 vinfo "new-project contains no per-engine branch"
@@ -89,7 +89,7 @@ fi
 running=""
 while IFS= read -r svc; do
     [[ -n "$svc" ]] && running+="$svc "
-done < <(cd "$DBTK_ROOT" && docker compose ps --services --status running 2>/dev/null || true)
+done < <(cd "$MMDB_ROOT" && docker compose ps --services --status running 2>/dev/null || true)
 
 provisioned=0
 skipped=""
@@ -97,7 +97,7 @@ skipped=""
 while IFS= read -r engine; do
     [[ -z "$engine" ]] && continue
     engine_load "$engine" || continue
-    name="$DBTK_ENGINE_NAME"
+    name="$MMDB_ENGINE_NAME"
 
     case " $running " in
         *" $name "*) ;;
@@ -105,20 +105,20 @@ while IFS= read -r engine; do
     esac
 
     proj="vfy$$"
-    add_cleanup "rm -f '$DBTK_ROOT'/secrets/${name}_${proj}_user*_password.txt"
+    add_cleanup "rm -f '$MMDB_ROOT'/secrets/${name}_${proj}_user*_password.txt"
 
     # </dev/null is load-bearing. new-project reaches the engine through
     # `docker compose exec -T`, which READS STDIN -- and inside this loop
     # stdin is the engine list being iterated. Without it the first engine
     # swallows the rest, the loop ends after one pass, and the check reports
     # success having exercised a single engine.
-    if ! (cd "$DBTK_ROOT" && ./scripts/new-project --name "$proj" --engine "$name" \
+    if ! (cd "$MMDB_ROOT" && ./scripts/new-project --name "$proj" --engine "$name" \
             </dev/null >/dev/null 2>&1); then
         vfail "new-project failed against a running $name"
     fi
 
     # Idempotent: people re-run this to reprint the connection block.
-    if ! (cd "$DBTK_ROOT" && ./scripts/new-project --name "$proj" --engine "$name" \
+    if ! (cd "$MMDB_ROOT" && ./scripts/new-project --name "$proj" --engine "$name" \
             </dev/null >/dev/null 2>&1); then
         vfail "new-project is not idempotent on $name; a second run failed"
     fi

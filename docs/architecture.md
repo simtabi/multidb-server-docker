@@ -1,6 +1,6 @@
 # Architecture
 
-How db-toolkit is put together, and why adding a database engine is a descriptor
+How my-multidb-server is put together, and why adding a database engine is a descriptor
 rather than a refactor.
 
 ## Three layers
@@ -30,28 +30,28 @@ So engines are **declared**. A descriptor states what the generic layer needs:
 
 ```sh
 # engines/postgres/engine.conf
-DBTK_ENGINE_NAME=pg
-DBTK_ENGINE_FAMILY=postgres
-DBTK_ENGINE_PARADIGM=relational
-DBTK_ENGINE_VERSIONS="15 16 17 18"
-DBTK_ENGINE_DEFAULT_VERSION=17
-DBTK_ENGINE_PORT=5432
-DBTK_ENGINE_DATA_DIR=/var/lib/postgresql/data
-DBTK_ENGINE_SOCKET_DIR=/var/run/postgresql
-DBTK_ENGINE_USER=postgres
+MMDB_ENGINE_NAME=pg
+MMDB_ENGINE_FAMILY=postgres
+MMDB_ENGINE_PARADIGM=relational
+MMDB_ENGINE_VERSIONS="15 16 17 18"
+MMDB_ENGINE_DEFAULT_VERSION=17
+MMDB_ENGINE_PORT=5432
+MMDB_ENGINE_DATA_DIR=/var/lib/postgresql/data
+MMDB_ENGINE_SOCKET_DIR=/var/run/postgresql
+MMDB_ENGINE_USER=postgres
 
-DBTK_ENGINE_PING='pg_isready -U postgres'
-DBTK_ENGINE_CLIENT=psql
-DBTK_ENGINE_DUMP='pg_dump -Fc'
-DBTK_ENGINE_DUMP_GLOBALS='pg_dumpall --globals-only'
-DBTK_ENGINE_RESTORE='pg_restore --no-owner'
+MMDB_ENGINE_PING='pg_isready -U postgres'
+MMDB_ENGINE_CLIENT=psql
+MMDB_ENGINE_DUMP='pg_dump -Fc'
+MMDB_ENGINE_DUMP_GLOBALS='pg_dumpall --globals-only'
+MMDB_ENGINE_RESTORE='pg_restore --no-owner'
 
-DBTK_ENGINE_POOLING=external
-DBTK_ENGINE_POOLER_IMAGE=ghcr.io/simtabi/db-toolkit-pgbouncer:dev
-DBTK_ENGINE_POOLING_REQUIRED_IN_PROD=true
+MMDB_ENGINE_POOLING=external
+MMDB_ENGINE_POOLER_IMAGE=ghcr.io/simtabi/my-multidb-server-pgbouncer:dev
+MMDB_ENGINE_POOLING_REQUIRED_IN_PROD=true
 
-DBTK_ENGINE_LICENSE=PostgreSQL
-DBTK_ENGINE_OSI_APPROVED=true
+MMDB_ENGINE_LICENSE=PostgreSQL
+MMDB_ENGINE_OSI_APPROVED=true
 ```
 
 Shell key-value, not YAML, deliberately: every consumer here is bash, and a
@@ -83,7 +83,7 @@ The init stages are the clearest illustration. Every engine runs the same five,
 in the same order, for the same reasons:
 
 ```
-dbtk-perms  →  dbtk-conf  →  dbtk-certs  →  dbtk-provision  →  dbtk-engine
+mmdb-perms  →  mmdb-conf  →  mmdb-certs  →  mmdb-provision  →  mmdb-engine
 ```
 
 Permissions before certificates, because engines refuse to start on a
@@ -125,7 +125,7 @@ logs interleave into an unparsable stream, and per-engine memory limits stop
 meaning anything. Tags explode too — split is a sum, combined is a product, and
 any engine's CVE forces rebuilding all of them.
 
-The single exception is `db-toolkit-cli`, because tools are not daemons.
+The single exception is `my-multidb-server-cli`, because tools are not daemons.
 
 ## Why per-major data volumes
 

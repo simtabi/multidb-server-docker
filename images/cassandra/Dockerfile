@@ -1,4 +1,4 @@
-# db-toolkit-cassandra — Apache Cassandra with authentication actually on.
+# my-multidb-server-cassandra — Apache Cassandra with authentication actually on.
 #
 # The headline: the official image ships `AllowAllAuthenticator` AND
 # `AllowAllAuthorizer`. That is not weak authentication, it is none, with no
@@ -13,11 +13,11 @@ FROM ${BASE_IMAGE}
 ARG ENGINE_VERSION=5.0
 ARG S6_OVERLAY_VERSION=3.2.3.2
 
-LABEL org.opencontainers.image.title="db-toolkit-cassandra" \
+LABEL org.opencontainers.image.title="my-multidb-server-cassandra" \
       org.opencontainers.image.description="Apache Cassandra with authentication and authorization enabled, supervised by s6-overlay" \
       org.opencontainers.image.vendor="Simtabi LLC" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.source="https://github.com/simtabi/db-toolkit-docker"
+      org.opencontainers.image.source="https://github.com/simtabi/my-multidb-server"
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,14 +43,14 @@ RUN set -eux; \
 
 COPY cassandra/s6/ /etc/s6-overlay/s6-rc.d/
 COPY cassandra/user-bundles.d/ /etc/s6-overlay/user-bundles.d/
-COPY cassandra/scripts/ /usr/local/lib/dbtk/
+COPY cassandra/scripts/ /usr/local/lib/mmdb/
 
-ENV DBTK_ENGINE=cassandra
+ENV MMDB_ENGINE=cassandra
 
 RUN set -eux; \
-    chmod +x /usr/local/lib/dbtk/*.sh; \
-    chmod +x /etc/s6-overlay/s6-rc.d/dbtk-engine/run; \
-    mkdir -p /dbtk/overrides /run/dbtk
+    chmod +x /usr/local/lib/mmdb/*.sh; \
+    chmod +x /etc/s6-overlay/s6-rc.d/mmdb-engine/run; \
+    mkdir -p /mmdb/overrides /run/mmdb
 
 # Gracetimes at the s6 defaults; raising them only makes the container idle
 # after everything is already down (DESIGN.md D-27).

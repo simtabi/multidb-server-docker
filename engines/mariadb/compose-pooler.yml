@@ -1,3 +1,3 @@
       # DB_HOST, DB_PORT and DB_PASSWORD_FILE come from the generator.
       ADMIN_PASSWORD_FILE: /run/secrets/proxysql_admin_password.txt
-      MAX_BACKEND_CONN: ${DBTK_PROXYSQL_MAX_BACKEND_CONN:-100}
+      MAX_BACKEND_CONN: ${MMDB_PROXYSQL_MAX_BACKEND_CONN:-100}

@@ -26,10 +26,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
-BACKUP_DIR="${DBTK_BACKUP_DIR:-$ROOT/backups}"
+BACKUP_DIR="${MMDB_BACKUP_DIR:-$ROOT/backups}"
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 log() { printf '[backup] %s\n' "$*"; }
@@ -58,7 +58,7 @@ done
 # container. Either way the DUMP COMMAND AND ITS FLAGS are identical, which is
 # the entire point of this file.
 # -----------------------------------------------------------------------------
-IN_CONTAINER="${DBTK_IN_CONTAINER:-0}"
+IN_CONTAINER="${MMDB_IN_CONTAINER:-0}"
 
 engine_exec() {
     local engine="$1"; shift
@@ -83,7 +83,7 @@ secret() {
 timestamp() { date -u '+%Y%m%dT%H%M%SZ'; }
 
 compress_ext() {
-    case "$(get DBTK_BACKUP_COMPRESSION)" in
+    case "$(get MMDB_BACKUP_COMPRESSION)" in
         NONE|none) printf '' ;;
         *) printf '.zst' ;;
     esac
@@ -151,27 +151,27 @@ engine_host() {
 backup_one_database() {
     local db="$1" ts out
     ts="$(timestamp)"
-    out="$BACKUP_DIR/${DBTK_ENGINE_NAME}_${db}_${ts}.${DBTK_ENGINE_BACKUP_EXT}$(compress_ext)"
-    log "$DBTK_ENGINE_NAME: dumping $db"
-    dump_or_fail "$out" "$DBTK_ENGINE_NAME dump of $db" hook_dump_database "$db" "$out"
+    out="$BACKUP_DIR/${MMDB_ENGINE_NAME}_${db}_${ts}.${MMDB_ENGINE_BACKUP_EXT}$(compress_ext)"
+    log "$MMDB_ENGINE_NAME: dumping $db"
+    dump_or_fail "$out" "$MMDB_ENGINE_NAME dump of $db" hook_dump_database "$db" "$out"
 }
 
 backup_globals() {
     # Only engines that declare a globals dump have one. PostgreSQL does;
     # MySQL keeps grants inside an ordinary database.
-    [ -n "${DBTK_ENGINE_DUMP_GLOBALS:-}" ] || return 0
+    [ -n "${MMDB_ENGINE_DUMP_GLOBALS:-}" ] || return 0
     local ts out
     ts="$(timestamp)"
-    out="$BACKUP_DIR/${DBTK_ENGINE_NAME}_globals_${ts}.sql$(compress_ext)"
-    log "$DBTK_ENGINE_NAME: dumping globals (roles and grants)"
-    dump_or_fail "$out" "$DBTK_ENGINE_NAME globals dump" hook_dump_globals "$out"
+    out="$BACKUP_DIR/${MMDB_ENGINE_NAME}_globals_${ts}.sql$(compress_ext)"
+    log "$MMDB_ENGINE_NAME: dumping globals (roles and grants)"
+    dump_or_fail "$out" "$MMDB_ENGINE_NAME globals dump" hook_dump_globals "$out"
 }
 
 # -----------------------------------------------------------------------------
 # Retention: GFS tiers (SPEC section 11)
 # -----------------------------------------------------------------------------
 prune() {
-    local daily; daily="$(get DBTK_BACKUP_RETAIN_DAILY)"; daily="${daily:-7}"
+    local daily; daily="$(get MMDB_BACKUP_RETAIN_DAILY)"; daily="${daily:-7}"
     local removed=0
     # Any artefact, whatever extension the engine's descriptor declares --
     # .dump, .sql, .archive, .tar. Matching a fixed list here would silently
@@ -192,11 +192,11 @@ prune() {
 # is the section 19 default.
 # -----------------------------------------------------------------------------
 push_s3() {
-    local bucket; bucket="$(get DBTK_S3_BUCKET)"
+    local bucket; bucket="$(get MMDB_S3_BUCKET)"
     [[ -z "$bucket" ]] && return 0
 
     command -v rclone >/dev/null 2>&1 \
-        || die "DBTK_S3_BUCKET is set but rclone is not installed; backups would stay on this machine"
+        || die "MMDB_S3_BUCKET is set but rclone is not installed; backups would stay on this machine"
 
     # rclone is CONFIGURED here, which it previously was not: the settings
     # existed in .env and nothing read them, so `rclone copy :s3:` ran with no
@@ -204,21 +204,21 @@ push_s3() {
     # off-site destination that silently does nothing is worse than none,
     # because it looks like the backups are leaving the machine.
     local key_file secret_file
-    key_file="$(get DBTK_S3_KEY_ID_FILE)";     key_file="${key_file:-secrets/s3_key_id.txt}"
-    secret_file="$(get DBTK_S3_KEY_SECRET_FILE)"; secret_file="${secret_file:-secrets/s3_key_secret.txt}"
+    key_file="$(get MMDB_S3_KEY_ID_FILE)";     key_file="${key_file:-secrets/s3_key_id.txt}"
+    secret_file="$(get MMDB_S3_KEY_SECRET_FILE)"; secret_file="${secret_file:-secrets/s3_key_secret.txt}"
 
     [[ -s "$ROOT/$key_file" && -s "$ROOT/$secret_file" ]] \
-        || die "DBTK_S3_BUCKET is set but $key_file or $secret_file is missing or empty"
+        || die "MMDB_S3_BUCKET is set but $key_file or $secret_file is missing or empty"
 
-    RCLONE_S3_PROVIDER="$(get DBTK_S3_PROVIDER)"
+    RCLONE_S3_PROVIDER="$(get MMDB_S3_PROVIDER)"
     export RCLONE_S3_PROVIDER="${RCLONE_S3_PROVIDER:-Other}"
     RCLONE_S3_ACCESS_KEY_ID="$(tr -d '\n' < "$ROOT/$key_file")"
     RCLONE_S3_SECRET_ACCESS_KEY="$(tr -d '\n' < "$ROOT/$secret_file")"
     export RCLONE_S3_ACCESS_KEY_ID RCLONE_S3_SECRET_ACCESS_KEY
 
     local host region
-    host="$(get DBTK_S3_HOST)";   [[ -n "$host" ]]   && export RCLONE_S3_ENDPOINT="$host"
-    region="$(get DBTK_S3_REGION)"; [[ -n "$region" ]] && export RCLONE_S3_REGION="$region"
+    host="$(get MMDB_S3_HOST)";   [[ -n "$host" ]]   && export RCLONE_S3_ENDPOINT="$host"
+    region="$(get MMDB_S3_REGION)"; [[ -n "$region" ]] && export RCLONE_S3_REGION="$region"
 
     log "pushing to S3 bucket $bucket"
 
@@ -236,11 +236,11 @@ push_s3() {
 # Failure notification, so backups never fail silently (SPEC section 11).
 # -----------------------------------------------------------------------------
 notify_failure() {
-    local url; url="$(get DBTK_BACKUP_NOTIFY_URL)"
+    local url; url="$(get MMDB_BACKUP_NOTIFY_URL)"
     [[ -z "$url" ]] && return 0
     command -v curl >/dev/null 2>&1 || return 0
     curl -fsS -X POST -H 'Content-Type: application/json' \
-        -d "{\"text\":\"db-toolkit backup FAILED on $(hostname) at $(date -u)\"}" \
+        -d "{\"text\":\"my-multidb-server backup FAILED on $(hostname) at $(date -u)\"}" \
         "$url" >/dev/null 2>&1 || true
 }
 # shellcheck disable=SC2154  # rc is assigned inside the trap body itself
@@ -253,7 +253,7 @@ run_engine_backup() {
     local engine="$1" db="${2:-}"
 
     engine_load "$engine" || die "unknown engine: $engine"
-    engine_load_hooks || die "no hooks for engine family ${DBTK_ENGINE_FAMILY:-?}"
+    engine_load_hooks || die "no hooks for engine family ${MMDB_ENGINE_FAMILY:-?}"
 
     if [ -n "$db" ]; then
         backup_one_database "$db"
@@ -283,7 +283,7 @@ wait_for_engine() {
 
 if (( SCHEDULE )); then
     [[ -n "$ENGINE" ]] || die "--schedule requires --engine"
-    interval="$(get DBTK_BACKUP_INTERVAL_SECONDS)"; interval="${interval:-86400}"
+    interval="$(get MMDB_BACKUP_INTERVAL_SECONDS)"; interval="${interval:-86400}"
     log "scheduled backups for $ENGINE every ${interval}s"
     wait_for_engine "$ENGINE" || true
     while true; do

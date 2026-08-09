@@ -2,7 +2,7 @@
 #
 # Stage 4: multi-project provisioning.
 #
-# SPEC section 8 and the danielptv triplet format: DBTK_PG_DATABASES holds
+# SPEC section 8 and the danielptv triplet format: MMDB_PG_DATABASES holds
 # `database:username:password` entries, comma-separated. The password may be
 # the literal __FILE__, which resolves to secrets/pg_<user>_password.txt mounted
 # at /run/secrets.
@@ -11,17 +11,17 @@
 # here, because the upstream entrypoint owns first-run initialisation and SPEC
 # section 6.1 is explicit that s6 wraps that contract rather than replacing it.
 
-DBTK_STAGE=dbtk-provision
-export DBTK_STAGE
+MMDB_STAGE=mmdb-provision
+export MMDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+# shellcheck source=mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
-triplets="${DBTK_PG_DATABASES:-}"
+triplets="${MMDB_PG_DATABASES:-}"
 
 if [[ -z "$triplets" ]]; then
-    stage "no DBTK_PG_DATABASES set; nothing to provision"
+    stage "no MMDB_PG_DATABASES set; nothing to provision"
     exit 0
 fi
 
@@ -30,8 +30,8 @@ if pgdata_initialised; then
     exit 0
 fi
 
-extensions="${DBTK_PG_INIT_EXTENSIONS:-}"
-sql="$DBTK_INITDB_DIR/50-dbtk-provision.sql"
+extensions="${MMDB_PG_INIT_EXTENSIONS:-}"
+sql="$MMDB_INITDB_DIR/50-mmdb-provision.sql"
 
 : > "$sql"
 count=0

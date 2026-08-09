@@ -18,27 +18,27 @@ check_engine() {
     img="$(image_name "$engine")"
     need_image "$img"
 
-    name="dbtk-verify-$engine-$$"
+    name="mmdb-verify-$engine-$$"
     track_container "$name"
 
-    docker run -d --name "$name" -e "$pw_env=dbtk-throwaway-verify" "$img" >/dev/null \
+    docker run -d --name "$name" -e "$pw_env=mmdb-throwaway-verify" "$img" >/dev/null \
         || vfail "$engine failed to start with only $pw_env set"
 
     wait_ready 90 "$engine to accept connections" \
-        docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify -e "SELECT 1"
+        docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify -e "SELECT 1"
 
     # Baked defaults from SPEC section 6 must actually be in effect.
     local charset collation sql_mode
-    charset="$(docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify -N -B \
+    charset="$(docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify -N -B \
         -e "SELECT @@character_set_server" 2>/dev/null | tr -d ' \r')"
     [[ "$charset" == "utf8mb4" ]] || vfail "$engine character_set_server is '$charset', expected utf8mb4"
 
-    collation="$(docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify -N -B \
+    collation="$(docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify -N -B \
         -e "SELECT @@collation_server" 2>/dev/null | tr -d ' \r')"
     [[ "$collation" == utf8mb4_unicode_ci* ]] \
         || vfail "$engine collation_server is '$collation', expected utf8mb4_unicode_ci"
 
-    sql_mode="$(docker exec "$name" "$client" -uroot -pdbtk-throwaway-verify -N -B \
+    sql_mode="$(docker exec "$name" "$client" -uroot -pmmdb-throwaway-verify -N -B \
         -e "SELECT @@sql_mode" 2>/dev/null | tr -d ' \r')"
     [[ -n "$sql_mode" ]] || vfail "$engine has an empty sql_mode; SPEC section 6 requires it explicit"
 
@@ -64,9 +64,9 @@ check_engine mariadb MARIADB_ROOT_PASSWORD mariadb
 mariadb_c="$CHECKED_CONTAINER"
 
 # Both must be alive at the same time.
-docker exec "$mysql_c" mysql -uroot -pdbtk-throwaway-verify -e "SELECT 1" >/dev/null 2>&1 \
+docker exec "$mysql_c" mysql -uroot -pmmdb-throwaway-verify -e "SELECT 1" >/dev/null 2>&1 \
     || vfail "MySQL stopped responding once MariaDB was up"
-docker exec "$mariadb_c" mariadb -uroot -pdbtk-throwaway-verify -e "SELECT 1" >/dev/null 2>&1 \
+docker exec "$mariadb_c" mariadb -uroot -pmmdb-throwaway-verify -e "SELECT 1" >/dev/null 2>&1 \
     || vfail "MariaDB stopped responding once MySQL was up"
 
 vinfo "MySQL and MariaDB run concurrently"

@@ -1,4 +1,4 @@
-# db-toolkit-pgbouncer — pgBouncer from Debian's own package.
+# my-multidb-server-pgbouncer — pgBouncer from Debian's own package.
 #
 # pgBouncer publishes no official image, and this was the toolkit's only
 # third-party rebuild (edoburu/pgbouncer). A third party is an organisation
@@ -33,10 +33,10 @@ RUN set -eux; \
 # variables. That contract is reproduced here so the descriptor and
 # engines/postgres/compose-pooler.yml did not have to change.
 COPY pgbouncer/entrypoint.sh /entrypoint.sh
-COPY pgbouncer/bootstrap.sh /usr/local/bin/dbtk-pgbouncer-bootstrap
+COPY pgbouncer/bootstrap.sh /usr/local/bin/mmdb-pgbouncer-bootstrap
 
 RUN set -eux; \
-    chmod +x /entrypoint.sh /usr/local/bin/dbtk-pgbouncer-bootstrap; \
+    chmod +x /entrypoint.sh /usr/local/bin/mmdb-pgbouncer-bootstrap; \
     mkdir -p /etc/pgbouncer; \
     chown -R postgres:postgres /etc/pgbouncer
 
@@ -47,8 +47,8 @@ EXPOSE 6432
 # supplying an entrypoint. Leaving it unset meant the image fell through to the
 # base's shell and exited 0 -- a container that "started successfully" and did
 # nothing, which is exactly the failure check 33 exists to catch.
-ENTRYPOINT ["/usr/local/bin/dbtk-pgbouncer-bootstrap"]
+ENTRYPOINT ["/usr/local/bin/mmdb-pgbouncer-bootstrap"]
 
-LABEL org.opencontainers.image.title="db-toolkit-pgbouncer" \
+LABEL org.opencontainers.image.title="my-multidb-server-pgbouncer" \
       org.opencontainers.image.description="pgBouncer from the PGDG package, built rather than pulled from a third party" \
       org.opencontainers.image.licenses="ISC"

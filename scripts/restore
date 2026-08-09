@@ -11,7 +11,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
@@ -33,7 +33,7 @@ done
 [[ -n "$FILE" ]]   || die "specify --file <path>"
 [[ -f "$FILE" ]]   || die "no such file: $FILE"
 
-IN_CONTAINER="${DBTK_IN_CONTAINER:-0}"
+IN_CONTAINER="${MMDB_IN_CONTAINER:-0}"
 
 engine_exec() {
     local engine="$1"; shift
@@ -61,7 +61,7 @@ compress_ext() { case "$FILE" in *.zst) printf '.zst' ;; *) printf '' ;; esac; }
 # shellcheck source=engine-lib.sh
 . "$ROOT/scripts/engine-lib.sh"
 engine_load "$ENGINE" || die "unknown engine: $ENGINE"
-engine_load_hooks || die "no hooks for engine family ${DBTK_ENGINE_FAMILY:-?}"
+engine_load_hooks || die "no hooks for engine family ${MMDB_ENGINE_FAMILY:-?}"
 
 # -----------------------------------------------------------------------------
 # Integrity first. Restoring a corrupted dump over a live database is strictly

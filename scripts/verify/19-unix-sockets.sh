@@ -15,18 +15,18 @@ need_docker
 img="$(image_name pg)"
 need_image "$img"
 
-sockvol="dbtk-verify-sock-$$"
-name="dbtk-verify-sockpg-$$"
+sockvol="mmdb-verify-sock-$$"
+name="mmdb-verify-sockpg-$$"
 track_container "$name"
 track_volume "$sockvol"
 
 docker volume create "$sockvol" >/dev/null
 
 docker run -d --name "$name" \
-    -e POSTGRES_PASSWORD=dbtk-throwaway-verify \
-    -e DBTK_SOCKETS=true \
+    -e POSTGRES_PASSWORD=mmdb-throwaway-verify \
+    -e MMDB_SOCKETS=true \
     -v "$sockvol:/var/run/postgresql" \
-    "$img" >/dev/null || vfail "container failed to start with DBTK_SOCKETS=true"
+    "$img" >/dev/null || vfail "container failed to start with MMDB_SOCKETS=true"
 
 wait_ready 60 "postgres to accept connections" docker exec "$name" pg_isready -U postgres
 
@@ -39,7 +39,7 @@ vinfo "socket present in the shared volume"
 # --network none is what makes "no TCP" an assertion rather than a claim.
 out="$(docker run --rm --network none \
     -v "$sockvol:/var/run/postgresql" \
-    -e PGPASSWORD=dbtk-throwaway-verify \
+    -e PGPASSWORD=mmdb-throwaway-verify \
     "$img" \
     psql -h /var/run/postgresql -U postgres -tAc "SELECT 'socket-ok'" 2>&1 || true)"
 

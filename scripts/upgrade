@@ -19,8 +19,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-PROJECT="${COMPOSE_PROJECT_NAME:-dbtk}"
-PREFIX="${DBTK_IMAGE_PREFIX:-ghcr.io/simtabi}"
+PROJECT="${COMPOSE_PROJECT_NAME:-mmdb}"
+PREFIX="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
 WORK="$ROOT/backups/upgrade"
 
 log() { printf '[upgrade] %s\n' "$*"; }
@@ -59,10 +59,10 @@ docker volume inspect "$vol_from" >/dev/null 2>&1 \
 # pull from a private registry and fails with a bare "denied", which says
 # nothing about what is actually wrong.
 for v in "$FROM" "$TO"; do
-    img="$PREFIX/db-toolkit-$ENGINE:$v"
+    img="$PREFIX/my-multidb-server-$ENGINE:$v"
     docker image inspect "$img" >/dev/null 2>&1 \
         || die "image not built: $img
-       Build it first:  DBTK_${ENGINE_UPPER}_VERSION=$v scripts/build $ENGINE"
+       Build it first:  MMDB_${ENGINE_UPPER}_VERSION=$v scripts/build $ENGINE"
 done
 
 cat <<PLAN
@@ -75,7 +75,7 @@ Upgrade plan
   method        dump and restore
 
   The ${FROM} volume is NEVER modified. If anything goes wrong, set
-  DBTK_${ENGINE_UPPER}_VERSION back to ${FROM} in .env and you are exactly
+  MMDB_${ENGINE_UPPER}_VERSION back to ${FROM} in .env and you are exactly
   where you started.
 ────────────────────────────────────────────────────────────────────────
 
@@ -90,8 +90,8 @@ fi
 mkdir -p "$WORK"
 stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
 
-old_c="dbtk-upgrade-from-$$"
-new_c="dbtk-upgrade-to-$$"
+old_c="mmdb-upgrade-from-$$"
+new_c="mmdb-upgrade-to-$$"
 cleanup() { docker rm -f "$old_c" "$new_c" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
@@ -103,8 +103,8 @@ log "starting $ENGINE $FROM against its existing volume (read only as far as you
 
 case "$ENGINE" in
     pg)
-        docker run -d --name "$old_c" -e POSTGRES_PASSWORD=dbtk-throwaway-upgrade \
-            -v "$vol_from:/var/lib/postgresql/data" "$PREFIX/db-toolkit-pg:$FROM" >/dev/null \
+        docker run -d --name "$old_c" -e POSTGRES_PASSWORD=mmdb-throwaway-upgrade \
+            -v "$vol_from:/var/lib/postgresql/data" "$PREFIX/my-multidb-server-pg:$FROM" >/dev/null \
             || die "could not start $ENGINE $FROM"
         for _ in $(seq 1 120); do
             docker exec "$old_c" pg_isready -U postgres >/dev/null 2>&1 && break
@@ -124,7 +124,7 @@ case "$ENGINE" in
         root_pw="$(cat "secrets/${ENGINE}_root_password.txt")"
 
         docker run -d --name "$old_c" -e "$pw_env=$root_pw" \
-            -v "$vol_from:/var/lib/mysql" "$PREFIX/db-toolkit-$ENGINE:$FROM" >/dev/null \
+            -v "$vol_from:/var/lib/mysql" "$PREFIX/my-multidb-server-$ENGINE:$FROM" >/dev/null \
             || die "could not start $ENGINE $FROM"
         for _ in $(seq 1 180); do
             docker exec "$old_c" "$client" -uroot -p"$root_pw" -e "SELECT 1" >/dev/null 2>&1 && break
@@ -150,8 +150,8 @@ log "starting $ENGINE $TO on a fresh volume"
 
 case "$ENGINE" in
     pg)
-        docker run -d --name "$new_c" -e POSTGRES_PASSWORD=dbtk-throwaway-upgrade \
-            -v "$vol_to:/var/lib/postgresql/data" "$PREFIX/db-toolkit-pg:$TO" >/dev/null \
+        docker run -d --name "$new_c" -e POSTGRES_PASSWORD=mmdb-throwaway-upgrade \
+            -v "$vol_to:/var/lib/postgresql/data" "$PREFIX/my-multidb-server-pg:$TO" >/dev/null \
             || die "could not start $ENGINE $TO"
         for _ in $(seq 1 120); do
             docker exec "$new_c" pg_isready -U postgres >/dev/null 2>&1 && break
@@ -166,7 +166,7 @@ case "$ENGINE" in
         ;;
     mysql|mariadb)
         docker run -d --name "$new_c" -e "$pw_env=$root_pw" \
-            -v "$vol_to:/var/lib/mysql" "$PREFIX/db-toolkit-$ENGINE:$TO" >/dev/null \
+            -v "$vol_to:/var/lib/mysql" "$PREFIX/my-multidb-server-$ENGINE:$TO" >/dev/null \
             || die "could not start $ENGINE $TO"
         for _ in $(seq 1 180); do
             docker exec "$new_c" "$client" -uroot -p"$root_pw" -e "SELECT 1" >/dev/null 2>&1 && break
@@ -193,7 +193,7 @@ cat <<DONE
 ────────────────────────────────────────────────────────────────────────
 Upgrade staged successfully.
 
-  1. Set DBTK_${ENGINE_UPPER}_VERSION=${TO} in .env
+  1. Set MMDB_${ENGINE_UPPER}_VERSION=${TO} in .env
   2. make up
   3. Verify your application
 

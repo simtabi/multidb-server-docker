@@ -13,7 +13,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CERT_DIR="$ROOT/certs"
-ENV_FILE="${DBTK_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${MMDB_ENV_FILE:-$ROOT/.env}"
 [[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
 
 RENEW=0
@@ -21,8 +21,8 @@ RENEW=0
 
 get() { grep -E "^${1}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
-CERT_DAYS="$(get DBTK_CERT_DAYS)"; CERT_DAYS="${CERT_DAYS:-825}"
-EXTRA_SANS="$(get DBTK_EXTRA_SANS)"
+CERT_DAYS="$(get MMDB_CERT_DAYS)"; CERT_DAYS="${CERT_DAYS:-825}"
+EXTRA_SANS="$(get MMDB_EXTRA_SANS)"
 
 command -v openssl >/dev/null 2>&1 || { printf 'openssl is required\n' >&2; exit 1; }
 
@@ -35,7 +35,7 @@ if [[ ! -s "$CERT_DIR/ca.crt" ]]; then
     printf 'creating the toolkit CA\n'
     openssl req -x509 -newkey rsa:4096 -nodes \
         -days 3650 \
-        -subj "/O=Simtabi LLC/OU=db-toolkit/CN=db-toolkit local CA" \
+        -subj "/O=Simtabi LLC/OU=my-multidb-server/CN=my-multidb-server local CA" \
         -keyout "$CERT_DIR/ca.key" \
         -out "$CERT_DIR/ca.crt" 2>/dev/null
     chmod 0600 "$CERT_DIR/ca.key"
@@ -73,7 +73,7 @@ issue() {
     fi
 
     openssl req -newkey rsa:2048 -nodes \
-        -subj "/O=Simtabi LLC/OU=db-toolkit/CN=${engine}" \
+        -subj "/O=Simtabi LLC/OU=my-multidb-server/CN=${engine}" \
         -keyout "$dir/server.key" \
         -out "$dir/server.csr" 2>/dev/null
 

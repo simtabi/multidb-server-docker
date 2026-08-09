@@ -10,22 +10,22 @@
 # In the sidecar the engine is a remote host; from the host we are already
 # exec'ing inside its container and there is no host to name.
 _mysql_host_args() {
-    if [ "${IN_CONTAINER:-0}" = "1" ]; then printf '%s\n%s\n' '-h' "$DBTK_ENGINE_NAME"; fi
+    if [ "${IN_CONTAINER:-0}" = "1" ]; then printf '%s\n%s\n' '-h' "$MMDB_ENGINE_NAME"; fi
 }
 
 _mysql_args() {
-    # _dbtk_pw, not pw: `local pw` would shadow a caller's own $pw, and a
+    # _mmdb_pw, not pw: `local pw` would shadow a caller's own $pw, and a
     # caller whose secret() returns "$pw" would read this empty local instead.
-    local _dbtk_pw; _dbtk_pw="$(secret "$DBTK_ENGINE_ROOT_SECRET")"
+    local _mmdb_pw; _mmdb_pw="$(secret "$MMDB_ENGINE_ROOT_SECRET")"
     local hargs=()
     while IFS= read -r a; do [ -n "$a" ] && hargs+=("$a"); done < <(_mysql_host_args)
-    printf '%s\n' ${hargs[@]+"${hargs[@]}"} "-uroot" "-p$_dbtk_pw"
+    printf '%s\n' ${hargs[@]+"${hargs[@]}"} "-uroot" "-p$_mmdb_pw"
 }
 
 _mysql_run() {
     local args=()
     while IFS= read -r a; do [ -n "$a" ] && args+=("$a"); done < <(_mysql_args)
-    engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${args[@]+"${args[@]}"} "$@"
+    engine_exec "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_CLIENT" ${args[@]+"${args[@]}"} "$@"
 }
 
 # Readiness. Deliberately NOT hook_list_databases: that answers "are there
@@ -46,7 +46,7 @@ hook_list_databases() {
 # "complete" dump without them is quietly incomplete until you need a procedure.
 hook_dump_database() {
     local db="$1" out="$2" dumper args=() pitr_args=()
-    dumper="$(printf '%s' "$DBTK_ENGINE_DUMP" | awk '{print $1}')"
+    dumper="$(printf '%s' "$MMDB_ENGINE_DUMP" | awk '{print $1}')"
     while IFS= read -r a; do [ -n "$a" ] && args+=("$a"); done < <(_mysql_args)
 
     # Record the binary-log coordinates the dump was taken at.
@@ -58,17 +58,17 @@ hook_dump_database() {
     #
     # --source-data replaced --master-data in MySQL 8.0.26 and MariaDB 10.5;
     # the descriptor says which to use rather than this branching on version.
-    if [ "${DBTK_MYSQL_PITR:-${DBTK_MARIADB_PITR:-false}}" = "true" ]; then
-        pitr_args=("--${DBTK_ENGINE_DUMP_POSITION_FLAG:-source-data}=2")
+    if [ "${MMDB_MYSQL_PITR:-${MMDB_MARIADB_PITR:-false}}" = "true" ]; then
+        pitr_args=("--${MMDB_ENGINE_DUMP_POSITION_FLAG:-source-data}=2")
     fi
 
     if [ -n "$(compress_ext)" ]; then
-        engine_exec "$DBTK_ENGINE_NAME" "$dumper" ${args[@]+"${args[@]}"} \
+        engine_exec "$MMDB_ENGINE_NAME" "$dumper" ${args[@]+"${args[@]}"} \
             --single-transaction --routines --triggers --events --quick \
             ${pitr_args[@]+"${pitr_args[@]}"} "$db" \
-            | zstd -q -T0 -"${DBTK_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
+            | zstd -q -T0 -"${MMDB_BACKUP_ZSTD_LEVEL:-9}" -o "$out" -f
     else
-        engine_exec "$DBTK_ENGINE_NAME" "$dumper" ${args[@]+"${args[@]}"} \
+        engine_exec "$MMDB_ENGINE_NAME" "$dumper" ${args[@]+"${args[@]}"} \
             --single-transaction --routines --triggers --events --quick \
             ${pitr_args[@]+"${pitr_args[@]}"} "$db" > "$out"
     fi
@@ -88,7 +88,7 @@ hook_restore_database() {
     local db="$1"
     local args=()
     while IFS= read -r a; do [ -n "$a" ] && args+=("$a"); done < <(_mysql_args)
-    engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${args[@]+"${args[@]}"} "$db"
+    engine_exec "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_CLIENT" ${args[@]+"${args[@]}"} "$db"
 }
 
 # Tables present, as distinct from rows. A database with no tables was empty
@@ -111,8 +111,8 @@ hook_row_count() {
 hook_auth_enforced() {
     local hargs=()
     while IFS= read -r a; do [ -n "$a" ] && hargs+=("$a"); done < <(_mysql_host_args)
-    if engine_exec "$DBTK_ENGINE_NAME" "$DBTK_ENGINE_CLIENT" ${hargs[@]+"${hargs[@]}"} \
-        -h 127.0.0.1 -uroot -pdbtk-throwaway-wrong-password -e "SELECT 1" >/dev/null 2>&1; then
+    if engine_exec "$MMDB_ENGINE_NAME" "$MMDB_ENGINE_CLIENT" ${hargs[@]+"${hargs[@]}"} \
+        -h 127.0.0.1 -uroot -pmmdb-throwaway-wrong-password -e "SELECT 1" >/dev/null 2>&1; then
         return 1
     fi
     return 0

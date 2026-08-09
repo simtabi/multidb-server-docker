@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-PROJECT="${COMPOSE_PROJECT_NAME:-dbtk}"
+PROJECT="${COMPOSE_PROJECT_NAME:-mmdb}"
 
 log() { printf '[destroy] %s\n' "$*"; }
 die() { printf '[destroy] ERROR: %s\n' "$*" >&2; exit 1; }

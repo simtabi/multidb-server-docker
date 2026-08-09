@@ -1,3 +1,0 @@
-#!/command/execlineb -P
-with-contenv
-/usr/local/lib/dbtk/run-patroni.sh

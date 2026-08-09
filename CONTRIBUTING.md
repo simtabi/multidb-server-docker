@@ -13,8 +13,8 @@ itself wrong, fix it in a separate commit that explains the reasoning.
 ## Getting set up
 
 ```bash
-git clone https://github.com/simtabi/db-toolkit-docker.git
-cd db-toolkit-docker
+git clone https://github.com/simtabi/my-multidb-server.git
+cd my-multidb-server
 make init
 make verify-structure   # harness self-test; must be green
 make verify             # full acceptance harness

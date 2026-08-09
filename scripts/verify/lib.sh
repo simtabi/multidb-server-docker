@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 #
-# Shared helpers for db-toolkit verify checks.
+# Shared helpers for my-multidb-server verify checks.
 #
 # Contract for every check script:
 #   exit 0  -> PASS
@@ -14,12 +14,12 @@
 
 set -euo pipefail
 
-DBTK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-export DBTK_ROOT
+MMDB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export MMDB_ROOT
 
 # Engines are declared, not hardcoded (SPEC section 22.1).
 # shellcheck source=../engine-lib.sh
-. "$DBTK_ROOT/scripts/engine-lib.sh"
+. "$MMDB_ROOT/scripts/engine-lib.sh"
 
 readonly VERIFY_EXIT_SKIP=3
 
@@ -53,7 +53,7 @@ need_docker() {
 # Read a variable from .env, falling back to .env.example, then to a default.
 env_get() {
     local key="$1" default="${2:-}" file val
-    for file in "$DBTK_ROOT/.env" "$DBTK_ROOT/.env.example"; do
+    for file in "$MMDB_ROOT/.env" "$MMDB_ROOT/.env.example"; do
         [[ -f "$file" ]] || continue
         val="$(grep -E "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
         if [[ -n "$val" ]]; then printf '%s\n' "$val"; return 0; fi
@@ -64,7 +64,7 @@ env_get() {
 # Is an engine selected by the active profiles?
 engine_selected() {
     local engine="$1" profiles
-    profiles="${COMPOSE_PROFILES:-$(env_get DBTK_PROFILES 'pg,ui')}"
+    profiles="${COMPOSE_PROFILES:-$(env_get MMDB_PROFILES 'pg,ui')}"
     [[ ",${profiles}," == *",${engine},"* ]]
 }
 
@@ -72,25 +72,25 @@ engine_selected() {
 image_exists() { docker image inspect "$1" >/dev/null 2>&1; }
 
 # Fully-qualified name for one of our engine images.
-#   image_name pg      -> ghcr.io/simtabi/db-toolkit-pg:17
-#   image_name mariadb -> ghcr.io/simtabi/db-toolkit-mariadb:11.4
+#   image_name pg      -> ghcr.io/simtabi/my-multidb-server-pg:17
+#   image_name mariadb -> ghcr.io/simtabi/my-multidb-server-mariadb:11.4
 image_name() {
     local engine="$1" prefix ver
-    prefix="${DBTK_IMAGE_PREFIX:-ghcr.io/simtabi}"
+    prefix="${MMDB_IMAGE_PREFIX:-ghcr.io/simtabi}"
     ver="$(engine_version "$engine")"
     [[ -n "$ver" ]] || vfail "unknown engine: $engine"
-    printf '%s/db-toolkit-%s:%s\n' "$prefix" "$engine" "$ver"
+    printf '%s/my-multidb-server-%s:%s\n' "$prefix" "$engine" "$ver"
 }
 
-# The configured version for an engine: DBTK_<ENGINE>_VERSION if set, otherwise
+# The configured version for an engine: MMDB_<ENGINE>_VERSION if set, otherwise
 # whatever its descriptor declares as the default. No engine names here.
 engine_version() {
     local engine="$1" upper ver
     [[ "$engine" == "cli" ]] && { printf 'dev'; return 0; }
     upper="$(printf '%s' "$engine" | tr '[:lower:]-' '[:upper:]_')"
-    ver="$(env_get "DBTK_${upper}_VERSION" '')"
+    ver="$(env_get "MMDB_${upper}_VERSION" '')"
     if [[ -n "$ver" ]]; then printf '%s' "$ver"; return 0; fi
-    ( engine_load "$engine" >/dev/null 2>&1 && printf '%s' "$DBTK_ENGINE_DEFAULT_VERSION" )
+    ( engine_load "$engine" >/dev/null 2>&1 && printf '%s' "$MMDB_ENGINE_DEFAULT_VERSION" )
 }
 
 # Fail with a clear message when the image a check needs has not been built.
@@ -108,15 +108,15 @@ need_image() {
     # it catches the common case -- a long check whose image vanishes partway
     # through -- and without it a standalone run gets the misleading
     # "run: make build" that this whole mechanism exists to avoid.
-    if [[ -z "${DBTK_IMAGE_SNAPSHOT:-}" ]]; then
-        DBTK_IMAGE_SNAPSHOT="$(mktemp)"
-        export DBTK_IMAGE_SNAPSHOT
-        add_cleanup "rm -f '$DBTK_IMAGE_SNAPSHOT'"
-        docker images --format '{{.Repository}}:{{.Tag}}' > "$DBTK_IMAGE_SNAPSHOT" 2>/dev/null || true
+    if [[ -z "${MMDB_IMAGE_SNAPSHOT:-}" ]]; then
+        MMDB_IMAGE_SNAPSHOT="$(mktemp)"
+        export MMDB_IMAGE_SNAPSHOT
+        add_cleanup "rm -f '$MMDB_IMAGE_SNAPSHOT'"
+        docker images --format '{{.Repository}}:{{.Tag}}' > "$MMDB_IMAGE_SNAPSHOT" 2>/dev/null || true
     fi
 
-    if [[ -n "${DBTK_IMAGE_SNAPSHOT:-}" ]] && [[ -f "$DBTK_IMAGE_SNAPSHOT" ]] \
-       && grep -qxF "$img" "$DBTK_IMAGE_SNAPSHOT" 2>/dev/null; then
+    if [[ -n "${MMDB_IMAGE_SNAPSHOT:-}" ]] && [[ -f "$MMDB_IMAGE_SNAPSHOT" ]] \
+       && grep -qxF "$img" "$MMDB_IMAGE_SNAPSHOT" 2>/dev/null; then
         vfail "image RECLAIMED mid-run: $img
        It existed when this run started and has since been removed, which
        Docker does to unused images under disk pressure. This is an
@@ -132,7 +132,7 @@ need_image() {
 base_image() {
     local engine="$1" version="$2" line
     line="$(awk -v e="$engine" -v v="$version" \
-        '$1==e && $2==v {print $3; exit}' "$DBTK_ROOT/images/bases.tsv" 2>/dev/null || true)"
+        '$1==e && $2==v {print $3; exit}' "$MMDB_ROOT/images/bases.tsv" 2>/dev/null || true)"
     [[ -n "$line" ]] || vfail "no base pinned for $engine $version in images/bases.tsv"
     printf '%s\n' "$line"
 }
@@ -145,10 +145,10 @@ build_image() {
     # Context is images/ so MySQL and MariaDB can share images/_shared.
     base="$(base_image "$engine" "$version")"
     docker build \
-        -f "$DBTK_ROOT/images/$engine/Dockerfile" \
+        -f "$MMDB_ROOT/images/$engine/Dockerfile" \
         --build-arg "BASE_IMAGE=$base" \
         --build-arg "ENGINE_VERSION=$version" \
-        -t "$tag" "$DBTK_ROOT/images"
+        -t "$tag" "$MMDB_ROOT/images"
 }
 
 # --- cleanup -----------------------------------------------------------------
@@ -167,7 +167,7 @@ track_container() { CLEANUP_CONTAINERS+=("$1"); }
 track_volume()    { CLEANUP_VOLUMES+=("$1"); }
 add_cleanup()     { CLEANUP_COMMANDS+=("$1"); }
 
-dbtk_cleanup() {
+mmdb_cleanup() {
     local item
     for item in ${CLEANUP_COMMANDS[@]+"${CLEANUP_COMMANDS[@]}"}; do
         eval "$item" >/dev/null 2>&1 || true
@@ -179,7 +179,7 @@ dbtk_cleanup() {
         [[ -n "$item" ]] && docker volume rm -f "$item" >/dev/null 2>&1 || true
     done
 }
-trap dbtk_cleanup EXIT
+trap mmdb_cleanup EXIT
 
 # Wait until a command succeeds, or fail after a budget in seconds.
 wait_for() {
@@ -220,12 +220,12 @@ wait_ready() {
 
 # Require a file to exist, else fail with a useful message.
 need_file() {
-    [[ -f "$1" ]] || vfail "expected file does not exist yet: ${1#"$DBTK_ROOT"/}"
+    [[ -f "$1" ]] || vfail "expected file does not exist yet: ${1#"$MMDB_ROOT"/}"
 }
 
 # Require a directory to exist.
 need_dir() {
-    [[ -d "$1" ]] || vfail "expected directory does not exist yet: ${1#"$DBTK_ROOT"/}"
+    [[ -d "$1" ]] || vfail "expected directory does not exist yet: ${1#"$MMDB_ROOT"/}"
 }
 
 # Run a command, capturing output, and fail with the full output on error.

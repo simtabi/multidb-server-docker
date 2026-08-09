@@ -49,7 +49,7 @@ default, and the failure is confusing rather than obvious: connections succeed,
 against the wrong server. Either stop the native service, or move the toolkit:
 
 ```
-DBTK_PG_HOST_PORT=5433
+MMDB_PG_HOST_PORT=5433
 ```
 
 ## Roles, grants and passwords
@@ -95,7 +95,7 @@ Keep the dump file for a while.
 ## Multiple projects at once
 
 ```
-DBTK_PG_DATABASES=app:app_user:__FILE__,analytics:analytics_user:__FILE__
+MMDB_PG_DATABASES=app:app_user:__FILE__,analytics:analytics_user:__FILE__
 ```
 
 Then import into each. Roles cannot reach each other's databases — the default

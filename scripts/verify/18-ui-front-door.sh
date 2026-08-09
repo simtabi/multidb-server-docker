@@ -6,16 +6,16 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 need_docker
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 # SPEC section 18: "Caddy serves every UI at its *.db.localhost hostname over
 # HTTPS" and "Both MySQL and MariaDB run concurrently with phpMyAdmin seeing
 # both via one UI".
 
-need_file "$DBTK_ROOT/caddy/Caddyfile.tmpl"
-need_file "$DBTK_ROOT/docker-compose.yml"
+need_file "$MMDB_ROOT/caddy/Caddyfile.tmpl"
+need_file "$MMDB_ROOT/docker-compose.yml"
 
-domain="$(env_get DBTK_UI_DOMAIN db.localhost)"
+domain="$(env_get MMDB_UI_DOMAIN db.localhost)"
 
 make up PROFILES=pg,mysql,mariadb,ui >/dev/null 2>&1 || vfail "make up with the ui profile failed"
 add_cleanup 'make down'

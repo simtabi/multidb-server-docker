@@ -13,15 +13,15 @@
 # pooler needs are converged here, idempotently, after the server is accepting
 # connections.
 #
-# This runs as a oneshot AFTER dbtk-postgres, so it must wait for readiness
+# This runs as a oneshot AFTER mmdb-postgres, so it must wait for readiness
 # itself rather than assuming it.
 
-DBTK_STAGE=dbtk-converge
-export DBTK_STAGE
+MMDB_STAGE=mmdb-converge
+export MMDB_STAGE
 # The absolute path is correct inside the image; this tells shellcheck where
 # to find the same file in the repository.
-# shellcheck source=dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+# shellcheck source=mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
 secret=/run/secrets/pgbouncer_password.txt
 
@@ -66,7 +66,7 @@ esc_pw="${pw//\'/\'\'}"
 
 gosu postgres psql -v ON_ERROR_STOP=1 -q --no-psqlrc -h /var/run/postgresql \
     -d postgres <<SQL
-DO \$dbtk\$
+DO \$mmdb\$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pgbouncer') THEN
         ALTER ROLE pgbouncer WITH LOGIN PASSWORD '${esc_pw}';
@@ -74,7 +74,7 @@ BEGIN
         CREATE ROLE pgbouncer WITH LOGIN PASSWORD '${esc_pw}';
     END IF;
 END
-\$dbtk\$;
+\$mmdb\$;
 
 CREATE SCHEMA IF NOT EXISTS pgbouncer AUTHORIZATION pgbouncer;
 
@@ -83,12 +83,12 @@ RETURNS TABLE(username TEXT, password TEXT)
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = pg_catalog
-AS \$dbtk\$
+AS \$mmdb\$
     SELECT usename::TEXT, passwd::TEXT
       FROM pg_shadow
      WHERE usename = p_username
        AND NOT usesuper;
-\$dbtk\$;
+\$mmdb\$;
 
 REVOKE ALL ON FUNCTION pgbouncer.get_auth(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO pgbouncer;
@@ -107,8 +107,8 @@ fi
 # stanza cannot be created before there is something to query.
 #
 # Both are idempotent, so a restart re-checks rather than re-does.
-if is_true "${DBTK_PG_PITR:-false}"; then
-    stanza="${DBTK_PGBACKREST_STANZA:-dbtk}"
+if is_true "${MMDB_PG_PITR:-false}"; then
+    stanza="${MMDB_PGBACKREST_STANZA:-mmdb}"
 
     if gosu postgres pgbackrest --stanza="$stanza" stanza-create 2>&1 | grep -qi 'error'; then
         stage "WARNING: stanza-create reported an error; PITR is NOT active"

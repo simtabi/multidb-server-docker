@@ -12,9 +12,9 @@ need_docker
 # matters most here, because a down that eats a volume is discovered exactly
 # once, in anger.
 
-need_file "$DBTK_ROOT/docker-compose.yml"
+need_file "$MMDB_ROOT/docker-compose.yml"
 
-cd "$DBTK_ROOT" || exit 1
+cd "$MMDB_ROOT" || exit 1
 
 docker compose config >/dev/null 2>&1 || vfail "docker-compose.yml is not valid"
 vinfo "compose file is valid"
@@ -43,7 +43,7 @@ docker compose exec -T pg psql -U postgres -q \
 
 make down >/dev/null 2>&1 || vfail "make down failed"
 
-vols="$(docker volume ls --format '{{.Name}}' | grep -c '^dbtk_' || true)"
+vols="$(docker volume ls --format '{{.Name}}' | grep -c '^mmdb_' || true)"
 (( vols > 0 )) || vfail "make down removed data volumes; SPEC section 15 forbids it"
 vinfo "$vols data volume(s) survived make down"
 

@@ -10,11 +10,11 @@
 # Runs as root so the official entrypoint can drop to the mysql user itself,
 # keeping first-run behaviour identical to the official image.
 
-DBTK_STAGE=dbtk-engine
-export DBTK_STAGE
-# shellcheck source=dbtk-lib.sh
-source /usr/local/lib/dbtk/dbtk-lib.sh
+MMDB_STAGE=mmdb-engine
+export MMDB_STAGE
+# shellcheck source=mmdb-lib.sh
+source /usr/local/lib/mmdb/mmdb-lib.sh
 
-stage "starting $DBTK_DAEMON via the official entrypoint"
+stage "starting $MMDB_DAEMON via the official entrypoint"
 
-exec /usr/local/bin/docker-entrypoint.sh "$DBTK_DAEMON"
+exec /usr/local/bin/docker-entrypoint.sh "$MMDB_DAEMON"
