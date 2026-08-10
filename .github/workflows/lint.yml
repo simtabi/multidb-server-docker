@@ -18,6 +18,12 @@ jobs:
       # and trivy-action supply-chain attacks spread. Dependabot's
       # github-actions ecosystem bumps the SHA and keeps the comment current.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # No job in this workflow pushes, so the token has no business
+          # outliving the checkout step. Without this, checkout writes the
+          # credential into .git/config, where any later step -- or anything
+          # that archives the workspace -- can read it.
+          persist-credentials: false
 
       # PINNED, not apt's.
       #
@@ -49,6 +55,12 @@ jobs:
       # and trivy-action supply-chain attacks spread. Dependabot's
       # github-actions ecosystem bumps the SHA and keeps the comment current.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # No job in this workflow pushes, so the token has no business
+          # outliving the checkout step. Without this, checkout writes the
+          # credential into .git/config, where any later step -- or anything
+          # that archives the workspace -- can read it.
+          persist-credentials: false
 
       # The harness must be well-formed even while the features it checks do
       # not exist yet. This is the gate that stays green through every phase.
