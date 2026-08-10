@@ -33,15 +33,16 @@ secret=/run/secrets/pgbouncer_password.txt
 converge_pgbouncer=0
 [[ -r "$secret" ]] && converge_pgbouncer=1
 
-# No /run/secrets AT ALL means this container is not a composed engine: it is a
-# client (`docker run <image> psql ...` -- check 12 does exactly that) or a
-# bare-run server with a throwaway password. Nothing here applies, and the
-# readiness wait below would stall the CMD s6 runs afterwards by up to 300
-# seconds -- which turned check 12's verify-full client into a five-minute
-# hang against a container whose own log was busy explaining a server that was
-# never meant to exist.
-if [[ ! -d /run/secrets ]]; then
-    stage "no secrets mounted; not a composed engine, nothing to converge"
+# Skip the readiness wait only when EVERY concern this script owns is absent.
+# The first version of this gate skipped on "no /run/secrets", which read as
+# "not a composed engine" -- and broke check 37, whose bare container mounts no
+# secrets and legitimately expects PITR convergence from MDB_PG_PITR=true
+# alone. The concerns decide, not the mounts: with no pooler secret and PITR
+# off, there is nothing to wait FOR, and waiting anyway stalls the CMD in a
+# client container (`docker run <image> psql ...`, check 12) by up to 300s
+# against a server that is never going to exist.
+if (( ! converge_pgbouncer )) && ! is_true "${MDB_PG_PITR:-false}"; then
+    stage "no pooler secret and PITR off; nothing to converge"
     exit 0
 fi
 
