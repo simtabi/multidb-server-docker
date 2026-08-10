@@ -315,7 +315,26 @@ while IFS= read -r value; do
             key="$(grep -E "^MDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
                    | head -1 | cut -d= -f1 || true)"
         fi
-        taken="${taken}       $value${key:+ ($key)}"$'\n'
+        # Still nothing? Then the value is a compose DEFAULT and the env file
+        # carries the setting commented out -- which is the common case for
+        # anything a user has never changed, and the one where a bare number is
+        # least useful. It happened with 8080: every other conflicting port
+        # named its variable and that one printed alone, so the only way to find
+        # the knob was to grep the compose file for the number.
+        #
+        # The line is named as commented, because telling someone to edit
+        # MDB_ADMINER_HOST_PORT when their env file has no such active line
+        # sends them looking for something that is not there.
+        hint=""
+        if [[ -z "$key" ]]; then
+            commented="$(grep -cE "^#[[:space:]]*MDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null || true)"
+            if [[ "${commented:-0}" == "1" ]]; then
+                key="$(grep -E "^#[[:space:]]*MDB_[A-Z0-9_]*(HOST_)?PORT=${value}\$" "$ENV_FILE" 2>/dev/null \
+                       | head -1 | sed 's/^#[[:space:]]*//' | cut -d= -f1 || true)"
+                hint=", commented out -- uncomment it to change the port"
+            fi
+        fi
+        taken="${taken}       $value${key:+ ($key$hint)}"$'\n'
     fi
 done <<< "$resolved"
 
