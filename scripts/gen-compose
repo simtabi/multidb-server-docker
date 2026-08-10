@@ -207,6 +207,17 @@ for engine in $(engine_list); do
             printf '    depends_on: [%s]\n' "$MDB_ENGINE_NAME"
             printf '    security_opt:\n      - no-new-privileges:true\n'
             printf '    cap_drop:\n      - ALL\n'
+            # Three capabilities back, a subset of the engines' own list,
+            # because a bare cap_drop ALL breaks both halves of the pooler
+            # secret story. The secrets directory is host-owned 0700, so even a
+            # ROOT process cannot traverse it without DAC_OVERRIDE -- on CI
+            # ProxySQL looped "cannot read proxysql_admin_password.txt" from
+            # uid 0. And pgBouncer's bootstrap now drops root to postgres via
+            # setpriv, a setresuid/setresgid call needing SETUID and SETGID --
+            # no-new-privileges does not forbid it, since shedding privilege is
+            # not gaining it. macOS hid all of this by flattening host
+            # ownership, exactly as it hid the Patroni key and pgAdmin.
+            printf '    cap_add: [DAC_OVERRIDE, SETUID, SETGID]\n'
             # Every pooler starts through a bootstrap script from the
             # repository rather than an inline shell snippet in generated YAML.
             # The two poolers need genuinely different startup work -- pgBouncer

@@ -40,12 +40,21 @@ esc_pw="${pw//\'/\'\'}"
 
 # Bounded wait. An unbounded one turns "the engine failed to start" into a
 # container that hangs with no explanation.
-deadline=$(( SECONDS + 90 ))
+#
+# 300 seconds, not 90: a FRESH volume means the official entrypoint runs the
+# full initialisation -- temporary server, initdb.d, shutdown, real server --
+# and on a two-core CI runner that alone can exceed 90s. And the timeout is a
+# FAILURE, not a skip-with-success: this stage is what creates the proxysql
+# user, so "skipping convergence" and exiting 0 left the pooler looping on
+# ERROR 1045 Access denied against a healthy-looking engine, with the one line
+# explaining why buried in a log claiming the service started successfully.
+deadline=$(( SECONDS + 300 ))
 until "$MDB_CLIENT" --protocol=socket -uroot \
         -p"$root_pw" -e "SELECT 1" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
-        stage "engine did not become ready within 90s; skipping convergence"
-        exit 0
+        stage "engine not ready after 300s; convergence FAILED -- the proxysql
+       user does not exist and a pooler pointed here cannot authenticate"
+        exit 1
     fi
     sleep 2
 done

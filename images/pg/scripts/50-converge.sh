@@ -35,11 +35,16 @@ converge_pgbouncer=0
 
 # Bounded wait. An unbounded one turns "PostgreSQL failed to start" into a
 # container that hangs with no explanation, which is strictly worse.
-deadline=$(( SECONDS + 60 ))
+# 300 seconds, not 60 -- a fresh volume's full initialisation can exceed the
+# short budget on a loaded machine -- and timing out is a FAILURE, not a
+# skip-with-success. The mysql-family twin of this script exited 0 here and
+# left the pooler looping on Access denied against an engine whose log said
+# the convergence service started successfully.
+deadline=$(( SECONDS + 300 ))
 until gosu postgres pg_isready -q -h /var/run/postgresql 2>/dev/null; do
     if (( SECONDS >= deadline )); then
-        stage "PostgreSQL did not become ready within 60s; skipping convergence"
-        exit 0
+        stage "PostgreSQL not ready after 300s; convergence FAILED"
+        exit 1
     fi
     sleep 1
 done
