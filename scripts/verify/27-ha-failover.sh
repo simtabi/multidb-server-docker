@@ -76,8 +76,13 @@ docker volume rm -f \
     "${COMPOSE_PROJECT_NAME:-mdb}_patroni2_pg${_pgv}_data" \
     "${COMPOSE_PROJECT_NAME:-mdb}_patroni3_pg${_pgv}_data" >/dev/null 2>&1 || true
 
-mdb_up PROFILES=ha || vfail "make up PROFILES=ha failed"
+# Registered BEFORE the boot, not after. A cleanup registered on the line
+# following `mdb_up` never runs when the boot itself fails -- and a FAILED
+# boot is exactly when containers are left behind. Check 27's half-started
+# HA stack kept haproxy on 5432, so check 28 then failed its port pre-flight
+# and reported a port collision that had nothing to do with its subject.
 add_cleanup 'make down'
+mdb_up PROFILES=ha || vfail "make up PROFILES=ha failed"
 
 # Parsed through `scripts/ha`'s machine-readable verbs, not by grepping the
 # human table. The table is for people and changes shape: `ha status` also

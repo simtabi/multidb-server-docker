@@ -17,8 +17,13 @@ need_file "$MDB_ROOT/docker-compose.yml"
 
 domain="$(env_get MDB_UI_DOMAIN db.localhost)"
 
-mdb_up PROFILES=pg,mysql,mariadb,ui || vfail "make up with the ui profile failed"
+# Registered BEFORE the boot, not after. A cleanup registered on the line
+# following `mdb_up` never runs when the boot itself fails -- and a FAILED
+# boot is exactly when containers are left behind. Check 27's half-started
+# HA stack kept haproxy on 5432, so check 28 then failed its port pre-flight
+# and reported a port collision that had nothing to do with its subject.
 add_cleanup 'make down'
+mdb_up PROFILES=pg,mysql,mariadb,ui || vfail "make up with the ui profile failed"
 
 # shellcheck disable=SC2016  # evaluated by the subshell, not here
 wait_for 90 "caddy to start" bash -c \
