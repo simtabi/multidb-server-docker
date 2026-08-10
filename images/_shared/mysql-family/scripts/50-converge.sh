@@ -54,7 +54,15 @@ until "$MDB_CLIENT" --protocol=socket -uroot \
     if (( SECONDS >= deadline )); then
         stage "engine not ready after 300s; convergence FAILED -- the proxysql
        user does not exist and a pooler pointed here cannot authenticate"
-        exit 1
+        # A MARKER plus exit 0, not exit 1. This image also runs as a CLIENT --
+        # `docker run <image> mysql ...` is how the harness and make shell use
+        # it -- and there this oneshot can never succeed, because no server is
+        # supposed to exist. Failing the oneshot halts s6 before the command
+        # ever runs (check 12 caught exactly that for pg). The marker turns the
+        # failure into an UNHEALTHY server instead: the healthcheck refuses
+        # while it exists, and a client container has no healthcheck to fail.
+        mkdir -p /run/mdb && : > /run/mdb/converge-failed
+        exit 0
     fi
     sleep 2
 done

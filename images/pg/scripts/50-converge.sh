@@ -33,6 +33,18 @@ secret=/run/secrets/pgbouncer_password.txt
 converge_pgbouncer=0
 [[ -r "$secret" ]] && converge_pgbouncer=1
 
+# No /run/secrets AT ALL means this container is not a composed engine: it is a
+# client (`docker run <image> psql ...` -- check 12 does exactly that) or a
+# bare-run server with a throwaway password. Nothing here applies, and the
+# readiness wait below would stall the CMD s6 runs afterwards by up to 300
+# seconds -- which turned check 12's verify-full client into a five-minute
+# hang against a container whose own log was busy explaining a server that was
+# never meant to exist.
+if [[ ! -d /run/secrets ]]; then
+    stage "no secrets mounted; not a composed engine, nothing to converge"
+    exit 0
+fi
+
 # Bounded wait. An unbounded one turns "PostgreSQL failed to start" into a
 # container that hangs with no explanation, which is strictly worse.
 # 300 seconds, not 60 -- a fresh volume's full initialisation can exceed the
@@ -44,7 +56,13 @@ deadline=$(( SECONDS + 300 ))
 until gosu postgres pg_isready -q -h /var/run/postgresql 2>/dev/null; do
     if (( SECONDS >= deadline )); then
         stage "PostgreSQL not ready after 300s; convergence FAILED"
-        exit 1
+        # Marker + exit 0, not exit 1 -- see the mysql-family twin. This image
+        # runs `docker run <image> psql ...` as a pure client (check 12 does),
+        # where no server exists for this probe to find; a failing oneshot
+        # halts s6 before that psql ever executes. The healthcheck refuses on
+        # the marker instead, which only a real server container has.
+        mkdir -p /run/mdb && : > /run/mdb/converge-failed
+        exit 0
     fi
     sleep 1
 done

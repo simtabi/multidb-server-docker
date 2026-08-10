@@ -72,7 +72,11 @@ ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0 \
     S6_KEEP_ENV=1
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=5 \
-    CMD mariadb-admin ping -h localhost --protocol=socket || exit 1
+    CMD test ! -f /run/mdb/converge-failed && mariadb-admin ping -h localhost --protocol=socket || exit 1
+# The marker test makes a timed-out convergence an UNHEALTHY container
+# rather than a healthy-looking engine missing its pooler account --
+# convergence itself cannot exit non-zero, because that halts client-mode
+# containers (docker run <image> psql/mysql) where no server ever starts.
 
 EXPOSE 3306
 
