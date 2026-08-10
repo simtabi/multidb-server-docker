@@ -1,0 +1,44 @@
+name: Bug report
+description: Something behaves differently than the docs or checks promise.
+labels: [bug]
+body:
+  - type: input
+    id: engine
+    attributes:
+      label: Engine and version
+      description: The engine involved and its MDB_*_VERSION, if engine-specific.
+      placeholder: pg 17 / mysql 8.4 / mariadb 11.8 / mongodb 8.0 / cassandra 5.0 / ferretdb 2
+    validations:
+      required: false
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: macOS 15 arm64 / Ubuntu 24.04 amd64 / Windows 11 WSL2
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: Output of `make verify-fast`
+      description: >-
+        The harness exists to catch exactly this. Paste the failing check's
+        output — or say that all checks pass, which is equally useful.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Container logs
+      description: "`docker compose logs <service> --tail 50` for the service involved."
+      render: text
+    validations:
+      required: false

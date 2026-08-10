@@ -1,0 +1,26 @@
+name: Feature request
+description: An engine, capability, or workflow the toolkit should support.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do that the toolkit currently makes hard.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: >-
+        What it should look like — a make target, an MDB_ variable, an engine
+        descriptor. New engines are descriptor files; see docs/adding-an-engine.md.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+    validations:
+      required: false
