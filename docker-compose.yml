@@ -82,8 +82,24 @@ services:
       # Rendered by scripts/env-render so the UI opens with the server already
       # listed rather than asking for a hostname (SPEC section 7).
       - ./caddy/servers.json:/pgadmin4/servers.json:ro
-      - ./secrets:/run/secrets:ro
       - pgadmin_data:/var/lib/pgadmin
+    # A compose SECRET rather than the ./secrets bind mount every other service
+    # uses, because pgAdmin is the only one that reads a secret as a non-root
+    # user. secrets/ is 0700 and its files 0600, owned by whoever ran make init,
+    # and the engines get away with it because their entrypoints read the file
+    # as root before dropping privileges. pgAdmin's runs as uid 5050 from the
+    # start: on Linux it cannot even traverse the directory, so it crash-looped
+    # and Caddy answered 502 -- while on macOS, where the Docker implementation
+    # flattens ownership, it worked. Same root cause as the Patroni server key.
+    #
+    # uid/gid/mode present the file readable to 5050 inside the container
+    # without loosening anything on the host.
+    secrets:
+      - source: pgadmin_password
+        target: pgadmin_password.txt
+        uid: "5050"
+        gid: "5050"
+        mode: 0400
     ports:
       - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_PGADMIN_HOST_PORT:-8082}:80"
     networks: [mdb]
@@ -354,3 +370,13 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME:-mdb}_caddy_data
   caddy_config:
     name: ${COMPOSE_PROJECT_NAME:-mdb}_caddy_config
+
+# -----------------------------------------------------------------------------
+# Secrets
+# -----------------------------------------------------------------------------
+# Only pgAdmin uses this mechanism; every other service bind-mounts ./secrets
+# and reads it as root before dropping privileges. See the note on the pgadmin
+# service for why it cannot.
+secrets:
+  pgadmin_password:
+    file: ./secrets/pgadmin_password.txt
