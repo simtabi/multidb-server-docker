@@ -94,9 +94,14 @@ if ! mdb_up PROFILES=ha; then
         printf '      ----- %s -----\n' "$c" >&2
         # The API tracebacks are noise: they are connection resets from the
         # healthcheck probing a node that is not answering yet, one per probe.
+        # 40 lines, and only stack FRAMES filtered. The first version cut to 12
+        # and dropped everything that looked like Python, which left exactly
+        # "PatroniFatalException: Failed to bootstrap cluster" -- the assertion
+        # that bootstrap failed, with the initdb or post-bootstrap error that
+        # says WHY scrolled off above it.
         docker logs "$c" 2>&1 \
-            | grep -viE 'Traceback|^ +File "|^ +[a-z_]+\(|ConnectionResetError' \
-            | tail -12 | sed 's/^/      /' >&2 || true
+            | grep -viE '^ +File "|^\s+\^+\s*$|ConnectionResetError' \
+            | tail -40 | sed 's/^/      /' >&2 || true
     done
     vfail "make up PROFILES=ha failed (each node's own log is above)"
 fi
