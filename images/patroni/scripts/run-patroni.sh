@@ -47,6 +47,30 @@ repl_pw="$(read_secret "${MDB_REPLICATION_SECRET:-pg_replication_password.txt}")
 # HAProxy polls them constantly and they disclose only role, not data.
 rest_pw="$(read_secret "${MDB_PATRONI_REST_SECRET:-patroni_rest_password.txt}")"
 
+# --- stage the server certificate where postgres owns it --------------------
+# PostgreSQL refuses to start on a private key it does not own:
+#   FATAL: private key file "/certs/pg/server.key" must be owned by the
+#          database user or root
+# certs/ is generated on the HOST by make init, so the key carries the invoking
+# user's uid. On a machine where that happens to be root, or where the Docker
+# implementation flattens ownership -- as Docker Desktop and OrbStack do on
+# macOS -- pointing postgres straight at the bind mount works, and it looks
+# fine forever. On Linux, and so on every CI runner, the uid is the runner's,
+# matches neither postgres nor root, and the LEADER fails to bootstrap: initdb
+# succeeds, the postmaster dies on the key, Patroni renames pgdata to
+# pgdata.failed and gives up. The replicas then wait for a leader that will
+# never arrive, and compose reports whichever node it noticed -- a different
+# one each run, which reads as a flaky node rather than a permission.
+#
+# The non-HA image already solved this in images/pg/scripts/30-certs.sh; this
+# is the same install(1), which copies and sets owner and mode in one step. The
+# mount stays read-only and the copy is what postgres reads.
+pg_certs=/etc/patroni/certs
+install -d -o postgres -g postgres -m 0700 "$pg_certs"
+install -o postgres -g postgres -m 0600 /certs/pg/server.key "$pg_certs/server.key"
+install -o postgres -g postgres -m 0644 /certs/pg/server.crt "$pg_certs/server.crt"
+install -o postgres -g postgres -m 0644 /certs/ca.crt        "$pg_certs/ca.crt"
+
 stage "writing $conf for node $name in scope $scope"
 
 # YAML, generated rather than templated with sed: the values include generated
@@ -105,9 +129,9 @@ bootstrap:
         max_replication_slots: 10
         wal_keep_size: 128MB
         ssl: 'on'
-        ssl_cert_file: /certs/pg/server.crt
-        ssl_key_file: /certs/pg/server.key
-        ssl_ca_file: /certs/ca.crt
+        ssl_cert_file: /etc/patroni/certs/server.crt
+        ssl_key_file: /etc/patroni/certs/server.key
+        ssl_ca_file: /etc/patroni/certs/ca.crt
 
   initdb:
     - encoding: UTF8
