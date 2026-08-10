@@ -12,8 +12,12 @@ jobs:
   shellcheck:
     name: shellcheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to the commit, not the tag -- a moved tag is how the tj-actions
+      # and trivy-action supply-chain attacks spread. Dependabot's
+      # github-actions ecosystem bumps the SHA and keeps the comment current.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # PINNED, not apt's.
       #
@@ -39,8 +43,12 @@ jobs:
   harness-structure:
     name: harness structure
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to the commit, not the tag -- a moved tag is how the tj-actions
+      # and trivy-action supply-chain attacks spread. Dependabot's
+      # github-actions ecosystem bumps the SHA and keeps the comment current.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # The harness must be well-formed even while the features it checks do
       # not exist yet. This is the gate that stays green through every phase.

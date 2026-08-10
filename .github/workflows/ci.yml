@@ -22,10 +22,18 @@ jobs:
   matrix:
     name: resolve matrix
     runs-on: ubuntu-latest
+    # Every job gets a timeout: the Actions default is 360 minutes, which is
+    # unbounded for practical purposes if a runner ever hangs on this.
+    timeout-minutes: 5
     outputs:
       versions: ${{ steps.gen.outputs.versions }}
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to the commit, not the tag, for the same reason the trivy binary
+      # is checksum-verified below: 75 of trivy-action's 76 tags were force-
+      # pushed in the 2026 supply-chain attack, and tj-actions spread the same
+      # way. Dependabot's github-actions ecosystem bumps the SHA and keeps the
+      # version comment current.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - id: gen
         run: echo "versions=$(scripts/ci-matrix versions)" >> "$GITHUB_OUTPUT"
 
@@ -57,7 +65,12 @@ jobs:
             runner: ubuntu-24.04-arm
 
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to the commit, not the tag, for the same reason the trivy binary
+      # is checksum-verified below: 75 of trivy-action's 76 tags were force-
+      # pushed in the 2026 supply-chain attack, and tj-actions spread the same
+      # way. Dependabot's github-actions ecosystem bumps the SHA and keeps the
+      # version comment current.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Confirm docker is available
         run: docker info
@@ -152,7 +165,12 @@ jobs:
             runner: ubuntu-24.04-arm
 
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to the commit, not the tag, for the same reason the trivy binary
+      # is checksum-verified below: 75 of trivy-action's 76 tags were force-
+      # pushed in the 2026 supply-chain attack, and tj-actions spread the same
+      # way. Dependabot's github-actions ecosystem bumps the SHA and keeps the
+      # version comment current.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # Same pinned version as lint.yml; see the note there.
       - name: Install shellcheck
