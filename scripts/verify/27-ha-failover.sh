@@ -82,7 +82,24 @@ docker volume rm -f \
 # HA stack kept haproxy on 5432, so check 28 then failed its port pre-flight
 # and reported a port collision that had nothing to do with its subject.
 add_cleanup 'make down'
-mdb_up PROFILES=ha || vfail "make up PROFILES=ha failed"
+if ! mdb_up PROFILES=ha; then
+    # compose says only "container mdb-patroniN is unhealthy", which is the one
+    # fact that does not narrow anything down -- and N moves between runs, which
+    # reads as a flaky node. Patroni says exactly why in its own log, so print
+    # it: locally the same symptom was "password authentication failed for user
+    # postgres", a replica that had cloned a data directory predating the
+    # current secrets, and nothing in compose's output hinted at credentials.
+    for n in 1 2 3; do
+        c="${COMPOSE_PROJECT_NAME:-mdb}-patroni${n}"
+        printf '      ----- %s -----\n' "$c" >&2
+        # The API tracebacks are noise: they are connection resets from the
+        # healthcheck probing a node that is not answering yet, one per probe.
+        docker logs "$c" 2>&1 \
+            | grep -viE 'Traceback|^ +File "|^ +[a-z_]+\(|ConnectionResetError' \
+            | tail -12 | sed 's/^/      /' >&2 || true
+    done
+    vfail "make up PROFILES=ha failed (each node's own log is above)"
+fi
 
 # Parsed through `scripts/ha`'s machine-readable verbs, not by grepping the
 # human table. The table is for people and changes shape: `ha status` also
