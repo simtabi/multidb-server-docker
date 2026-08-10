@@ -40,7 +40,10 @@ RUN set -eux; \
     mkdir -p /etc/pgbouncer; \
     chown -R postgres:postgres /etc/pgbouncer
 
-USER postgres
+# No USER directive: the container starts as root so the bootstrap script can
+# read the mounted secret -- whose host ownership no in-container user can
+# match -- and it drops to postgres via setpriv before pgBouncer starts. The
+# process that listens on 6432 is postgres; check 33 connects and proves it.
 EXPOSE 6432
 
 # Self-contained: `docker run` on this image starts a pooler, without compose

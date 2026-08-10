@@ -56,7 +56,16 @@ for ui in adminer pgadmin pma; do
     done
     case "$code" in
         200|301|302) vinfo "https://${ui}.${domain} -> $code" ;;
-        *) vfail "https://${ui}.${domain} returned '${code:-no response}' after 120s" ;;
+        *)
+            # The status code alone convicts nobody: 502 means only that Caddy
+            # could not reach the UI, and the UI's own log says why it is not
+            # answering -- for pgAdmin it was a crash loop on a secret file it
+            # could not read, which no amount of staring at Caddy would surface.
+            printf '      ----- %s log -----\n' "$ui" >&2
+            docker compose logs --tail 20 "$ui" 2>&1 | sed 's/^/      /' >&2 || true
+            printf '      ----- caddy log -----\n' >&2
+            docker compose logs --tail 8 caddy 2>&1 | sed 's/^/      /' >&2 || true
+            vfail "https://${ui}.${domain} returned '${code:-no response}' after 120s (logs above)" ;;
     esac
 done
 

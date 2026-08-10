@@ -85,21 +85,20 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     # A compose SECRET rather than the ./secrets bind mount every other service
     # uses, because pgAdmin is the only one that reads a secret as a non-root
-    # user. secrets/ is 0700 and its files 0600, owned by whoever ran make init,
-    # and the engines get away with it because their entrypoints read the file
-    # as root before dropping privileges. pgAdmin's runs as uid 5050 from the
-    # start: on Linux it cannot even traverse the directory, so it crash-looped
-    # and Caddy answered 502 -- while on macOS, where the Docker implementation
-    # flattens ownership, it worked. Same root cause as the Patroni server key.
+    # user (uid 5050) with no root phase -- the engines and poolers read as root
+    # and then drop. Mounting the FILE steps around secrets/ being 0700, which
+    # uid 5050 cannot traverse.
     #
-    # uid/gid/mode present the file readable to 5050 inside the container
-    # without loosening anything on the host.
+    # No uid/gid/mode here, although compose accepts them: for file-backed
+    # secrets outside swarm they are silently IGNORED (docker/compose#9648; the
+    # PR to honour them was closed unmerged). The file arrives with its HOST
+    # owner and mode -- a first fix set uid: 5050 here, verified only that
+    # compose accepted the syntax, and changed nothing on Linux. What makes the
+    # file readable is scripts/init generating it 0644, with the 0700 directory
+    # as the guard on the host.
     secrets:
       - source: pgadmin_password
         target: pgadmin_password.txt
-        uid: "5050"
-        gid: "5050"
-        mode: 0400
     ports:
       - "${MDB_BIND_ADDR:-127.0.0.1}:${MDB_PGADMIN_HOST_PORT:-8082}:80"
     networks: [mdb]

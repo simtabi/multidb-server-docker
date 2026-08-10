@@ -19,4 +19,15 @@ set -eu
 DB_PASSWORD="$(tr -d '\n' < "$DB_PASSWORD_FILE")"
 export DB_PASSWORD
 
-exec /entrypoint.sh /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+# The read above happens as ROOT, and the drop to postgres happens here, at
+# exec -- the same read-then-drop the engine entrypoints use, and the reason
+# they never hit this: secrets/ is created on the host by make init as the
+# invoking user, mode 0700, files 0600. A container process that starts as
+# postgres cannot even traverse that directory on Linux, so this script died
+# on its very first line with "cannot read" and the check reported "the
+# pooler is not running (exit 1)". On macOS the Docker implementation
+# flattens ownership, which is why it only ever failed on CI. The image
+# previously baked USER postgres, which made the unprivileged read the only
+# option; the Dockerfile now leaves the user root and this line is the drop.
+exec setpriv --reuid postgres --regid postgres --init-groups \
+    /entrypoint.sh /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini

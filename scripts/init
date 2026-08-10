@@ -54,7 +54,7 @@ gen_secret() {
     # `set -o pipefail` would turn that into a fatal error 141 after the file
     # had already been written but before it was chmodded.
     openssl rand -base64 96 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-40 > "$file"
-    chmod 0600 "$file"
+    chmod "${2:-0600}" "$file"
     printf '  generated %s\n' "$name"
 }
 
@@ -91,7 +91,19 @@ gen_secret pgbackrest_cipher_passphrase.txt
 gen_secret proxysql_admin_password.txt
 gen_secret proxysql_monitor_password.txt
 
-gen_secret pgadmin_password.txt
+# 0644, not 0600, and deliberately. pgAdmin is the only container that reads
+# its secret as a NON-ROOT user (uid 5050) with no root phase to read it for
+# them -- the engines and poolers all read as root and then drop. Compose
+# ignores uid/gid/mode on file-backed secrets outside swarm (docker/compose
+# #9648; the PR to fix it was closed unmerged), so the bind-mounted file
+# arrives in the container with the HOST owner and mode, and 0600 owned by
+# whoever ran make init is unreadable to uid 5050 on Linux: pgAdmin
+# crash-looped and Caddy answered 502. On macOS ownership is flattened, which
+# is why it never reproduced here. On the host nothing is exposed: secrets/
+# itself is 0700, so the wider file mode is unreachable to other users.
+gen_secret pgadmin_password.txt 0644
+# Same reasoning would apply to any future secret consumed by a third-party
+# image that starts unprivileged. Our own images read as root instead.
 
 # -----------------------------------------------------------------------------
 # 3. Certificates

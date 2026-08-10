@@ -40,20 +40,35 @@ base_for() {
 # Captured BEFORE the list is filled in, because by then it is never empty.
 EXPLICIT_ENGINES=$#
 
-engines=("$@")
-if [[ ${#engines[@]} -eq 0 ]]; then
-    engines=()
+# Derived images (pgbouncer, patroni) may be NAMED explicitly. They are not
+# engines, so the engine loop below cannot build them -- and before this split
+# `scripts/build pgbouncer` matched nothing, built zero images and exited 0,
+# which reads exactly like success. An image name you typed either builds or
+# fails; it never no-ops.
+engines=()
+explicit_derived=""
+for a in "$@"; do
+    case "$a" in
+        pgbouncer|patroni) explicit_derived="$explicit_derived $a" ;;
+        *) engines+=("$a") ;;
+    esac
+done
+if [[ $# -eq 0 ]]; then
     for e in $(engine_list) cli; do
         [[ -f "$ROOT/images/$e/Dockerfile" ]] && engines+=("$e")
     done
 fi
 
-if [[ ${#engines[@]} -eq 0 ]]; then
+# ${#engines[@]} on an empty array trips `set -u` on bash 3.2 (macOS), so the
+# count goes through the ${arr[@]+...} guard the harness already uses elsewhere.
+engine_count=0
+for _e in ${engines[@]+"${engines[@]}"}; do engine_count=$(( engine_count + 1 )); done
+if [[ "$engine_count" -eq 0 && -z "$explicit_derived" ]]; then
     printf 'no images have a Dockerfile yet\n' >&2
     exit 1
 fi
 
-for engine in "${engines[@]}"; do
+for engine in ${engines[@]+"${engines[@]}"}; do
     [[ -f "$ROOT/images/$engine/Dockerfile" ]] \
         || { printf 'images/%s/Dockerfile does not exist\n' "$engine" >&2; exit 1; }
 
@@ -96,19 +111,21 @@ done
 # ghcr for an image we have never published.
 derived=0
 if (( EXPLICIT_ENGINES == 0 )); then
-    build_derived=1
+    build_derived=1        # full build: everything, including derived
 else
-    build_derived=0
+    build_derived=0        # explicit engines only -- unless a derived image was named
 fi
+case " $explicit_derived " in *" pgbouncer "*) build_pgbouncer=1 ;; *) build_pgbouncer=$build_derived ;; esac
+case " $explicit_derived " in *" patroni "*)   build_patroni=1   ;; *) build_patroni=$build_derived   ;; esac
 
-if (( build_derived )) && [[ -f "$ROOT/images/pgbouncer/Dockerfile" ]]; then
+if (( build_pgbouncer )) && [[ -f "$ROOT/images/pgbouncer/Dockerfile" ]]; then
     tag="$PREFIX/multidb-server-pgbouncer:dev"
     printf 'building %s\n  from debian:12-slim + PGDG\n' "$tag"
     docker build -f "$ROOT/images/pgbouncer/Dockerfile" -t "$tag" "$ROOT/images"
     derived=$(( derived + 1 ))
 fi
 
-if (( build_derived )) && [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
+if (( build_patroni )) && [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
     pg_version="$(version_for pg)"
     tag="$PREFIX/multidb-server-patroni:$pg_version"
     printf 'building %s\n  from %s/multidb-server-pg:%s\n' "$tag" "$PREFIX" "$pg_version"
@@ -120,4 +137,4 @@ if (( build_derived )) && [[ -f "$ROOT/images/patroni/Dockerfile" ]]; then
     derived=$(( derived + 1 ))
 fi
 
-printf '✓ built %d image(s)\n' "$(( ${#engines[@]} + derived ))"
+printf '✓ built %d image(s)\n' "$(( engine_count + derived ))"

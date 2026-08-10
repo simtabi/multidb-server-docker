@@ -29,3 +29,16 @@ fi
 
 MDB_ENV_FILE="$ENV_FILE" "$ROOT/scripts/env-render" "$caddy_template" "$ROOT/caddy/Caddyfile"
 MDB_ENV_FILE="$ENV_FILE" "$ROOT/scripts/env-render" "caddy/servers.json.tmpl" "$ROOT/caddy/servers.json"
+
+# -----------------------------------------------------------------------------
+# Normalise the one secret whose mode must differ
+# -----------------------------------------------------------------------------
+# pgAdmin reads its secret as uid 5050 with no root phase, and compose ignores
+# uid/gid/mode on file-backed secrets (docker/compose#9648), so the HOST mode is
+# what the container sees. init generates it 0644 now -- but init refuses to run
+# on an existing checkout, so anyone who initialised before that change keeps an
+# 0600 file and a crash-looping pgAdmin. This runs on every make up and heals
+# it. secrets/ stays 0700, which is the actual guard on the host.
+if [[ -f "$ROOT/secrets/pgadmin_password.txt" ]]; then
+    chmod 0644 "$ROOT/secrets/pgadmin_password.txt"
+fi

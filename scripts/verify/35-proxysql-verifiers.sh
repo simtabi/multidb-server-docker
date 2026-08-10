@@ -47,8 +47,22 @@ wait_ready 180 "the engine to accept connections" \
 
 # The pooler mirrors on start, so it has to see a user created after it booted.
 docker compose restart "${engine}-pooler" >/dev/null 2>&1
-wait_ready 120 "the pooler to finish mirroring" bash -c \
-    "docker compose logs ${engine}-pooler 2>/dev/null | grep -q 'mirrored'"
+# In a SUBSHELL, because wait_ready exits through vfail on timeout and would
+# take the whole check with it before the log dump below ever ran. The subshell
+# contains the exit; its FAIL line still prints, and the dump follows it.
+if ! ( wait_ready 120 "the pooler to finish mirroring" bash -c \
+    "docker compose logs ${engine}-pooler 2>/dev/null | grep -q 'mirrored'" ); then
+    # The timeout names a wait, not a cause. The pooler's own log distinguishes
+    # every distinct failure this can be: still waiting for the upstream (the
+    # engine's convergence has not created the proxysql user yet), auth
+    # rejected (wrong verifier), TLS refused (CA problems), or ProxySQL itself
+    # exiting. Locally the full sequence finishes in seconds, so whatever this
+    # is exists only on the runner -- which is exactly why it must be printed
+    # rather than reasoned about.
+    printf '      ----- %s-pooler log -----\n' "$engine" >&2
+    docker compose logs --tail 30 "${engine}-pooler" 2>&1 | sed 's/^/      /' >&2 || true
+    vfail "the pooler never reported mirroring (its log is above)"
+fi
 
 app_pw="$(tr -d '\n' < "$secret_dir/${engine}_${proj}_user_password.txt")"
 admin_pw="$(tr -d '\n' < "$secret_dir/proxysql_admin_password.txt")"
