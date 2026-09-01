@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Report security issues privately to **opensource@simtabi.com**. Do not open a
+Report security issues privately to **security@simtabi.com**. Do not open a
 public issue for a vulnerability.
 
 Include the affected image or script, the version or digest, reproduction
