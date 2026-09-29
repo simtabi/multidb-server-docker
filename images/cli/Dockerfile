@@ -12,7 +12,7 @@ ARG BASE_IMAGE=debian:12-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613
 FROM ${BASE_IMAGE}
 
 ARG PG_CLIENT_VERSION=17
-ARG RCLONE_VERSION=1.75.0
+ARG RCLONE_VERSION=1.75.1
 
 LABEL org.opencontainers.image.title="multidb-server-cli" \
       org.opencontainers.image.description="PostgreSQL, MySQL and MariaDB clients, dump/restore tools, and the multidb-server scripts" \
