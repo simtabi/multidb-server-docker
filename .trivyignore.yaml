@@ -71,6 +71,16 @@ vulnerabilities:
       Revisit at the next Cassandra release.
     expired_at: 2026-11-09
 
+  - id: CVE-2026-68497
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
+    statement: >-
+      jackson-databind, vendored at 2.19.2 by Cassandra 5.0.8 and 4.1.11 with no
+      newer release to repin to. Fixed only in the library (2.18.10, 2.21.6,
+      2.22.2); replacing the JAR inside lib/ is an untested Cassandra
+      configuration. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
   - id: CVE-2026-54513
     purls:
       - "pkg:maven/com.fasterxml.jackson.core/jackson-databind"

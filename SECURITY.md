@@ -2,8 +2,11 @@
 
 ## Reporting a vulnerability
 
-Report security issues privately to **opensource@simtabi.com**. Do not open a
-public issue for a vulnerability.
+Do not open a public issue for a vulnerability. Report it privately, through
+GitHub private vulnerability reporting at
+<https://github.com/simtabi/multidb-server-docker/security/advisories/new>. The
+report stays attached to the repository, with a draft advisory and a CVE request
+path. If you do not use GitHub, email **security@simtabi.com** instead.
 
 Include the affected image or script, the version or digest, reproduction
 steps, and the impact you observed. We aim to acknowledge within three working
