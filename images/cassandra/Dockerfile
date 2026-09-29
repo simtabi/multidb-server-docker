@@ -25,6 +25,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl procps xz-utils zstd; \
+    # The base digest predates Debian's pcre2 and expat security updates. They
+    # are fixable, so they are fixed -- named packages only, so nothing else in
+    # the pinned base moves.
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1; \
     rm -rf /var/lib/apt/lists/*
 
 # s6-overlay v3 as PID 1, same contract as every other engine image.

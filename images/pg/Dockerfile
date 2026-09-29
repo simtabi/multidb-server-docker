@@ -105,6 +105,7 @@ FROM ${BASE_IMAGE}
 ARG ENGINE_VERSION=17
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG POSTGRES_EXPORTER_VERSION=0.20.1
+ARG RCLONE_VERSION=1.75.1
 
 LABEL org.opencontainers.image.title="multidb-server-pg" \
       org.opencontainers.image.description="PostgreSQL with the full multidb-server extension suite, supervised by s6-overlay" \
@@ -120,6 +121,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # during step 1 research (DESIGN.md section 4).
 RUN set -eux; \
     apt-get update; \
+    # The base digest predates Debian's pcre2 and expat security updates. They
+    # are fixable, so they are fixed -- named packages only, so the PostgreSQL
+    # server the digest pins does not move.
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -131,7 +136,7 @@ RUN set -eux; \
         # hand-rolled archive_command copying files somewhere.
         pgbackrest \
         procps \
-        rclone \
+        unzip \
         xz-utils \
         zstd \
         "postgresql-${PG_MAJOR}-cron" \
@@ -147,6 +152,22 @@ RUN set -eux; \
         libcurl4 \
         libsodium23; \
     rm -rf /var/lib/apt/lists/*
+
+# rclone from upstream rather than the distribution, pinned like the other engine
+# images (SPEC section 6.1). Debian's package trails upstream, and its bundled Go
+# runtime carried fixed HIGH and CRITICAL CVEs that only an upstream release clears.
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+        amd64) rc_arch='amd64' ;; \
+        arm64) rc_arch='arm64' ;; \
+        *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/rclone.zip \
+        "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${rc_arch}.zip"; \
+    unzip -q -j /tmp/rclone.zip "*/rclone" -d /usr/local/bin; \
+    chmod +x /usr/local/bin/rclone; \
+    rm -f /tmp/rclone.zip; \
+    rclone version | head -1
 
 # --- the four extensions built or fetched above ------------------------------
 COPY --from=builder /build/out/usr/ /usr/

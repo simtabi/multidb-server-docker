@@ -10,7 +10,7 @@ FROM ${BASE_IMAGE}
 
 ARG ENGINE_VERSION=11.4
 ARG S6_OVERLAY_VERSION=3.2.3.2
-ARG RCLONE_VERSION=1.75.0
+ARG RCLONE_VERSION=1.75.1
 
 LABEL org.opencontainers.image.title="multidb-server-mariadb" \
       org.opencontainers.image.description="MariaDB with multidb-server configuration and tooling, supervised by s6-overlay" \
