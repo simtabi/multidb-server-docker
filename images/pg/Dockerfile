@@ -121,6 +121,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # during step 1 research (DESIGN.md section 4).
 RUN set -eux; \
     apt-get update; \
+    # The base digest predates Debian's pcre2 and expat security updates. They
+    # are fixable, so they are fixed -- named packages only, so the PostgreSQL
+    # server the digest pins does not move.
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
