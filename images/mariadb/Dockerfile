@@ -4,7 +4,7 @@
 # scripts and s6 tree with the MySQL image (see images/_shared/mysql-family).
 #
 # BASE_IMAGE is passed digest-pinned from images/bases.tsv.
-ARG BASE_IMAGE=mariadb:11.4.12@sha256:67873d30a17f6a9c331f06363b2fa15f38abca415529966d67c84f87f82439fe
+ARG BASE_IMAGE=mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
 
 FROM ${BASE_IMAGE}
 
