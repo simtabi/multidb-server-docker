@@ -26,6 +26,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl unzip; \
+    # The 10.11 digest (Ubuntu 22.04) predates Ubuntu's libssl3 security
+    # update. It is fixable, so it is fixed -- named package only, and only
+    # where it is installed: 11.4 and 11.8 are Ubuntu 24.04, which ships
+    # libssl3t64 instead, and their pinned bases do not move.
+    if dpkg-query -W -f='${Status}' libssl3 2>/dev/null | grep -q 'install ok installed'; then \
+        apt-get install -y --only-upgrade libssl3; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 
 # rclone from upstream rather than the distribution, so both engine images
