@@ -201,6 +201,58 @@ vulnerabilities:
       Revisit at the next Cassandra release.
     expired_at: 2026-11-09
 
+  # The 2026-10 jackson wave. Found after the repin to 4.1.12 and 5.0.9
+  # (published 2026-10-02, the newest releases of either series), both of which
+  # still ship jackson-core and jackson-databind 2.19.2 in lib/. The repin fixed
+  # nothing here, so these are waived, not repinned. Scoped tighter than the
+  # entries above: the purl carries the exact vendored version, so a Cassandra
+  # release that moves jackson stops matching and the build re-decides.
+  # Upstream: https://issues.apache.org/jira/browse/CASSANDRA-21691 (open).
+  # 90 days from 2026-10-02.
+
+  - id: CVE-2026-89407
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-core@2.19.2"
+    statement: >-
+      jackson-core regex backtracking denial of service, vendored at 2.19.2 by
+      Apache Cassandra 4.1.12 and 5.0.9, the newest releases of both series, so
+      there is no base image to repin to. Fixed upstream in the library (2.18.11,
+      2.21.7, 2.22.3) but in no Cassandra release; replacing the JAR inside lib/
+      is an untested Cassandra configuration. Tracked as CASSANDRA-21691.
+      Revisit at the next Cassandra release.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-89425
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-core@2.19.2"
+    statement: >-
+      jackson-core unbounded StringBuilder growth on malformed tokens, vendored at
+      2.19.2 by Apache Cassandra 4.1.12 and 5.0.9 with no newer release to repin
+      to. Fixed upstream in the library (2.18.11, 2.21.7, 2.22.3) but in no
+      Cassandra release. Tracked as CASSANDRA-21691. Revisit at the next
+      Cassandra release.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-91776
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.19.2"
+    statement: >-
+      jackson-databind unbounded cache denial of service, vendored at 2.19.2 by
+      Apache Cassandra 4.1.12 and 5.0.9 with no newer release to repin to. Fixed
+      upstream in the library (2.18.11, 2.21.7, 2.22.3) but in no Cassandra
+      release. Tracked as CASSANDRA-21691. Revisit at the next Cassandra release.
+    expired_at: 2026-12-31
+
+  - id: CVE-2026-91777
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.19.2"
+    statement: >-
+      jackson-databind, vendored at 2.19.2 by Apache Cassandra 4.1.12 and 5.0.9
+      with no newer release to repin to. Fixed upstream in the library (2.18.11,
+      2.21.7, 2.22.3) but in no Cassandra release. Tracked as CASSANDRA-21691.
+      Revisit at the next Cassandra release.
+    expired_at: 2026-12-31
+
   # ---------------------------------------------------------------------------
   # gosu -- Go standard library CVEs in a statically linked setuid helper
   # ---------------------------------------------------------------------------

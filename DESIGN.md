@@ -53,9 +53,11 @@ All digests resolved from the live registry this session. **Every image below is
 | MySQL 8.0 | `8.0.44` | `sha256:9c3380eac945af0736031b200027f581925927c81e010056214a4bd6b6693714` | [mysql](https://hub.docker.com/_/mysql) |
 | MySQL 8.4 LTS | `8.4.11` | `sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb` | ibid |
 | MySQL 9 innovation | `9.7.2` | `sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e` | ibid |
-| MariaDB 10.11 LTS | `10.11.18` | `sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d` | [mariadb](https://hub.docker.com/_/mariadb) |
-| MariaDB 11.4 LTS | `11.4.12` | `sha256:67873d30a17f6a9c331f06363b2fa15f38abca415529966d67c84f87f82439fe` | ibid |
-| MariaDB 11.8 LTS | `11.8.8` | `sha256:d9f7eb2637296652f24b484afd5d246f759f49f5babcadc6a9e344c9acb75fbf` | ibid |
+| MariaDB 10.11 LTS | `10.11.19` | `sha256:7db29378d4fdab73f8123bbc2b48905c90d1a4b00cf848b028f1e81e623257f2` | [mariadb](https://hub.docker.com/_/mariadb) |
+| MariaDB 11.4 LTS | `11.4.13` | `sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6` | ibid |
+| MariaDB 11.8 LTS | `11.8.9` | `sha256:6422478cb8e159f080fb1d8ccf65101e26fe51385787fde7d16c3b165a331f15` | ibid |
+| Cassandra 4.1 | `4.1.12` | `sha256:9b33a893b9f92682892a8087caa7e4a95dbdc814cd921a25847df75e67dbded1` | [cassandra](https://hub.docker.com/_/cassandra) |
+| Cassandra 5.0 | `5.0.9` | `sha256:1d18946ead0b0d22ed0371bd7384d86f540465c489f2935e88df35e755073f6b` | ibid |
 | Adminer | `5.4.1` | `sha256:a3167350c4eb9ae4473b8ea0f49c8e5ae74c87b240ee2f6086521dba2a6bf243` | [adminer](https://hub.docker.com/_/adminer) |
 | phpMyAdmin | `5.2.3` | `sha256:5e2289bcd500868ed4ac9261ddd7cbcc6e20036f83031ade72667b15dca31c60` | [phpmyadmin](https://hub.docker.com/_/phpmyadmin) |
 | pgAdmin | `9.9` | `sha256:5d9624a93634d1c5e595619cc57b1d330758120d1baf445fa97300c0c1fc3c0a` | [pgadmin4](https://www.pgadmin.org/docs/pgadmin4/latest/container_deployment.html) |

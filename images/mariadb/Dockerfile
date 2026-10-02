@@ -4,7 +4,7 @@
 # scripts and s6 tree with the MySQL image (see images/_shared/mysql-family).
 #
 # BASE_IMAGE is passed digest-pinned from images/bases.tsv.
-ARG BASE_IMAGE=mariadb:11.4.12@sha256:67873d30a17f6a9c331f06363b2fa15f38abca415529966d67c84f87f82439fe
+ARG BASE_IMAGE=mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
 
 FROM ${BASE_IMAGE}
 
@@ -26,6 +26,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl unzip; \
+    # The 10.11 digest (Ubuntu 22.04) predates Ubuntu's libssl3 security
+    # update. It is fixable, so it is fixed -- named package only, and only
+    # where it is installed: 11.4 and 11.8 are Ubuntu 24.04, which ships
+    # libssl3t64 instead, and their pinned bases do not move.
+    if dpkg-query -W -f='${Status}' libssl3 2>/dev/null | grep -q 'install ok installed'; then \
+        apt-get install -y --only-upgrade libssl3; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 
 # rclone from upstream rather than the distribution, so both engine images
