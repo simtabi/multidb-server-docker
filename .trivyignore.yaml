@@ -71,6 +71,16 @@ vulnerabilities:
       Revisit at the next Cassandra release.
     expired_at: 2026-11-09
 
+  - id: CVE-2026-68494
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-core"
+    statement: >-
+      jackson-core, vendored at 2.19.2 by Cassandra 5.0.9 and 4.1.12, both the
+      newest releases of their series, so there is nothing to repin to. Fixed
+      only in the library (2.18.8, 2.21.4); replacing the JAR inside lib/ is an
+      untested Cassandra configuration. Revisit at the next Cassandra release.
+    expired_at: 2026-11-09
+
   - id: CVE-2026-68497
     purls:
       - "pkg:maven/com.fasterxml.jackson.core/jackson-databind"
@@ -254,174 +264,12 @@ vulnerabilities:
     expired_at: 2026-12-31
 
   # ---------------------------------------------------------------------------
-  # gosu -- Go standard library CVEs in a statically linked setuid helper
+  # gosu, rclone, postgres_exporter -- no waivers, by construction
   # ---------------------------------------------------------------------------
-  # gosu ships in the upstream postgres base image; we do not build it and cannot
-  # repin it independently. Every finding is in the Go standard library it was
-  # compiled against, in packages gosu does not reach: it drops privileges at
-  # container start and execs, parsing no untrusted input and opening no sockets.
-  # net/mail, mime and net/http parsing are not on any path it executes.
-  #
-  # These carry no purls deliberately. Trivy attributes them to the Go stdlib
-  # rather than to gosu, and a stdlib purl would be both wrong and broad. The
-  # scoping here is the statement plus the expiry.
-  #
-  # Revisit whenever images/bases.tsv is repinned -- a rebuilt base picks up a
-  # newer gosu and these should disappear rather than be re-waived.
-  - id: CVE-2025-61726
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2025-61729
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2025-68121
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-25679
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-27145
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-32280
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-32281
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-32283
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-33811
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-33814
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-39820
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-39836
-    statement: >-
-      gosu, Go stdlib, unreachable in a setuid exec helper that parses no
-      untrusted input. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-42499
-    statement: >-
-      gosu, Go stdlib net/mail. gosu parses no mail on any path it executes.
-      Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-42504
-    statement: >-
-      gosu, Go stdlib mime. gosu parses no MIME on any path it executes.
-      Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  # The 2026-09 Go stdlib wave, fixed in Go 1.25.13 / 1.26.6. gosu 1.19 is still
-  # the newest release and every base image here carries it; postgres_exporter
-  # 0.20.1 (also newest) was built with the same older toolchain, so these IDs
-  # cover both binaries.
-  - id: CVE-2026-33818
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-39821
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-56853
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-56858
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-56859
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-56860
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-  - id: CVE-2026-56862
-    statement: >-
-      gosu and postgres_exporter, Go stdlib, both on their newest releases with
-      nothing to repin to. Revisit on the next images/bases.tsv repin.
-    expired_at: 2026-11-09
-
-  # ---------------------------------------------------------------------------
-  # rclone -- a vendored gRPC, already on the newest release
-  # ---------------------------------------------------------------------------
-  # 1.75.1 (2026-09-04) is the latest rclone release, and it vendors a gRPC
-  # older than the 1.82.2 fix. The toolkit uses rclone only as an outbound S3
-  # client for backup pushes; it runs no gRPC server.
-  - id: CVE-2026-84445
-    purls:
-      - "pkg:golang/google.golang.org/grpc"
-    statement: >-
-      google.golang.org/grpc vendored by rclone 1.75.1, the newest release, with
-      nothing to repin to. rclone is used here as an outbound S3 client and
-      serves no gRPC. Revisit at the next rclone release.
-    expired_at: 2026-11-09
-
-  # ---------------------------------------------------------------------------
-  # postgres_exporter -- Go toolchain CVEs, already on the newest release
-  # ---------------------------------------------------------------------------
-  # 0.20.1 (2026-07-07) is the latest upstream release, so there is nothing to
-  # repin to. Both findings are in the Go toolchain the release was built with,
-  # not in the exporter's own code. The exporter is off by default and, when on,
-  # is reachable only on the internal metrics network.
-  - id: CVE-2026-56852
-    statement: >-
-      postgres_exporter, golang.org/x/text, no newer upstream release exists to
-      repin to. Off by default and internal-only when enabled. Revisit at the
-      next postgres_exporter release.
-    expired_at: 2026-11-09
-  - id: CVE-2026-39822
-    statement: >-
-      postgres_exporter and gosu, Go stdlib os.Root, no newer upstream release
-      exists to repin to. Revisit at the next postgres_exporter release.
-    expired_at: 2026-11-09
-  - id: CVE-2026-46600
-    statement: >-
-      postgres_exporter, Go stdlib and golang.org/x/net, no newer upstream
-      release exists to repin to. Off by default and internal-only when enabled.
-      Revisit at the next postgres_exporter release.
-    expired_at: 2026-11-09
-  - id: CVE-2026-56854
-    purls:
-      - "pkg:golang/golang.org/x/crypto"
-    statement: >-
-      postgres_exporter, golang.org/x/crypto, no newer upstream release exists to
-      repin to. Off by default and internal-only when enabled. Revisit at the
-      next postgres_exporter release.
-    expired_at: 2026-11-09
+  # These three were waived until 2026-10: their newest releases were built on a
+  # Go toolchain older than the standard-library fixes, and rclone and the
+  # exporter vendored vulnerable gRPC / x/net / x/crypto. Each image now rebuilds
+  # them from the same upstream tags on the pinned toolchain in images/bases.tsv,
+  # with those modules raised (DESIGN.md D-51), so the findings are fixed rather
+  # than waived. A finding against them now means the toolchain row or a module
+  # floor needs raising -- do that, do not re-add a waiver here.

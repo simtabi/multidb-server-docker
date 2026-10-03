@@ -5,6 +5,9 @@
 # here; scripts/verify/02-pinned-versions.sh validates that file so the
 # indirection is not a way to smuggle in an unpinned base.
 ARG BASE_IMAGE=pgvector/pgvector:0.8.6-pg17@sha256:7ae6051efd0e60444282c27c7e141af07f322ce033300e727a49c3dd11075e38
+# The Go toolchain the gotools stage builds with; pinned in images/bases.tsv
+# (row `toolchain go`) and passed by scripts/build, like BASE_IMAGE.
+ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
 
 # =============================================================================
 # Builder: the four extensions PGDG does not package.
@@ -98,14 +101,44 @@ RUN set -eux; \
     make install DESTDIR=/build/out
 
 # =============================================================================
+# Go tools, rebuilt from their upstream release tags on a patched toolchain
+# (DESIGN.md D-51). The released binaries carry the Go standard library of the
+# day they were cut, and their CVEs with it; the same tag rebuilt on current Go
+# does not. Cross-compiled on the build platform: arm64 is never emulated.
+# =============================================================================
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS gotools
+
+ARG TARGETOS
+ARG TARGETARCH
+COPY --chmod=0755 _shared/gotools/build.sh /usr/local/bin/build-go-tool
+
+# gosu: the tag the base image already ships, and the binary its entrypoint and
+# ours call. Every finding against it was in the Go standard library.
+ARG GOSU_VERSION=1.19
+RUN build-go-tool gosu https://github.com/tianon/gosu "$GOSU_VERSION" . /out/gosu
+
+# rclone: grpc raised past CVE-2026-84445 (fixed at d5a41119e0e3; 1.75.1 vendors
+# an earlier 1.84.0-dev pseudo-version). VersionSuffix is cleared so the binary
+# reports v1.75.1 rather than a -DEV build.
+ARG RCLONE_VERSION=1.75.1
+RUN LDFLAGS="-X github.com/rclone/rclone/fs.VersionSuffix=" \
+    build-go-tool rclone https://github.com/rclone/rclone "v${RCLONE_VERSION}" . /out/rclone \
+        google.golang.org/grpc@v1.84.0-dev.0.20260825144003-d5a41119e0e3
+
+# postgres_exporter: x/net raised past CVE-2026-46600 and x/crypto past
+# CVE-2026-56854. Version is stamped the way the upstream release is.
+ARG POSTGRES_EXPORTER_VERSION=0.20.1
+RUN LDFLAGS="-X github.com/prometheus/common/version.Version=${POSTGRES_EXPORTER_VERSION} -X github.com/prometheus/common/version.Revision=v${POSTGRES_EXPORTER_VERSION} -X github.com/prometheus/common/version.Branch=HEAD" \
+    build-go-tool postgres_exporter https://github.com/prometheus-community/postgres_exporter "v${POSTGRES_EXPORTER_VERSION}" ./cmd/postgres_exporter /out/postgres_exporter \
+        golang.org/x/net@v0.59.0 golang.org/x/crypto@v0.57.0
+
+# =============================================================================
 # Final image
 # =============================================================================
 FROM ${BASE_IMAGE}
 
 ARG ENGINE_VERSION=17
 ARG S6_OVERLAY_VERSION=3.2.3.2
-ARG POSTGRES_EXPORTER_VERSION=0.20.1
-ARG RCLONE_VERSION=1.75.1
 
 LABEL org.opencontainers.image.title="multidb-server-pg" \
       org.opencontainers.image.description="PostgreSQL with the full multidb-server extension suite, supervised by s6-overlay" \
@@ -153,21 +186,16 @@ RUN set -eux; \
         libsodium23; \
     rm -rf /var/lib/apt/lists/*
 
-# rclone from upstream rather than the distribution, pinned like the other engine
-# images (SPEC section 6.1). Debian's package trails upstream, and its bundled Go
-# runtime carried fixed HIGH and CRITICAL CVEs that only an upstream release clears.
-RUN set -eux; \
-    case "$(dpkg --print-architecture)" in \
-        amd64) rc_arch='amd64' ;; \
-        arm64) rc_arch='arm64' ;; \
-        *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL -o /tmp/rclone.zip \
-        "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${rc_arch}.zip"; \
-    unzip -q -j /tmp/rclone.zip "*/rclone" -d /usr/local/bin; \
-    chmod +x /usr/local/bin/rclone; \
-    rm -f /tmp/rclone.zip; \
-    rclone version | head -1
+# gosu, rclone and postgres_exporter, rebuilt in the gotools stage (DESIGN.md D-51).
+#   - rclone comes from its upstream tag rather than the distribution, pinned like
+#     the other engine images (SPEC section 6.1); Debian's package trails upstream.
+#   - postgres_exporter is the optional embedded exporter (SPEC section 6.1): present
+#     in every image, started only when MDB_PG_EMBED_EXPORTER is true, so a bare
+#     `docker run` can self-report while compose runs it as a separate service.
+#   - gosu replaces the base image's copy in place, so the upstream entrypoint and
+#     our convergence scripts keep calling the same path.
+COPY --from=gotools /out/gosu /out/rclone /out/postgres_exporter /usr/local/bin/
+RUN set -eux; gosu --version; gosu nobody true; rclone version | head -1; postgres_exporter --version 2>&1 | head -1
 
 # --- the four extensions built or fetched above ------------------------------
 COPY --from=builder /build/out/usr/ /usr/
@@ -188,23 +216,6 @@ RUN set -eux; \
     tar -C / -Jxpf /tmp/s6-noarch.tar.xz; \
     tar -C / -Jxpf /tmp/s6-arch.tar.xz; \
     rm -f /tmp/s6-noarch.tar.xz /tmp/s6-arch.tar.xz
-
-# The optional embedded exporter (SPEC section 6.1). Present in every image but
-# only started when MDB_PG_EMBED_EXPORTER is true, so a bare `docker run` can
-# self-report while compose keeps running it as a separate service.
-RUN set -eux; \
-    case "$(dpkg --print-architecture)" in \
-        amd64) pe_arch='amd64' ;; \
-        arm64) pe_arch='arm64' ;; \
-        *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL -o /tmp/pgexp.tar.gz \
-        "https://github.com/prometheus-community/postgres_exporter/releases/download/v${POSTGRES_EXPORTER_VERSION}/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-${pe_arch}.tar.gz"; \
-    tar -C /tmp -xzf /tmp/pgexp.tar.gz; \
-    install -m 0755 "/tmp/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-${pe_arch}/postgres_exporter" \
-        /usr/local/bin/postgres_exporter; \
-    rm -rf /tmp/pgexp.tar.gz "/tmp/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-${pe_arch}"; \
-    postgres_exporter --version 2>&1 | head -1
 
 COPY pg/s6/ /etc/s6-overlay/s6-rc.d/
 # The user bundle goes in user-bundles.d, not s6-rc.d/user. The legacy location

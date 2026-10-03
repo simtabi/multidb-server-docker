@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **gosu, rclone and postgres_exporter are rebuilt from their release tags on a
+  patched Go toolchain**, with gRPC, `x/net` and `x/crypto` raised past their
+  fixes (DESIGN.md D-51). This removes 26 Trivy waivers that were due to expire
+  on 2026-11-09 and fail every build. The toolchain is pinned in
+  `images/bases.tsv`, and check 02 fails if a Dockerfile's `GO_IMAGE` default
+  drifts from it.
+
 ## [0.1.0] - 2026-08-10
 
 First public release.
