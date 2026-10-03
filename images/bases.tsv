@@ -32,3 +32,8 @@ cassandra	4.1	cassandra:4.1.12@sha256:9b33a893b9f92682892a8087caa7e4a95dbdc814cd
 cassandra	5.0	cassandra:5.0.9@sha256:1d18946ead0b0d22ed0371bd7384d86f540465c489f2935e88df35e755073f6b
 
 ferretdb	2	ghcr.io/ferretdb/ferretdb:2@sha256:5706414241eb84f0515512c37b46db0f1b1eac9e5ceb7e4c2523211c184b1985
+
+# Not an engine: the Go toolchain the gotools stage rebuilds gosu, rclone and
+# postgres_exporter on (DESIGN.md D-51). scripts/build passes it as GO_IMAGE, and
+# check 02 fails if a Dockerfile's GO_IMAGE default disagrees with this row.
+toolchain	go	golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
