@@ -1,5 +1,7 @@
 # Contributing
 
+Where this file is silent, the [Simtabi contributing guide](https://github.com/simtabi/.github/blob/HEAD/CONTRIBUTING.md) applies.
+
 ## The rule that matters most
 
 Nothing is done until a check proves it. Every change either passes an existing
