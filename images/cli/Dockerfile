@@ -8,11 +8,33 @@
 #
 # Build context is images/, like every other image here.
 ARG BASE_IMAGE=debian:12-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+# The Go toolchain the gotools stage builds with; pinned in images/bases.tsv
+# (row `toolchain go`) and passed by scripts/build, like BASE_IMAGE.
+ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+
+# =============================================================================
+# Go tools, rebuilt from their upstream release tags on a patched toolchain
+# (DESIGN.md D-51). The released binaries carry the Go standard library of the
+# day they were cut, and their CVEs with it; the same tag rebuilt on current Go
+# does not. Cross-compiled on the build platform: arm64 is never emulated.
+# =============================================================================
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS gotools
+
+ARG TARGETOS
+ARG TARGETARCH
+COPY --chmod=0755 _shared/gotools/build.sh /usr/local/bin/build-go-tool
+
+# rclone: grpc raised past CVE-2026-84445 (fixed at d5a41119e0e3; 1.75.1 vendors
+# an earlier 1.84.0-dev pseudo-version). VersionSuffix is cleared so the binary
+# reports v1.75.1 rather than a -DEV build.
+ARG RCLONE_VERSION=1.75.1
+RUN LDFLAGS="-X github.com/rclone/rclone/fs.VersionSuffix=" \
+    build-go-tool rclone https://github.com/rclone/rclone "v${RCLONE_VERSION}" . /out/rclone \
+        google.golang.org/grpc@v1.84.0-dev.0.20260825144003-d5a41119e0e3
 
 FROM ${BASE_IMAGE}
 
 ARG PG_CLIENT_VERSION=17
-ARG RCLONE_VERSION=1.75.1
 
 LABEL org.opencontainers.image.title="multidb-server-cli" \
       org.opencontainers.image.description="PostgreSQL, MySQL and MariaDB clients, dump/restore tools, and the multidb-server scripts" \
@@ -62,17 +84,9 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # rclone for S3-compatible targets, matching the engine images' version.
-RUN set -eux; \
-    case "$(dpkg --print-architecture)" in \
-        amd64) rc_arch='amd64' ;; \
-        arm64) rc_arch='arm64' ;; \
-        *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL -o /tmp/rclone.zip \
-        "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${rc_arch}.zip"; \
-    unzip -q -j /tmp/rclone.zip "*/rclone" -d /usr/local/bin; \
-    chmod +x /usr/local/bin/rclone; \
-    rm -f /tmp/rclone.zip
+# rclone from the gotools stage (DESIGN.md D-51).
+COPY --from=gotools /out/rclone /usr/local/bin/
+RUN set -eux; rclone version | head -1
 
 # The toolkit scripts, so backup/restore/new-project are available here too.
 COPY --chmod=0755 cli/entrypoint.sh /usr/local/bin/mdb-entrypoint

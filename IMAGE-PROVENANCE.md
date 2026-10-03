@@ -22,6 +22,7 @@ Maintained by Docker in partnership with upstream, on the library namespace.
 | `mongo` | MongoDB (referenced, not rebuilt — see [licensing](docs/licensing.md)) |
 | `cassandra` | Cassandra engine base |
 | `debian` | the `cli` image base |
+| `golang` | build stage only: rebuilds gosu, rclone and postgres_exporter from their upstream tags ([D-51](DESIGN.md)); never shipped |
 | `caddy` | UI front door |
 | `haproxy` | HA routing |
 | `adminer` | SQL UI |

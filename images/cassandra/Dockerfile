@@ -7,6 +7,26 @@
 #
 # Build context is images/, like every other image.
 ARG BASE_IMAGE=cassandra:5.0.9@sha256:1d18946ead0b0d22ed0371bd7384d86f540465c489f2935e88df35e755073f6b
+# The Go toolchain the gotools stage builds with; pinned in images/bases.tsv
+# (row `toolchain go`) and passed by scripts/build, like BASE_IMAGE.
+ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+
+# =============================================================================
+# Go tools, rebuilt from their upstream release tags on a patched toolchain
+# (DESIGN.md D-51). The released binaries carry the Go standard library of the
+# day they were cut, and their CVEs with it; the same tag rebuilt on current Go
+# does not. Cross-compiled on the build platform: arm64 is never emulated.
+# =============================================================================
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS gotools
+
+ARG TARGETOS
+ARG TARGETARCH
+COPY --chmod=0755 _shared/gotools/build.sh /usr/local/bin/build-go-tool
+
+# gosu: the tag the base image already ships, and the binary its entrypoint and
+# ours call. Every finding against it was in the Go standard library.
+ARG GOSU_VERSION=1.19
+RUN build-go-tool gosu https://github.com/tianon/gosu "$GOSU_VERSION" . /out/gosu
 
 FROM ${BASE_IMAGE}
 
@@ -30,6 +50,11 @@ RUN set -eux; \
     # the pinned base moves.
     apt-get install -y --only-upgrade libpcre2-8-0 libexpat1; \
     rm -rf /var/lib/apt/lists/*
+
+# gosu from the gotools stage (DESIGN.md D-51). gosu replaces
+# the base image's copy in place, so its entrypoint keeps calling the same path.
+COPY --from=gotools /out/gosu /usr/local/bin/
+RUN set -eux; gosu --version; gosu nobody true
 
 # s6-overlay v3 as PID 1, same contract as every other engine image.
 RUN set -eux; \

@@ -83,10 +83,18 @@ for engine in ${engines[@]+"${engines[@]}"}; do
         exit 1
     }
 
+    # The Go toolchain for the gotools stage (D-51), from the same file as the base.
+    go_image="$(base_for toolchain go)"
+    [[ -n "$go_image" ]] || {
+        printf 'no Go toolchain pinned (row "toolchain go") in images/bases.tsv\n' >&2
+        exit 1
+    }
+
     printf 'building %s\n  from %s\n' "$tag" "$base"
     docker build \
         -f "$ROOT/images/$engine/Dockerfile" \
         --build-arg "BASE_IMAGE=$base" \
+        --build-arg "GO_IMAGE=$go_image" \
         --build-arg "ENGINE_VERSION=$version" \
         -t "$tag" "$ROOT/images"
 done
