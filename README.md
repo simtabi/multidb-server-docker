@@ -29,6 +29,36 @@ Add engines with profiles:
 make up PROFILES=pg,mysql,mongodb,ui
 ```
 
+## Quick start guide and usage
+
+### Getting started
+
+1. Confirm the harness is sound: `make verify-structure`.
+2. Start only the engines a project needs (profiles are opt-in, one per engine):
+   `make up PROFILES=pg,ui`.
+3. Check what is running: `make status`.
+
+### Usage
+
+Provision a project: a database, a least-privilege owner role, a read-only
+companion role, the configured extensions, and a paste-ready connection block:
+
+```bash
+make new-project NAME=myapp
+make new-project NAME=myapp ENGINE=mysql
+```
+
+Connect, and back up:
+
+```bash
+make psql USER_NAME=myapp    # as the project role
+make backup ENGINE=pg DB=myapp     # one database
+make verify-backups                # restore them into throwaway containers
+```
+
+The full walkthrough is in [Getting started](docs/getting-started.md); everything
+else is in the [documentation index](#documentation).
+
 ## Engines
 
 Every engine is **authenticated by default**, which several of them are not out
