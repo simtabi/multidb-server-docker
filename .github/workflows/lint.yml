@@ -16,7 +16,7 @@ jobs:
       # Pinned to the commit, not the tag -- a moved tag is how the tj-actions
       # and trivy-action supply-chain attacks spread. Dependabot's
       # github-actions ecosystem bumps the SHA and keeps the comment current.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           # No job in this workflow pushes, so the token has no business
           # outliving the checkout step. Without this, checkout writes the
@@ -53,7 +53,7 @@ jobs:
       # Pinned to the commit, not the tag -- a moved tag is how the tj-actions
       # and trivy-action supply-chain attacks spread. Dependabot's
       # github-actions ecosystem bumps the SHA and keeps the comment current.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           # No job in this workflow pushes, so the token has no business
           # outliving the checkout step. Without this, checkout writes the
