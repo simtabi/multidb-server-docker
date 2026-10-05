@@ -14,3 +14,59 @@ updates:
       time: "06:00"
       timezone: America/New_York
     open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /images/caddy
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/cassandra
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/cli
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/mariadb
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/mysql
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/patroni
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/pg
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+  - package-ecosystem: docker
+    directory: /images/pgbouncer
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
