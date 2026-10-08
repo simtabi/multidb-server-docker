@@ -154,10 +154,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # during step 1 research (DESIGN.md section 4).
 RUN set -eux; \
     apt-get update; \
-    # The base digest predates Debian's pcre2 and expat security updates. They
-    # are fixable, so they are fixed -- named packages only, so the PostgreSQL
-    # server the digest pins does not move.
-    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1; \
+    # The base digest predates Debian's pcre2, expat and perl security updates.
+    # They are fixable, so they are fixed -- named packages only, so the
+    # PostgreSQL server the digest pins does not move. The four perl packages
+    # move together: perl depends on the exact perl-base version, so upgrading
+    # one alone does not resolve. pgvector has not rebuilt 0.8.6 since
+    # 2026-08-13, so there is no newer digest to repin to (perl 5.36.0-7+deb12u4).
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1 \
+        perl perl-base perl-modules-5.36 libperl5.36; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
