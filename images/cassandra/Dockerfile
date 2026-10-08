@@ -45,10 +45,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl procps xz-utils zstd; \
-    # The base digest predates Debian's pcre2 and expat security updates. They
-    # are fixable, so they are fixed -- named packages only, so nothing else in
-    # the pinned base moves.
-    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1; \
+    # The base digest predates Debian's pcre2, expat and perl-base security
+    # updates. They are fixable, so they are fixed -- named packages only, so
+    # nothing else in the pinned base moves. perl-base is the only perl package
+    # the bookworm-based 4.1 image carries (fixed in 5.36.0-7+deb12u4); on a
+    # base where a named package is absent, --only-upgrade skips it.
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1 perl-base; \
     rm -rf /var/lib/apt/lists/*
 
 # gosu from the gotools stage (DESIGN.md D-51). gosu replaces
