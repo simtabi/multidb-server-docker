@@ -51,10 +51,13 @@ RUN set -eux; \
     # the bookworm-based 4.1 image carries (fixed in 5.36.0-7+deb12u4). The
     # same image carries python3.11 for cqlsh (fixed in 3.11.2-6+deb12u9); its
     # four packages move together because each depends on the exact version of
-    # the others. On a base where a named package is absent, --only-upgrade
-    # skips it.
-    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1 perl-base \
-        python3.11 python3.11-minimal libpython3.11-stdlib libpython3.11-minimal; \
+    # the others. --only-upgrade skips a package that is not installed, but apt
+    # still fails on a name its archive does not have, so the python3.11 set is
+    # named only where it is installed (trixie, under 5.0, has no python3.11).
+    py311="$(dpkg-query -W -f='${Package}\n' \
+        python3.11 python3.11-minimal libpython3.11-stdlib libpython3.11-minimal \
+        2>/dev/null || true)"; \
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1 perl-base $py311; \
     rm -rf /var/lib/apt/lists/*
 
 # gosu from the gotools stage (DESIGN.md D-51). gosu replaces
