@@ -9,7 +9,7 @@
 ARG BASE_IMAGE=cassandra:5.0.9@sha256:1d18946ead0b0d22ed0371bd7384d86f540465c489f2935e88df35e755073f6b
 # The Go toolchain the gotools stage builds with; pinned in images/bases.tsv
 # (row `toolchain go`) and passed by scripts/build, like BASE_IMAGE.
-ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+ARG GO_IMAGE=golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
 
 # =============================================================================
 # Go tools, rebuilt from their upstream release tags on a patched toolchain
@@ -48,9 +48,16 @@ RUN set -eux; \
     # The base digest predates Debian's pcre2, expat and perl-base security
     # updates. They are fixable, so they are fixed -- named packages only, so
     # nothing else in the pinned base moves. perl-base is the only perl package
-    # the bookworm-based 4.1 image carries (fixed in 5.36.0-7+deb12u4); on a
-    # base where a named package is absent, --only-upgrade skips it.
-    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1 perl-base; \
+    # the bookworm-based 4.1 image carries (fixed in 5.36.0-7+deb12u4). The
+    # same image carries python3.11 for cqlsh (fixed in 3.11.2-6+deb12u9); its
+    # four packages move together because each depends on the exact version of
+    # the others. --only-upgrade skips a package that is not installed, but apt
+    # still fails on a name its archive does not have, so the python3.11 set is
+    # named only where it is installed (trixie, under 5.0, has no python3.11).
+    py311="$(dpkg-query -W -f='${Package}\n' \
+        python3.11 python3.11-minimal libpython3.11-stdlib libpython3.11-minimal \
+        2>/dev/null || true)"; \
+    apt-get install -y --only-upgrade libpcre2-8-0 libexpat1 perl-base $py311; \
     rm -rf /var/lib/apt/lists/*
 
 # gosu from the gotools stage (DESIGN.md D-51). gosu replaces
