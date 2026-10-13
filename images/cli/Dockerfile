@@ -10,7 +10,7 @@
 ARG BASE_IMAGE=debian:12-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 # The Go toolchain the gotools stage builds with; pinned in images/bases.tsv
 # (row `toolchain go`) and passed by scripts/build, like BASE_IMAGE.
-ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+ARG GO_IMAGE=golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
 
 # =============================================================================
 # Go tools, rebuilt from their upstream release tags on a patched toolchain
@@ -25,12 +25,14 @@ ARG TARGETARCH
 COPY --chmod=0755 _shared/gotools/build.sh /usr/local/bin/build-go-tool
 
 # rclone: grpc raised past CVE-2026-84445 (fixed at d5a41119e0e3; 1.75.1 vendors
-# an earlier 1.84.0-dev pseudo-version). VersionSuffix is cleared so the binary
+# an earlier 1.84.0-dev pseudo-version) and x/net past CVE-2026-78669 (fixed in
+# v0.60.0; 1.75.1 vendors v0.57.0). VersionSuffix is cleared so the binary
 # reports v1.75.1 rather than a -DEV build.
 ARG RCLONE_VERSION=1.75.1
 RUN LDFLAGS="-X github.com/rclone/rclone/fs.VersionSuffix=" \
     build-go-tool rclone https://github.com/rclone/rclone "v${RCLONE_VERSION}" . /out/rclone \
-        google.golang.org/grpc@v1.84.0-dev.0.20260825144003-d5a41119e0e3
+        google.golang.org/grpc@v1.84.0-dev.0.20260825144003-d5a41119e0e3 \
+        golang.org/x/net@v0.60.0
 
 FROM ${BASE_IMAGE}
 

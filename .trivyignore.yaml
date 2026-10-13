@@ -263,6 +263,25 @@ vulnerabilities:
       Revisit at the next Cassandra release.
     expired_at: 2026-12-31
 
+  # lz4-java, measured 2026-10-13. Trivy reported CVE-2026-106451 against
+  # opt/cassandra/lib/lz4-java-1.10.1.jar in both cassandra 4.1.12 and 5.0.9 on
+  # amd64 and arm64. Those are still the newest releases of either series (Docker
+  # Hub tags last updated 2026-10-06), so there is no base image to repin to, and
+  # the fix (1.11.4) exists only in the library. Scoped to the vendored version
+  # so a Cassandra release that moves lz4-java stops matching. 30 days.
+
+  - id: CVE-2026-106451
+    purls:
+      - "pkg:maven/at.yawk.lz4/lz4-java@1.10.1"
+    statement: >-
+      lz4-java insecure temporary file handling, vendored at 1.10.1 in
+      opt/cassandra/lib by Apache Cassandra 4.1.12 and 5.0.9, the newest releases
+      of both series, so there is no base image to repin to. Fixed upstream in
+      the library (1.11.4) but in no Cassandra release; replacing the JAR inside
+      lib/ is an untested Cassandra configuration. Measured 2026-10-13. Revisit
+      at the next Cassandra release.
+    expired_at: 2026-11-12
+
   # ---------------------------------------------------------------------------
   # gosu, rclone, postgres_exporter -- no waivers, by construction
   # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@
 ARG BASE_IMAGE=pgvector/pgvector:0.8.6-pg17@sha256:7ae6051efd0e60444282c27c7e141af07f322ce033300e727a49c3dd11075e38
 # The Go toolchain the gotools stage builds with; pinned in images/bases.tsv
 # (row `toolchain go`) and passed by scripts/build, like BASE_IMAGE.
-ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+ARG GO_IMAGE=golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
 
 # =============================================================================
 # Builder: the four extensions PGDG does not package.
@@ -118,19 +118,22 @@ ARG GOSU_VERSION=1.19
 RUN build-go-tool gosu https://github.com/tianon/gosu "$GOSU_VERSION" . /out/gosu
 
 # rclone: grpc raised past CVE-2026-84445 (fixed at d5a41119e0e3; 1.75.1 vendors
-# an earlier 1.84.0-dev pseudo-version). VersionSuffix is cleared so the binary
+# an earlier 1.84.0-dev pseudo-version) and x/net past CVE-2026-78669 (fixed in
+# v0.60.0; 1.75.1 vendors v0.57.0). VersionSuffix is cleared so the binary
 # reports v1.75.1 rather than a -DEV build.
 ARG RCLONE_VERSION=1.75.1
 RUN LDFLAGS="-X github.com/rclone/rclone/fs.VersionSuffix=" \
     build-go-tool rclone https://github.com/rclone/rclone "v${RCLONE_VERSION}" . /out/rclone \
-        google.golang.org/grpc@v1.84.0-dev.0.20260825144003-d5a41119e0e3
+        google.golang.org/grpc@v1.84.0-dev.0.20260825144003-d5a41119e0e3 \
+        golang.org/x/net@v0.60.0
 
-# postgres_exporter: x/net raised past CVE-2026-46600 and x/crypto past
-# CVE-2026-56854. Version is stamped the way the upstream release is.
+# postgres_exporter: x/net raised past CVE-2026-46600 and CVE-2026-78669
+# (v0.60.0), and x/crypto past CVE-2026-56854. Version is stamped the way the
+# upstream release is.
 ARG POSTGRES_EXPORTER_VERSION=0.20.1
 RUN LDFLAGS="-X github.com/prometheus/common/version.Version=${POSTGRES_EXPORTER_VERSION} -X github.com/prometheus/common/version.Revision=v${POSTGRES_EXPORTER_VERSION} -X github.com/prometheus/common/version.Branch=HEAD" \
     build-go-tool postgres_exporter https://github.com/prometheus-community/postgres_exporter "v${POSTGRES_EXPORTER_VERSION}" ./cmd/postgres_exporter /out/postgres_exporter \
-        golang.org/x/net@v0.59.0 golang.org/x/crypto@v0.57.0
+        golang.org/x/net@v0.60.0 golang.org/x/crypto@v0.57.0
 
 # =============================================================================
 # Final image
