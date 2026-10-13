@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on 2026-11-09 and fail every build. The toolchain is pinned in
   `images/bases.tsv`, and check 02 fails if a Dockerfile's `GO_IMAGE` default
   drifts from it.
+- **The Go toolchain moves to 1.27.2 and `x/net` to v0.60.0** for gosu, rclone
+  and postgres_exporter, fixing CVE-2026-78667, CVE-2026-78669 and
+  CVE-2026-97031, which failed the Trivy gate on every engine image.
+- **The cassandra 4.1 image upgrades its python3.11 packages** to
+  3.11.2-6+deb12u9, the same named-package pattern used for perl.
+- **lz4-java 1.10.1, vendored by Cassandra, is waived for CVE-2026-106451**
+  until 2026-11-12: neither 4.1.12 nor 5.0.9 has a release carrying the fix.
 
 ## [0.1.0] - 2026-08-10
 
